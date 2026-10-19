@@ -1,0 +1,24 @@
+privacy:
+  privacy_unit: user
+  adjacency: add_remove
+
+  horizon:
+    days: 90
+
+  global_budget:
+    epsilon: 4.0
+    delta: 4.0e-6
+
+  default_query_budget:
+    epsilon: 1.0
+    delta: 1.0e-6
+
+  accountant:
+    type: basic
+
+  default_mechanism:
+    type: gaussian
+
+  release:
+    reuse_existing_release: true
+    allow_budget_overrun: false

@@ -1,0 +1,37 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Caches and test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+results/verification/
+
+# SQLite transient databases and write-ahead logs
+*.db-wal
+*.db-shm
+verify_*.db*
+test_*.db*
+temp_*.db*
+custom_*.db*
+experiment_state*.db*
+*.jsonl
+
+# Distribution packages and historical archives
+Private_LLM_Analytics_v*.zip
+*.zip
+*.tar.gz
+
+# Large synthetic datasets (>50MB, regenerable via DatasetConfig.generate_standard_dataset)
+data/interactions_n100000.parquet
+
+# Environment and IDE
+.env
+.venv/
+env/
+venv/
+.vscode/
+.idea/

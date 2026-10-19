@@ -1,0 +1,46 @@
+recipients:
+  internal:
+    role: trusted
+    providers:
+      - "*"
+    metrics:
+      - "*"
+    exact_results: true
+    dp_results: true
+    cross_provider_comparison: true
+
+  provider_a:
+    role: external
+    providers:
+      - provider_a
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false
+
+  provider_b:
+    role: external
+    providers:
+      - provider_b
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false
+
+  provider_c:
+    role: external
+    providers:
+      - provider_c
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false

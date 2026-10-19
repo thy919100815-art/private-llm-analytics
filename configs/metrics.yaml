@@ -1,0 +1,36 @@
+metrics:
+  user_prevalence:
+    enabled: true
+    type: prevalence
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: binary
+      max_cells_per_user: 9
+    mechanism:
+      type: gaussian
+
+  user_normalized_share:
+    enabled: true
+    type: normalized_share
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: l1_normalized
+      norm_bound: 1.0
+    mechanism:
+      type: gaussian
+
+  interaction_volume:
+    enabled: true
+    type: volume
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: l2_clip
+      clip_norm: 20.0
+    mechanism:
+      type: gaussian
