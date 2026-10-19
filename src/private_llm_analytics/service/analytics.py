@@ -19,12 +19,14 @@ from private_llm_analytics.ingestion.csv_loader import load_interactions_csv
 from private_llm_analytics.ingestion.fingerprint import compute_dataset_fingerprint
 from private_llm_analytics.ingestion.parquet_loader import load_interactions_parquet
 from private_llm_analytics.planner.query import AnalyticsQuery
+from private_llm_analytics.privacy.composition import PrivacyView
 from private_llm_analytics.privacy.exceptions import (
     DatasetConfigurationMismatchError,
     ProductionRNGControlError,
     ProductionSafetyConfigurationError,
     RecipientSecurityViolation,
 )
+
 from private_llm_analytics.release.release import ReleaseOrchestrator
 from private_llm_analytics.service.experiment import ExperimentRunner
 from private_llm_analytics.simulator.generator import SyntheticDataGenerator
@@ -302,3 +304,8 @@ class AnalyticsService:
             trial_id=trial_id,
             rng=rng,
         )
+
+    def get_privacy_view(self, recipient: str = "global_external") -> PrivacyView:
+        """Retrieve authoritative privacy consumption view for a recipient or scope."""
+        return self.orchestrator.get_privacy_view(recipient=recipient)
+

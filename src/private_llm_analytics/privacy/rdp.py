@@ -105,6 +105,7 @@ def compute_laplace_rdp_bound(
 
 def compose_rdp_vectors(
     rdp_vectors: Sequence[Dict[Decimal, Decimal]],
+    orders: Optional[Sequence[Union[float, Decimal]]] = None,
 ) -> Dict[Decimal, Decimal]:
     """Compose multiple RDP vectors by summing RDP costs order-wise.
 
@@ -116,19 +117,21 @@ def compose_rdp_vectors(
         - Summation must be performed independently per alpha before conversion.
     """
     if not rdp_vectors:
+        if orders:
+            return {to_decimal(a): Decimal("0.0") for a in orders}
         return {}
 
-    orders = list(rdp_vectors[0].keys())
-    for idx, v in enumerate(rdp_vectors[1:], start=1):
-        if set(v.keys()) != set(orders):
+    target_orders = [to_decimal(a) for a in orders] if orders is not None else list(rdp_vectors[0].keys())
+    for idx, v in enumerate(rdp_vectors):
+        if set(v.keys()) != set(target_orders):
             raise ValueError(
                 f"Cannot compose RDP vectors with mismatched orders at index {idx}: "
-                f"expected {orders}, got {list(v.keys())}"
+                f"expected {target_orders}, got {list(v.keys())}"
             )
 
-    total: Dict[Decimal, Decimal] = {alpha: Decimal("0.0") for alpha in orders}
+    total: Dict[Decimal, Decimal] = {alpha: Decimal("0.0") for alpha in target_orders}
     for v in rdp_vectors:
-        for alpha in orders:
+        for alpha in target_orders:
             total[alpha] += to_decimal(v[alpha])
 
     return total

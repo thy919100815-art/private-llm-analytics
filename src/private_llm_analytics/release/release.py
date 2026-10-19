@@ -31,10 +31,20 @@ from private_llm_analytics.privacy.exceptions import (
     RecipientSecurityViolation,
     UnsupportedMechanismError,
 )
+from private_llm_analytics.privacy.composition import PrivacyView, resolve_budget_scope_id
+from private_llm_analytics.privacy.rdp import (
+    DEFAULT_RDP_ORDERS,
+    compute_gaussian_rdp,
+    compute_laplace_rdp_bound,
+    rdp_vector_to_json,
+    to_decimal,
+)
 from private_llm_analytics.privacy.ledger import PrivacyLedger
-from private_llm_analytics.privacy.state import PrivacyStateManager
+from private_llm_analytics.privacy.rdp_accountant import RDPAccountant
+from private_llm_analytics.privacy.state import PrivacyStateManager, _to_decimal
 from private_llm_analytics.release.cache import PersistentReleaseStore
 from private_llm_analytics.release.recipients import filter_release_for_recipient
+
 
 
 class ReleaseOrchestrator:
@@ -143,6 +153,19 @@ class ReleaseOrchestrator:
             state_manager=self.state_manager,
         )
 
+        acct_cfg = getattr(app_config.privacy, "accountant", None)
+        self.accountant_mode = getattr(acct_cfg, "mode", "rdp") if acct_cfg else "rdp"
+        orders = getattr(acct_cfg, "rdp_orders", DEFAULT_RDP_ORDERS)
+        delta_global = getattr(acct_cfg, "delta", app_config.privacy.global_budget.delta)
+        epsilon_cap = getattr(acct_cfg, "epsilon_cap", app_config.privacy.global_budget.epsilon)
+        self.rdp_accountant = RDPAccountant(
+            epsilon_cap=epsilon_cap,
+            delta_global=delta_global,
+            orders=orders,
+            state_manager=self.state_manager,
+        )
+
+
     def _trigger_hook(self, hook_name: str) -> None:
         """Helper to invoke test fault injection hooks."""
         if not self.test_hooks or hook_name not in self.test_hooks:
@@ -244,12 +267,27 @@ class ReleaseOrchestrator:
             else self.config.privacy.release.reuse_existing_release
         )
 
+        recipient_role = policy.role
+        rc_config = getattr(self.config.privacy, "recipient_composition", None)
+        rc_mode = rc_config.mode if rc_config else "global_external"
+        rc_groups = rc_config.groups if rc_config else None
+        budget_scope_id = resolve_budget_scope_id(
+            recipient=query.recipient,
+            recipient_role=recipient_role,
+            mode=rc_mode,
+            groups=rc_groups,
+        )
+
         # 8. Check persistent state (single source of truth: no legacy cache fallback)
         if reuse_cache:
             committed = self.state_manager.get_committed_release(plan.release_key)
             if committed is not None:
                 # Cache hit: 0 budget consumed
-                self._record_cache_hit(plan, committed, query.recipient, dataset_version)
+                self._record_cache_hit(
+                    plan, committed, query.recipient, dataset_version,
+                    budget_scope_id=budget_scope_id,
+                    accountant_mode=self.accountant_mode,
+                )
                 return self._finalize_output(
                     release_result=committed,
                     query=query,
@@ -258,6 +296,8 @@ class ReleaseOrchestrator:
                     include_exact=include_exact,
                     cache_hit=True,
                     release_key=plan.release_key,
+                    budget_scope_id=budget_scope_id,
+                    accountant_mode=self.accountant_mode,
                 )
 
         # 9. Fault hook: before_budget_reserve
@@ -269,6 +309,35 @@ class ReleaseOrchestrator:
             epsilon=self.config.privacy.global_budget.epsilon,
             delta=self.config.privacy.global_budget.delta,
         )
+
+        # Calibrate mechanism scale and compute candidate RDP vector
+        if "gaussian" in plan.mechanism:
+            mech_for_scale = GaussianMechanism(
+                epsilon=plan.epsilon,
+                delta=plan.delta,
+                sensitivity=plan.sensitivity,
+                method="analytic",
+            )
+            candidate_sigma = mech_for_scale.noise_scale
+            candidate_rdp = compute_gaussian_rdp(
+                sigma=candidate_sigma,
+                sensitivity=plan.sensitivity,
+                orders=self.rdp_accountant.orders,
+            )
+        elif "laplace" in plan.mechanism:
+            mech_for_scale = LaplaceMechanism(
+                epsilon=plan.epsilon,
+                delta=plan.delta,
+                sensitivity=plan.sensitivity,
+            )
+            candidate_sigma = mech_for_scale.noise_scale
+            candidate_rdp = compute_laplace_rdp_bound(
+                epsilon=plan.epsilon,
+                orders=self.rdp_accountant.orders,
+            )
+        else:
+            raise UnsupportedMechanismError(f"Unsupported mechanism: {plan.mechanism}")
+
         plan_metadata = {
             "metric": plan.metric,
             "window_start": str(plan.time_window[0]) if plan.time_window[0] else None,
@@ -276,6 +345,7 @@ class ReleaseOrchestrator:
             "dataset_version": dataset_version,
             "mechanism": plan.mechanism,
             "sensitivity": plan.sensitivity,
+            "noise_scale": candidate_sigma,
             "cell_names": user_matrix.cell_names,
             "n_users": user_matrix.n_users,
             "public_population_size": user_matrix.public_population_size,
@@ -290,6 +360,9 @@ class ReleaseOrchestrator:
         else:
             allow_overrun = self.config.privacy.release.allow_budget_overrun
 
+        effective_epsilon_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
+        effective_delta_global = _to_decimal(self.config.privacy.global_budget.delta)
+
         res_tuple = self.state_manager.reserve_or_get_release(
             release_key=plan.release_key,
             canonical_semantics=plan.canonical_semantics,
@@ -300,12 +373,25 @@ class ReleaseOrchestrator:
             single_flight_timeout=single_flight_timeout,
             lease_timeout=lease_timeout,
             reuse_cache=reuse_cache,
+            accountant_mode=self.accountant_mode,
+            budget_scope_id=budget_scope_id,
+            recipient=query.recipient,
+            recipient_role=recipient_role,
+            rdp_orders=self.rdp_accountant.orders,
+            rdp_candidate_cost=candidate_rdp,
+            epsilon_cap=effective_epsilon_cap,
+            delta_global=effective_delta_global,
         )
+
         status, cached_res, reservation_id, release_id = res_tuple
         generation = getattr(res_tuple, "generation", 1)
 
         if status == "CACHE_HIT" and cached_res is not None:
-            self._record_cache_hit(plan, cached_res, query.recipient, dataset_version)
+            self._record_cache_hit(
+                plan, cached_res, query.recipient, dataset_version,
+                budget_scope_id=budget_scope_id,
+                accountant_mode=self.accountant_mode,
+            )
             return self._finalize_output(
                 release_result=cached_res,
                 query=query,
@@ -314,10 +400,16 @@ class ReleaseOrchestrator:
                 include_exact=include_exact,
                 cache_hit=True,
                 release_key=plan.release_key,
+                budget_scope_id=budget_scope_id,
+                accountant_mode=self.accountant_mode,
+                effective_epsilon=getattr(res_tuple, "effective_epsilon", None),
+                best_alpha=getattr(res_tuple, "best_alpha", None),
             )
 
         # 11. Execute DP Generation with reservation active
         committed = False
+        eff_eps_committed = None
+        best_a_committed = None
         try:
             self._trigger_hook("after_budget_reserve")
 
@@ -352,7 +444,7 @@ class ReleaseOrchestrator:
             self._trigger_hook("before_release_commit")
 
             # Commit release atomically with generation fencing (Audit C11)
-            self.state_manager.commit_release(
+            eff_eps_committed, best_a_committed = self.state_manager.commit_release(
                 reservation_id=reservation_id,
                 release_key=plan.release_key,
                 release_id=release_id,
@@ -362,6 +454,10 @@ class ReleaseOrchestrator:
                 window_start=str(plan.time_window[0]) if plan.time_window[0] else None,
                 window_end=str(plan.time_window[1]) if plan.time_window[1] else None,
                 generation=generation,
+                budget_scope_id=budget_scope_id,
+                accountant_mode=self.accountant_mode,
+                rdp_cost_json=rdp_vector_to_json(candidate_rdp) if candidate_rdp else None,
+                delta_global=effective_delta_global,
             )
             committed = True
 
@@ -404,6 +500,10 @@ class ReleaseOrchestrator:
             include_exact=include_exact,
             cache_hit=False,
             release_key=plan.release_key,
+            budget_scope_id=budget_scope_id,
+            accountant_mode=self.accountant_mode,
+            effective_epsilon=eff_eps_committed,
+            best_alpha=best_a_committed,
         )
 
     def _record_cache_hit(
@@ -412,6 +512,8 @@ class ReleaseOrchestrator:
         release_result: DPReleaseResult,
         recipient: str,
         dataset_version: str,
+        budget_scope_id: str = "global_external",
+        accountant_mode: str = "basic",
     ) -> None:
         try:
             self.state_manager.record_cache_hit_ledger(
@@ -422,6 +524,8 @@ class ReleaseOrchestrator:
                 dataset_version=dataset_version,
                 window_start=str(plan.time_window[0]) if plan.time_window[0] else None,
                 window_end=str(plan.time_window[1]) if plan.time_window[1] else None,
+                budget_scope_id=budget_scope_id,
+                accountant_mode=accountant_mode,
             )
         except Exception:
             pass
@@ -452,6 +556,10 @@ class ReleaseOrchestrator:
         include_exact: bool,
         cache_hit: bool,
         release_key: str,
+        budget_scope_id: str = "global_external",
+        accountant_mode: str = "basic",
+        effective_epsilon: Optional[Any] = None,
+        best_alpha: Optional[Any] = None,
     ) -> Dict[str, Any]:
         exact_data = None
         if policy.role == "trusted" and include_exact:
@@ -471,4 +579,45 @@ class ReleaseOrchestrator:
         )
         output["cache_hit"] = cache_hit
         output["release_key"] = release_key
+        output["incremental_privacy_cost"] = 0.0 if cache_hit else float(release_result.epsilon)
+        output["incremental_privacy_cost_decimal"] = "0.0" if cache_hit else str(_to_decimal(release_result.epsilon))
+
+        # Attach privacy accounting metadata
+        eff_eps_float = float(effective_epsilon) if effective_epsilon is not None else None
+        eff_eps_str = str(effective_epsilon) if effective_epsilon is not None else None
+        best_alpha_float = float(best_alpha) if best_alpha is not None else None
+
+        output["privacy_accounting"] = {
+            "accountant_mode": accountant_mode,
+            "budget_scope_id": budget_scope_id,
+            "effective_epsilon": eff_eps_float,
+            "effective_epsilon_decimal": eff_eps_str,
+            "best_alpha": best_alpha_float,
+            "epsilon_cap": float(self.config.privacy.global_budget.epsilon),
+            "delta_global": float(self.config.privacy.global_budget.delta),
+        }
         return output
+
+    def get_privacy_view(self, recipient: str = "global_external") -> PrivacyView:
+        """Get authoritative PrivacyView for a given recipient or budget scope."""
+        policy = self.config.recipients.recipients.get(recipient)
+        rec_role = policy.role if policy else ("trusted" if recipient == "internal" else "external")
+        rc_config = getattr(self.config.privacy, "recipient_composition", None)
+        rc_mode = rc_config.mode if rc_config else "global_external"
+        rc_groups = rc_config.groups if rc_config else None
+
+        scope_id = resolve_budget_scope_id(
+            recipient=recipient,
+            recipient_role=rec_role,
+            mode=rc_mode,
+            groups=rc_groups,
+        )
+        return self.state_manager.get_privacy_view(
+            budget_scope_id=scope_id,
+            delta_global=self.config.privacy.global_budget.delta,
+            orders=self.rdp_accountant.orders,
+            epsilon_cap=self.config.privacy.global_budget.epsilon,
+            accountant_mode=self.accountant_mode,
+        )
+
+

@@ -19,11 +19,23 @@ import numpy as np
 
 from private_llm_analytics.metrics.base import DPReleaseResult
 from private_llm_analytics.privacy.budget import PrivacyBudget
+from private_llm_analytics.privacy.composition import PrivacyView
 from private_llm_analytics.privacy.exceptions import (
     CommitIrreversibleError,
     PrivacyBudgetExceededError,
     ReleaseInProgressError,
     ReservationLostError,
+)
+from private_llm_analytics.privacy.rdp import (
+    DEFAULT_RDP_ORDERS,
+    compute_gaussian_rdp,
+    compose_rdp_vectors,
+    rdp_to_epsilon_delta,
+    rdp_vector_from_json,
+    rdp_vector_to_json,
+    to_decimal,
+    validate_delta,
+    validate_orders,
 )
 
 
@@ -50,7 +62,7 @@ def _json_serializable(obj: Any) -> Any:
 
 
 class ReservationTuple(tuple):
-    """4-tuple for backward compatibility that exposes generation and owner_id."""
+    """4-tuple for backward compatibility that exposes generation, owner_id, and RDP metadata."""
 
     def __new__(
         cls,
@@ -60,6 +72,9 @@ class ReservationTuple(tuple):
         release_id: Optional[str],
         generation: int = 1,
         owner_id: str = "",
+        effective_epsilon: Optional[Any] = None,
+        best_alpha: Optional[Any] = None,
+        budget_scope_id: str = "global_external",
     ):
         return super().__new__(cls, (status, result, reservation_id, release_id))
 
@@ -71,6 +86,9 @@ class ReservationTuple(tuple):
         release_id: Optional[str],
         generation: int = 1,
         owner_id: str = "",
+        effective_epsilon: Optional[Any] = None,
+        best_alpha: Optional[Any] = None,
+        budget_scope_id: str = "global_external",
     ):
         self.status = status
         self.result = result
@@ -78,6 +96,9 @@ class ReservationTuple(tuple):
         self.release_id = release_id
         self.generation = generation
         self.owner_id = owner_id
+        self.effective_epsilon = effective_epsilon
+        self.best_alpha = best_alpha
+        self.budget_scope_id = budget_scope_id
 
 
 class PrivacyStateManager:
@@ -119,7 +140,11 @@ class PrivacyStateManager:
                     delta TEXT NOT NULL,
                     status TEXT NOT NULL CHECK (status IN ('PENDING', 'COMMITTED', 'ABORTED')),
                     created_at TEXT NOT NULL,
-                    committed_at TEXT
+                    committed_at TEXT,
+                    budget_scope_id TEXT NOT NULL DEFAULT 'global_external',
+                    accountant_mode TEXT NOT NULL DEFAULT 'basic',
+                    rdp_cost_json TEXT,
+                    rdp_orders_json TEXT
                 )
             """)
             cursor.execute("""
@@ -146,7 +171,16 @@ class PrivacyStateManager:
                     public_population_size INTEGER,
                     dp_vector_json TEXT,
                     post_processed_json TEXT,
-                    committed_at TEXT
+                    committed_at TEXT,
+                    recipient TEXT NOT NULL DEFAULT '',
+                    recipient_role TEXT NOT NULL DEFAULT 'external',
+                    budget_scope_id TEXT NOT NULL DEFAULT 'global_external',
+                    accountant_mode TEXT NOT NULL DEFAULT 'basic',
+                    rdp_cost_json TEXT,
+                    rdp_orders_json TEXT,
+                    delta_global TEXT,
+                    effective_epsilon TEXT,
+                    best_alpha TEXT
                 )
             """)
             cursor.execute("""
@@ -164,7 +198,12 @@ class PrivacyStateManager:
                     sensitivity REAL NOT NULL,
                     noise_scale REAL NOT NULL,
                     release_key TEXT NOT NULL,
-                    cache_hit INTEGER NOT NULL
+                    cache_hit INTEGER NOT NULL,
+                    budget_scope_id TEXT NOT NULL DEFAULT 'global_external',
+                    accountant_mode TEXT NOT NULL DEFAULT 'basic',
+                    rdp_cost_json TEXT,
+                    effective_epsilon TEXT,
+                    best_alpha TEXT
                 )
             """)
 
@@ -333,6 +372,78 @@ class PrivacyStateManager:
                         """)
                         cursor.execute("DROP TABLE _privacy_ledger_old")
 
+            # v0.2 Longitudinal Schema Extensions
+            reservations_new_cols = {
+                "budget_scope_id": "TEXT NOT NULL DEFAULT 'global_external'",
+                "accountant_mode": "TEXT NOT NULL DEFAULT 'basic'",
+                "rdp_cost_json": "TEXT",
+                "rdp_orders_json": "TEXT",
+            }
+            cursor.execute("PRAGMA table_info(privacy_reservations)")
+            res_cols = {row[1] for row in cursor.fetchall()}
+            for c_name, c_def in reservations_new_cols.items():
+                if c_name not in res_cols:
+                    cursor.execute(f"ALTER TABLE privacy_reservations ADD COLUMN {c_name} {c_def}")
+
+            release_store_new_cols = {
+                "recipient": "TEXT NOT NULL DEFAULT ''",
+                "recipient_role": "TEXT NOT NULL DEFAULT 'external'",
+                "budget_scope_id": "TEXT NOT NULL DEFAULT 'global_external'",
+                "accountant_mode": "TEXT NOT NULL DEFAULT 'basic'",
+                "rdp_cost_json": "TEXT",
+                "rdp_orders_json": "TEXT",
+                "delta_global": "TEXT",
+                "effective_epsilon": "TEXT",
+                "best_alpha": "TEXT",
+            }
+            cursor.execute("PRAGMA table_info(release_store)")
+            rel_cols = {row[1] for row in cursor.fetchall()}
+            for c_name, c_def in release_store_new_cols.items():
+                if c_name not in rel_cols:
+                    cursor.execute(f"ALTER TABLE release_store ADD COLUMN {c_name} {c_def}")
+
+            ledger_new_cols = {
+                "budget_scope_id": "TEXT NOT NULL DEFAULT 'global_external'",
+                "accountant_mode": "TEXT NOT NULL DEFAULT 'basic'",
+                "rdp_cost_json": "TEXT",
+                "effective_epsilon": "TEXT",
+                "best_alpha": "TEXT",
+            }
+            cursor.execute("PRAGMA table_info(privacy_ledger)")
+            led_cols = {row[1] for row in cursor.fetchall()}
+            for c_name, c_def in ledger_new_cols.items():
+                if c_name not in led_cols:
+                    cursor.execute(f"ALTER TABLE privacy_ledger ADD COLUMN {c_name} {c_def}")
+
+            # Indices for performance
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_rel_scope_status ON release_store (budget_scope_id, status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_res_scope_status ON privacy_reservations (budget_scope_id, status)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_led_scope ON privacy_ledger (budget_scope_id)")
+
+            # Deterministic migration of legacy Gaussian records to RDP vectors (v0.2 Item 31)
+            cursor.execute("""
+                SELECT release_key, mechanism, sensitivity, noise_scale, reservation_id
+                FROM release_store
+                WHERE rdp_cost_json IS NULL AND status = 'COMMITTED'
+            """)
+            legacy_releases = cursor.fetchall()
+            for r_key, mech, sens, sig, r_res_id in legacy_releases:
+                if "gaussian" in str(mech).lower():
+                    if sens > 0 and sig > 0:
+                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=DEFAULT_RDP_ORDERS)
+                        rdp_j = rdp_vector_to_json(rdp_v)
+                        orders_j = json.dumps([float(o) for o in DEFAULT_RDP_ORDERS])
+                        cursor.execute(
+                            "UPDATE release_store SET rdp_cost_json = ?, rdp_orders_json = ? WHERE release_key = ?",
+                            (rdp_j, orders_j, r_key),
+                        )
+                        cursor.execute(
+                            "UPDATE privacy_reservations SET rdp_cost_json = ?, rdp_orders_json = ? WHERE reservation_id = ?",
+                            (rdp_j, orders_j, r_res_id),
+                        )
+                    else:
+                        raise ValueError(f"Legacy release '{r_key}' missing valid sensitivity/sigma for RDP migration.")
+
             conn.commit()
 
     def get_committed_release(self, release_key: str) -> Optional[DPReleaseResult]:
@@ -394,6 +505,14 @@ class PrivacyStateManager:
         lease_timeout: float = 300.0,
         reuse_cache: bool = True,
         owner_id: Optional[str] = None,
+        accountant_mode: str = "basic",
+        budget_scope_id: str = "global_external",
+        recipient: str = "",
+        recipient_role: str = "external",
+        rdp_orders: Optional[List[Any]] = None,
+        rdp_candidate_cost: Optional[Dict[Any, Any]] = None,
+        epsilon_cap: Optional[Any] = None,
+        delta_global: Optional[Any] = None,
     ) -> ReservationTuple:
         """Atomic compare-and-reserve transaction with single-flight memoization and lease fencing.
 
@@ -436,6 +555,9 @@ class PrivacyStateManager:
                                     None,
                                     generation=row["generation"],
                                     owner_id=row["owner_id"],
+                                    effective_epsilon=row["effective_epsilon"] if "effective_epsilon" in row.keys() else None,
+                                    best_alpha=row["best_alpha"] if "best_alpha" in row.keys() else None,
+                                    budget_scope_id=row["budget_scope_id"] if "budget_scope_id" in row.keys() else budget_scope_id,
                                 )
 
                         elif status == "PENDING":
@@ -479,24 +601,59 @@ class PrivacyStateManager:
                                     new_res_id = str(uuid.uuid4())
                                     new_rel_id = str(uuid.uuid4())
                                     now_iso = now_utc.isoformat()
+                                    rdp_j = rdp_vector_to_json(rdp_candidate_cost) if rdp_candidate_cost else None
+                                    orders_j = json.dumps([float(o) for o in (rdp_orders or DEFAULT_RDP_ORDERS)]) if rdp_orders else None
+                                    delta_g = str(_to_decimal(delta_global)) if delta_global is not None else str(_to_decimal(global_budget.delta))
 
                                     cursor.execute(
                                         """
                                         INSERT INTO privacy_reservations (
                                             reservation_id, release_key, owner_id, generation,
-                                            epsilon, delta, status, created_at
-                                        ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                                            epsilon, delta, status, created_at,
+                                            budget_scope_id, accountant_mode, rdp_cost_json, rdp_orders_json
+                                        ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
                                         """,
-                                        (new_res_id, release_key, caller_owner, new_gen, str(_to_decimal(budget_needed.epsilon)), str(_to_decimal(budget_needed.delta)), now_iso),
+                                        (
+                                            new_res_id,
+                                            release_key,
+                                            caller_owner,
+                                            new_gen,
+                                            str(_to_decimal(budget_needed.epsilon)),
+                                            str(_to_decimal(budget_needed.delta)),
+                                            now_iso,
+                                            budget_scope_id,
+                                            accountant_mode,
+                                            rdp_j,
+                                            orders_j,
+                                        ),
                                     )
                                     cursor.execute(
                                         """
                                         UPDATE release_store
                                         SET reservation_id = ?, owner_id = ?, generation = ?, release_id = ?,
-                                            created_at = ?, status = 'PENDING', epsilon = ?, delta = ?
+                                            created_at = ?, status = 'PENDING', epsilon = ?, delta = ?,
+                                            recipient = ?, recipient_role = ?, budget_scope_id = ?,
+                                            accountant_mode = ?, rdp_cost_json = ?, rdp_orders_json = ?, delta_global = ?
                                         WHERE release_key = ? AND generation = ? AND status = 'PENDING'
                                         """,
-                                        (new_res_id, caller_owner, new_gen, new_rel_id, now_iso, str(_to_decimal(budget_needed.epsilon)), str(_to_decimal(budget_needed.delta)), release_key, active_gen),
+                                        (
+                                            new_res_id,
+                                            caller_owner,
+                                            new_gen,
+                                            new_rel_id,
+                                            now_iso,
+                                            str(_to_decimal(budget_needed.epsilon)),
+                                            str(_to_decimal(budget_needed.delta)),
+                                            recipient,
+                                            recipient_role,
+                                            budget_scope_id,
+                                            accountant_mode,
+                                            rdp_j,
+                                            orders_j,
+                                            delta_g,
+                                            release_key,
+                                            active_gen,
+                                        ),
                                     )
                                     cursor.execute("COMMIT")
                                     return ReservationTuple(
@@ -506,6 +663,7 @@ class PrivacyStateManager:
                                         new_rel_id,
                                         generation=new_gen,
                                         owner_id=caller_owner,
+                                        budget_scope_id=budget_scope_id,
                                     )
                                 else:
                                     cursor.execute("COMMIT")
@@ -524,45 +682,101 @@ class PrivacyStateManager:
 
                     needed_eps = _to_decimal(budget_needed.epsilon)
                     needed_delta = _to_decimal(budget_needed.delta)
-                    global_eps = _to_decimal(global_budget.epsilon)
-                    global_delta = _to_decimal(global_budget.delta)
+                    global_eps = _to_decimal(epsilon_cap) if epsilon_cap is not None else _to_decimal(global_budget.epsilon)
+                    global_delta = _to_decimal(delta_global) if delta_global is not None else _to_decimal(global_budget.delta)
 
+                    # 2. Check privacy budget atomically across COMMITTED and PENDING in scope
                     if not allow_overrun:
-                        # Check privacy budget atomically across COMMITTED and PENDING using exact Decimal summation (Finding A)
-                        cursor.execute("""
-                            SELECT epsilon, delta
-                            FROM privacy_reservations
-                            WHERE status IN ('COMMITTED', 'PENDING')
-                        """)
-                        current_eps = Decimal("0.0")
-                        current_delta = Decimal("0.0")
-                        for r_eps, r_delta in cursor.fetchall():
-                            current_eps += _to_decimal(r_eps)
-                            current_delta += _to_decimal(r_delta)
+                        if accountant_mode == "rdp":
 
-                        eps_ok = (current_eps + needed_eps) <= global_eps
-                        delta_ok = (current_delta + needed_delta) <= global_delta
-                        if not (eps_ok and delta_ok):
-                            raise PrivacyBudgetExceededError(
-                                f"Requested budget (eps={budget_needed.epsilon}, delta={budget_needed.delta}) exceeds "
-                                f"remaining persistent budget (global: eps={global_budget.epsilon}, delta={global_budget.delta}; "
-                                f"reserved+spent: eps={float(current_eps):.4f}, delta={float(current_delta):.2e})"
+                            eff_orders = [to_decimal(o) for o in (rdp_orders or DEFAULT_RDP_ORDERS)]
+                            eff_delta = validate_delta(global_delta)
+
+                            cursor.execute(
+                                """
+                                SELECT epsilon, delta, rdp_cost_json
+                                FROM privacy_reservations
+                                WHERE budget_scope_id = ? AND status IN ('COMMITTED', 'PENDING')
+                                """,
+                                (budget_scope_id,),
                             )
+                            active_rows = cursor.fetchall()
+                            vecs = []
+                            basic_sum = Decimal("0.0")
+                            for r in active_rows:
+                                basic_sum += _to_decimal(r["epsilon"])
+                                if r["rdp_cost_json"]:
+                                    vecs.append(rdp_vector_from_json(r["rdp_cost_json"]))
+                            basic_sum += needed_eps
+                            if rdp_candidate_cost:
+                                vecs.append({to_decimal(k): to_decimal(v) for k, v in rdp_candidate_cost.items()})
+
+                            if vecs:
+                                composed = compose_rdp_vectors(vecs, orders=eff_orders)
+                                best_a, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=eff_delta)
+                                eff_eps = min(basic_sum, rdp_eff)
+                                if eff_eps > global_eps:
+                                    raise PrivacyBudgetExceededError(
+                                        f"Requested release in scope '{budget_scope_id}' exceeds RDP privacy budget cap: "
+                                        f"resulting effective epsilon {float(eff_eps):.4f} > cap {float(global_eps):.4f} "
+                                        f"(at delta={eff_delta}, best order alpha={best_a})."
+                                    )
+
+                        else:
+                            cursor.execute(
+                                """
+                                SELECT epsilon, delta
+                                FROM privacy_reservations
+                                WHERE budget_scope_id = ? AND status IN ('COMMITTED', 'PENDING')
+                                """,
+                                (budget_scope_id,),
+                            )
+                            current_eps = Decimal("0.0")
+                            current_delta = Decimal("0.0")
+                            for r_eps, r_delta in cursor.fetchall():
+                                current_eps += _to_decimal(r_eps)
+                                current_delta += _to_decimal(r_delta)
+
+                            eps_ok = (current_eps + needed_eps) <= global_eps
+                            delta_ok = (current_delta + needed_delta) <= global_delta
+                            if not (eps_ok and delta_ok):
+                                raise PrivacyBudgetExceededError(
+                                    f"Requested budget (eps={budget_needed.epsilon}, delta={budget_needed.delta}) exceeds "
+                                    f"remaining persistent budget for scope '{budget_scope_id}' "
+                                    f"(cap: eps={global_eps}, delta={global_delta}; "
+                                    f"reserved+spent: eps={float(current_eps):.4f}, delta={float(current_delta):.2e})"
+                                )
 
                     # 3. Insert or update PENDING reservation
                     reservation_id = str(uuid.uuid4())
                     release_id = str(uuid.uuid4())
                     now_iso = datetime.now(timezone.utc).isoformat()
                     next_gen = (row["generation"] + 1) if (row is not None and "generation" in row.keys()) else 1
+                    rdp_j = rdp_vector_to_json(rdp_candidate_cost) if rdp_candidate_cost else None
+                    orders_j = json.dumps([float(o) for o in (rdp_orders or DEFAULT_RDP_ORDERS)]) if rdp_orders else None
+                    delta_g = str(global_delta)
 
                     cursor.execute(
                         """
                         INSERT INTO privacy_reservations (
                             reservation_id, release_key, owner_id, generation,
-                            epsilon, delta, status, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?)
+                            epsilon, delta, status, created_at,
+                            budget_scope_id, accountant_mode, rdp_cost_json, rdp_orders_json
+                        ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?)
                         """,
-                        (reservation_id, release_key, caller_owner, next_gen, str(needed_eps), str(needed_delta), now_iso),
+                        (
+                            reservation_id,
+                            release_key,
+                            caller_owner,
+                            next_gen,
+                            str(needed_eps),
+                            str(needed_delta),
+                            now_iso,
+                            budget_scope_id,
+                            accountant_mode,
+                            rdp_j,
+                            orders_j,
+                        ),
                     )
 
                     if row is not None:
@@ -575,7 +789,9 @@ class PrivacyStateManager:
                                 metric = ?, window_start = ?, window_end = ?, dataset_version = ?,
                                 mechanism = ?, epsilon = ?, delta = ?, sensitivity = ?, noise_scale = ?,
                                 cell_names_json = ?, n_users = ?, public_population_size = ?,
-                                dp_vector_json = NULL, post_processed_json = NULL, committed_at = NULL
+                                dp_vector_json = NULL, post_processed_json = NULL, committed_at = NULL,
+                                recipient = ?, recipient_role = ?, budget_scope_id = ?,
+                                accountant_mode = ?, rdp_cost_json = ?, rdp_orders_json = ?, delta_global = ?
                             WHERE release_key = ?
                             """,
                             (
@@ -597,6 +813,13 @@ class PrivacyStateManager:
                                 json.dumps(plan_metadata.get("cell_names", [])),
                                 plan_metadata.get("n_users", 0),
                                 plan_metadata.get("public_population_size"),
+                                recipient,
+                                recipient_role,
+                                budget_scope_id,
+                                accountant_mode,
+                                rdp_j,
+                                orders_j,
+                                delta_g,
                                 release_key,
                             ),
                         )
@@ -608,8 +831,9 @@ class PrivacyStateManager:
                                 canonical_semantics_json, metric, window_start, window_end,
                                 dataset_version, mechanism, epsilon, delta, sensitivity, noise_scale,
                                 cell_names_json, n_users, public_population_size, dp_vector_json,
-                                post_processed_json
-                            ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                                post_processed_json, recipient, recipient_role, budget_scope_id,
+                                accountant_mode, rdp_cost_json, rdp_orders_json, delta_global
+                            ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
                             """,
                             (
                                 release_key,
@@ -631,6 +855,13 @@ class PrivacyStateManager:
                                 json.dumps(plan_metadata.get("cell_names", [])),
                                 plan_metadata.get("n_users", 0),
                                 plan_metadata.get("public_population_size"),
+                                recipient,
+                                recipient_role,
+                                budget_scope_id,
+                                accountant_mode,
+                                rdp_j,
+                                orders_j,
+                                delta_g,
                             ),
                         )
 
@@ -642,6 +873,7 @@ class PrivacyStateManager:
                         release_id,
                         generation=next_gen,
                         owner_id=caller_owner,
+                        budget_scope_id=budget_scope_id,
                     )
 
                 except Exception:
@@ -663,7 +895,13 @@ class PrivacyStateManager:
         window_end: Optional[str] = None,
         generation: Optional[int] = None,
         owner_id: Optional[str] = None,
-    ) -> None:
+        budget_scope_id: str = "global_external",
+        accountant_mode: str = "basic",
+        rdp_cost_json: Optional[str] = None,
+        effective_epsilon: Optional[Any] = None,
+        best_alpha: Optional[Any] = None,
+        delta_global: Optional[Any] = None,
+    ) -> Tuple[Optional[Decimal], Optional[Decimal]]:
         """Atomically mark reservation and release as COMMITTED, and record ledger audit event.
 
         Strictly fenced: Requires status='PENDING' and matching reservation_id (and generation).
@@ -676,6 +914,7 @@ class PrivacyStateManager:
 
         with self._connection() as conn:
             conn.isolation_level = None
+            conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
             cursor.execute("BEGIN IMMEDIATE")
             try:
@@ -705,6 +944,49 @@ class PrivacyStateManager:
                         f"was lost, expired, or already finalized (rowcount={cursor.rowcount})."
                     )
 
+                # Fetch reservation metadata if needed
+                cursor.execute(
+                    "SELECT budget_scope_id, accountant_mode, rdp_cost_json FROM privacy_reservations WHERE reservation_id = ?",
+                    (reservation_id,),
+                )
+                res_row = cursor.fetchone()
+                if res_row is not None:
+                    if not budget_scope_id or budget_scope_id == "global_external":
+                        budget_scope_id = res_row["budget_scope_id"] or budget_scope_id
+                    if not accountant_mode or accountant_mode == "basic":
+                        accountant_mode = res_row["accountant_mode"] or accountant_mode
+                    if not rdp_cost_json:
+                        rdp_cost_json = res_row["rdp_cost_json"]
+
+                eff_eps_dec = to_decimal(effective_epsilon) if effective_epsilon is not None else None
+                best_alpha_dec = to_decimal(best_alpha) if best_alpha is not None else None
+
+                # Compute cumulative effective epsilon and best alpha for this scope if not supplied
+                if eff_eps_dec is None and accountant_mode == "rdp":
+                    cursor.execute(
+                        "SELECT delta_global FROM release_store WHERE release_key = ?",
+                        (release_key,),
+                    )
+                    dg_row = cursor.fetchone()
+                    raw_dg = dg_row["delta_global"] if dg_row and dg_row["delta_global"] else delta_global
+                    eff_delta = validate_delta(raw_dg) if raw_dg is not None else Decimal("1.0e-5")
+
+                    cursor.execute(
+                        "SELECT epsilon, rdp_cost_json FROM privacy_reservations WHERE budget_scope_id = ? AND status = 'COMMITTED'",
+                        (budget_scope_id,),
+                    )
+                    committed_rdps = cursor.fetchall()
+                    vecs = [rdp_vector_from_json(r["rdp_cost_json"]) for r in committed_rdps if r["rdp_cost_json"]]
+                    basic_sum = sum(_to_decimal(r["epsilon"]) for r in committed_rdps)
+                    if vecs:
+                        composed = compose_rdp_vectors(vecs)
+                        best_alpha_dec, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=eff_delta)
+                        eff_eps_dec = min(basic_sum, rdp_eff)
+
+                eff_eps_str = str(eff_eps_dec) if eff_eps_dec is not None else None
+                best_alpha_str = str(best_alpha_dec) if best_alpha_dec is not None else None
+
+
                 # 2. Commit release payload with CAS fencing
                 if generation is not None:
                     cursor.execute(
@@ -715,7 +997,10 @@ class PrivacyStateManager:
                             post_processed_json = ?,
                             cell_names_json = ?,
                             noise_scale = ?,
-                            committed_at = ?
+                            committed_at = ?,
+                            effective_epsilon = ?,
+                            best_alpha = ?,
+                            rdp_cost_json = COALESCE(?, rdp_cost_json)
                         WHERE release_key = ? AND reservation_id = ? AND generation = ? AND status = 'PENDING'
                         """,
                         (
@@ -724,6 +1009,9 @@ class PrivacyStateManager:
                             cell_names_json,
                             release_result.noise_scale,
                             now_iso,
+                            eff_eps_str,
+                            best_alpha_str,
+                            rdp_cost_json,
                             release_key,
                             reservation_id,
                             generation,
@@ -738,7 +1026,10 @@ class PrivacyStateManager:
                             post_processed_json = ?,
                             cell_names_json = ?,
                             noise_scale = ?,
-                            committed_at = ?
+                            committed_at = ?,
+                            effective_epsilon = ?,
+                            best_alpha = ?,
+                            rdp_cost_json = COALESCE(?, rdp_cost_json)
                         WHERE release_key = ? AND reservation_id = ? AND status = 'PENDING'
                         """,
                         (
@@ -747,6 +1038,9 @@ class PrivacyStateManager:
                             cell_names_json,
                             release_result.noise_scale,
                             now_iso,
+                            eff_eps_str,
+                            best_alpha_str,
+                            rdp_cost_json,
                             release_key,
                             reservation_id,
                         ),
@@ -765,8 +1059,10 @@ class PrivacyStateManager:
                         release_id, timestamp, metric, recipient,
                         window_start, window_end, dataset_version,
                         mechanism, epsilon, delta, sensitivity,
-                        noise_scale, release_key, cache_hit
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                        noise_scale, release_key, cache_hit,
+                        budget_scope_id, accountant_mode, rdp_cost_json,
+                        effective_epsilon, best_alpha
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
                     """,
                     (
                         release_id,
@@ -782,10 +1078,16 @@ class PrivacyStateManager:
                         release_result.sensitivity,
                         release_result.noise_scale,
                         release_key,
+                        budget_scope_id,
+                        accountant_mode,
+                        rdp_cost_json,
+                        eff_eps_str,
+                        best_alpha_str,
                     ),
                 )
 
                 cursor.execute("COMMIT")
+                return (eff_eps_dec, best_alpha_dec)
 
             except Exception:
                 try:
@@ -821,6 +1123,8 @@ class PrivacyStateManager:
         dataset_version: str,
         window_start: Optional[str] = None,
         window_end: Optional[str] = None,
+        budget_scope_id: str = "global_external",
+        accountant_mode: str = "basic",
     ) -> None:
         """Record a cache hit in the audit ledger (0 budget consumed)."""
         now_iso = datetime.now(timezone.utc).isoformat()
@@ -833,8 +1137,9 @@ class PrivacyStateManager:
                     release_id, timestamp, metric, recipient,
                     window_start, window_end, dataset_version,
                     mechanism, epsilon, delta, sensitivity,
-                    noise_scale, release_key, cache_hit
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    noise_scale, release_key, cache_hit,
+                    budget_scope_id, accountant_mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
                     hit_id,
@@ -850,9 +1155,13 @@ class PrivacyStateManager:
                     release_result.sensitivity,
                     release_result.noise_scale,
                     release_key,
+                    budget_scope_id,
+                    accountant_mode,
                 ),
             )
             conn.commit()
+
+
 
     def abort_reservation(
         self,
@@ -977,15 +1286,25 @@ class PrivacyStateManager:
                     pass
                 raise
 
-    def get_total_spent_decimal(self) -> Tuple[Decimal, Decimal]:
+    def get_total_spent_decimal(self, budget_scope_id: Optional[str] = None) -> Tuple[Decimal, Decimal]:
         """Return cumulative (spent_epsilon, spent_delta) committed in persistent storage using exact Decimal summation."""
         with self._connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT epsilon, delta
-                FROM privacy_reservations
-                WHERE status = 'COMMITTED'
-            """)
+            if budget_scope_id is not None:
+                cursor.execute(
+                    """
+                    SELECT epsilon, delta
+                    FROM privacy_reservations
+                    WHERE status = 'COMMITTED' AND budget_scope_id = ?
+                    """,
+                    (budget_scope_id,),
+                )
+            else:
+                cursor.execute("""
+                    SELECT epsilon, delta
+                    FROM privacy_reservations
+                    WHERE status = 'COMMITTED'
+                """)
             spent_eps = Decimal("0.0")
             spent_delta = Decimal("0.0")
             for r_eps, r_delta in cursor.fetchall():
@@ -993,35 +1312,121 @@ class PrivacyStateManager:
                 spent_delta += _to_decimal(r_delta)
             return spent_eps, spent_delta
 
-
-    def list_releases(self) -> List[Dict[str, Any]]:
-        """List all committed releases in release_store."""
+    def list_releases(self, budget_scope_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        """List all committed releases in release_store, optionally filtered by budget_scope_id."""
         with self._connection() as conn:
             conn.row_factory = sqlite3.Row
             cursor = conn.cursor()
-            cursor.execute("SELECT * FROM release_store WHERE status = 'COMMITTED'")
+            if budget_scope_id is not None:
+                cursor.execute("SELECT * FROM release_store WHERE status = 'COMMITTED' AND budget_scope_id = ?", (budget_scope_id,))
+            else:
+                cursor.execute("SELECT * FROM release_store WHERE status = 'COMMITTED'")
             return [dict(row) for row in cursor.fetchall()]
 
-    def get_total_spent(self) -> Tuple[float, float]:
+    def get_total_spent(self, budget_scope_id: Optional[str] = None) -> Tuple[float, float]:
         """Return cumulative (spent_epsilon, spent_delta) committed in persistent storage using exact Decimal summation."""
-        eps, delta = self.get_total_spent_decimal()
+        eps, delta = self.get_total_spent_decimal(budget_scope_id=budget_scope_id)
         return float(eps), float(delta)
 
-    def get_total_reserved_or_spent(self) -> Tuple[float, float]:
+    def get_total_reserved_or_spent(self, budget_scope_id: Optional[str] = None) -> Tuple[float, float]:
         """Return cumulative (epsilon, delta) either committed or actively reserved using exact Decimal summation."""
         with self._connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT epsilon, delta
-                FROM privacy_reservations
-                WHERE status IN ('COMMITTED', 'PENDING')
-            """)
+            if budget_scope_id is not None:
+                cursor.execute(
+                    """
+                    SELECT epsilon, delta
+                    FROM privacy_reservations
+                    WHERE status IN ('COMMITTED', 'PENDING') AND budget_scope_id = ?
+                    """,
+                    (budget_scope_id,),
+                )
+            else:
+                cursor.execute("""
+                    SELECT epsilon, delta
+                    FROM privacy_reservations
+                    WHERE status IN ('COMMITTED', 'PENDING')
+                """)
             eps = Decimal("0.0")
             delta = Decimal("0.0")
             for r_eps, r_delta in cursor.fetchall():
                 eps += _to_decimal(r_eps)
                 delta += _to_decimal(r_delta)
             return float(eps), float(delta)
+
+    def get_privacy_view(
+        self,
+        budget_scope_id: str = "global_external",
+        delta_global: Optional[Union[float, Decimal]] = None,
+        orders: Optional[Sequence[Union[float, Decimal]]] = None,
+        epsilon_cap: Optional[Union[float, Decimal]] = None,
+        accountant_mode: Optional[str] = None,
+    ) -> PrivacyView:
+        """Reconstruct authoritative PrivacyView for a given budget scope."""
+        eff_orders = [to_decimal(o) for o in (orders or DEFAULT_RDP_ORDERS)]
+        eff_delta = validate_delta(delta_global) if delta_global is not None else Decimal("1.0e-5")
+        eff_cap = to_decimal(epsilon_cap) if epsilon_cap is not None else Decimal("4.0")
+
+        with self._connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT accountant_mode, epsilon, delta, rdp_cost_json
+                FROM release_store
+                WHERE budget_scope_id = ? AND status = 'COMMITTED'
+                """,
+                (budget_scope_id,),
+            )
+            rows = cursor.fetchall()
+
+        total_releases = len(rows)
+        resolved_mode = accountant_mode or (rows[0]["accountant_mode"] if rows else "rdp")
+
+        if resolved_mode == "rdp":
+            vecs = []
+            for r in rows:
+                if r["rdp_cost_json"]:
+                    vecs.append(rdp_vector_from_json(r["rdp_cost_json"]))
+            if vecs:
+                cum_rdp = compose_rdp_vectors(vecs, orders=eff_orders)
+                best_alpha, rdp_eff = rdp_to_epsilon_delta(cum_rdp, delta_global=eff_delta)
+                basic_sum = sum(_to_decimal(r["epsilon"]) for r in rows)
+                eff_eps = min(basic_sum, rdp_eff)
+            else:
+                cum_rdp = {o: Decimal("0.0") for o in eff_orders}
+                best_alpha = None
+                eff_eps = Decimal("0.0")
+
+            remaining_eps = max(Decimal("0.0"), eff_cap - eff_eps)
+            return PrivacyView(
+                budget_scope_id=budget_scope_id,
+                release_count=total_releases,
+                total_rdp_vector=cum_rdp,
+                effective_epsilon=eff_eps,
+                best_alpha=best_alpha,
+                delta_global=eff_delta,
+                epsilon_cap=eff_cap,
+                remaining_epsilon=remaining_eps,
+                accountant_mode="rdp",
+                orders=eff_orders,
+            )
+        else:
+            spent_eps = sum(_to_decimal(r["epsilon"]) for r in rows)
+            spent_delta = sum(_to_decimal(r["delta"]) for r in rows)
+            remaining_eps = max(Decimal("0.0"), eff_cap - spent_eps)
+            return PrivacyView(
+                budget_scope_id=budget_scope_id,
+                release_count=total_releases,
+                total_rdp_vector={},
+                effective_epsilon=spent_eps,
+                best_alpha=None,
+                delta_global=spent_delta,
+                epsilon_cap=eff_cap,
+                remaining_epsilon=remaining_eps,
+                accountant_mode="basic",
+                orders=eff_orders,
+            )
 
     def clear(self) -> None:
         """Wipe all state (test-only helper)."""
