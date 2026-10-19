@@ -277,6 +277,7 @@ class ReleaseOrchestrator:
             mode=rc_mode,
             groups=rc_groups,
         )
+        effective_accountant_mode = "basic" if budget_scope_id == "internal" else self.accountant_mode
 
         # 8. Check persistent state (single source of truth: no legacy cache fallback)
         if reuse_cache:
@@ -286,7 +287,7 @@ class ReleaseOrchestrator:
                 self._record_cache_hit(
                     plan, committed, query.recipient, dataset_version,
                     budget_scope_id=budget_scope_id,
-                    accountant_mode=self.accountant_mode,
+                    accountant_mode=effective_accountant_mode,
                 )
                 return self._finalize_output(
                     release_result=committed,
@@ -297,7 +298,7 @@ class ReleaseOrchestrator:
                     cache_hit=True,
                     release_key=plan.release_key,
                     budget_scope_id=budget_scope_id,
-                    accountant_mode=self.accountant_mode,
+                    accountant_mode=effective_accountant_mode,
                 )
 
         # 9. Fault hook: before_budget_reserve
@@ -373,7 +374,7 @@ class ReleaseOrchestrator:
             single_flight_timeout=single_flight_timeout,
             lease_timeout=lease_timeout,
             reuse_cache=reuse_cache,
-            accountant_mode=self.accountant_mode,
+            accountant_mode=effective_accountant_mode,
             budget_scope_id=budget_scope_id,
             recipient=query.recipient,
             recipient_role=recipient_role,
@@ -390,7 +391,7 @@ class ReleaseOrchestrator:
             self._record_cache_hit(
                 plan, cached_res, query.recipient, dataset_version,
                 budget_scope_id=budget_scope_id,
-                accountant_mode=self.accountant_mode,
+                accountant_mode=effective_accountant_mode,
             )
             return self._finalize_output(
                 release_result=cached_res,
@@ -401,7 +402,7 @@ class ReleaseOrchestrator:
                 cache_hit=True,
                 release_key=plan.release_key,
                 budget_scope_id=budget_scope_id,
-                accountant_mode=self.accountant_mode,
+                accountant_mode=effective_accountant_mode,
                 effective_epsilon=getattr(res_tuple, "effective_epsilon", None),
                 best_alpha=getattr(res_tuple, "best_alpha", None),
             )
@@ -455,7 +456,7 @@ class ReleaseOrchestrator:
                 window_end=str(plan.time_window[1]) if plan.time_window[1] else None,
                 generation=generation,
                 budget_scope_id=budget_scope_id,
-                accountant_mode=self.accountant_mode,
+                accountant_mode=effective_accountant_mode,
                 rdp_cost_json=rdp_vector_to_json(candidate_rdp) if candidate_rdp else None,
                 delta_global=effective_delta_global,
             )
@@ -501,7 +502,7 @@ class ReleaseOrchestrator:
             cache_hit=False,
             release_key=plan.release_key,
             budget_scope_id=budget_scope_id,
-            accountant_mode=self.accountant_mode,
+            accountant_mode=effective_accountant_mode,
             effective_epsilon=eff_eps_committed,
             best_alpha=best_a_committed,
         )

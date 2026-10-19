@@ -9,9 +9,17 @@ from experiments.exp01_baseline import run_baseline_experiment
 from experiments.exp02_epsilon import run_epsilon_sweep
 from experiments.exp03_population import run_population_sweep
 from experiments.exp04_clipping import run_clipping_sweep
+from experiments.exp05_composition import run_composition_experiment
+from experiments.exp06_release_frequency import run_release_frequency_experiment
+from experiments.exp07_recipient_composition import run_recipient_composition_experiment
+from experiments.exp08_longitudinal_budget import run_longitudinal_budget_experiment
 
 
-def run_all_experiments(smoke: bool = False, output_dir: Optional[str] = None):
+def run_all_experiments(
+    smoke: bool = False,
+    output_dir: Optional[str] = None,
+    include_longitudinal: bool = False,
+):
     out_root = output_dir or ("results/verification" if smoke else "results")
     t_start = time.time()
 
@@ -55,6 +63,13 @@ def run_all_experiments(smoke: bool = False, output_dir: Optional[str] = None):
             data_path="data/interactions_n10000.parquet",
             output_dir=out_root,
         )
+
+        if include_longitudinal:
+            print("\n--- Running Longitudinal Accounting Experiments (Smoke) ---")
+            run_composition_experiment(t_values=[1, 2, 5], n_trials=2, output_dir=out_root)
+            run_release_frequency_experiment(cadences={"weekly": 6, "monthly": 3}, n_trials=2, output_dir=out_root)
+            run_recipient_composition_experiment(n_weeks=4, output_dir=out_root)
+            run_longitudinal_budget_experiment(max_steps=6, output_dir=out_root)
     else:
         print("============================================================")
         print("FULL EXPERIMENT MODE")
@@ -91,6 +106,13 @@ def run_all_experiments(smoke: bool = False, output_dir: Optional[str] = None):
             output_dir=out_root,
         )
 
+        if include_longitudinal:
+            print("\n--- Running Longitudinal Accounting Experiments (Full) ---")
+            run_composition_experiment(output_dir=out_root)
+            run_release_frequency_experiment(output_dir=out_root)
+            run_recipient_composition_experiment(output_dir=out_root)
+            run_longitudinal_budget_experiment(output_dir=out_root)
+
     total_time = time.time() - t_start
     print("======================================================================")
     print(f"All experiments successfully completed in {total_time/60:.2f} minutes.")
@@ -104,8 +126,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run Private LLM Analytics experiments")
     parser.add_argument("--smoke", action="store_true", help="Run rapid smoke test with minimal trials into results/verification")
     parser.add_argument("--output-dir", type=str, default=None, help="Output directory for results (defaults to results/verification for smoke, results for full)")
+    parser.add_argument("--include-longitudinal", "--v02", action="store_true", help="Also execute v0.2 longitudinal experiments (Exp 05-08)")
     args = parser.parse_args()
-    run_all_experiments(smoke=args.smoke, output_dir=args.output_dir)
+    run_all_experiments(smoke=args.smoke, output_dir=args.output_dir, include_longitudinal=args.include_longitudinal)
 
 
 if __name__ == "__main__":

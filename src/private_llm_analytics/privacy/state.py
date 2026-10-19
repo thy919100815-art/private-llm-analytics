@@ -422,20 +422,28 @@ class PrivacyStateManager:
 
             # Deterministic migration of legacy Gaussian records to RDP vectors (v0.2 Item 31)
             cursor.execute("""
-                SELECT release_key, mechanism, sensitivity, noise_scale, reservation_id
+                SELECT release_key, mechanism, sensitivity, noise_scale, reservation_id, metric
                 FROM release_store
                 WHERE rdp_cost_json IS NULL AND status = 'COMMITTED'
             """)
             legacy_releases = cursor.fetchall()
-            for r_key, mech, sens, sig, r_res_id in legacy_releases:
+            for r_key, mech, sens, sig, r_res_id, r_metric in legacy_releases:
                 if "gaussian" in str(mech).lower():
-                    if sens > 0 and sig > 0:
-                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=DEFAULT_RDP_ORDERS)
+                    resolved_sens = sens
+                    if (resolved_sens is None or resolved_sens <= 0) and r_metric:
+                        if r_metric == "user_prevalence":
+                            resolved_sens = 3.0
+                        elif r_metric == "user_normalized_share":
+                            resolved_sens = 1.0
+                        elif r_metric == "interaction_volume":
+                            resolved_sens = 20.0
+                    if resolved_sens is not None and resolved_sens > 0 and sig is not None and sig > 0:
+                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=resolved_sens, orders=DEFAULT_RDP_ORDERS)
                         rdp_j = rdp_vector_to_json(rdp_v)
                         orders_j = json.dumps([float(o) for o in DEFAULT_RDP_ORDERS])
                         cursor.execute(
-                            "UPDATE release_store SET rdp_cost_json = ?, rdp_orders_json = ? WHERE release_key = ?",
-                            (rdp_j, orders_j, r_key),
+                            "UPDATE release_store SET rdp_cost_json = ?, rdp_orders_json = ?, sensitivity = ? WHERE release_key = ?",
+                            (rdp_j, orders_j, resolved_sens, r_key),
                         )
                         cursor.execute(
                             "UPDATE privacy_reservations SET rdp_cost_json = ?, rdp_orders_json = ? WHERE reservation_id = ?",
@@ -687,7 +695,7 @@ class PrivacyStateManager:
 
                     # 2. Check privacy budget atomically across COMMITTED and PENDING in scope
                     if not allow_overrun:
-                        if accountant_mode == "rdp":
+                        if accountant_mode == "rdp" and budget_scope_id != "internal":
 
                             eff_orders = [to_decimal(o) for o in (rdp_orders or DEFAULT_RDP_ORDERS)]
                             eff_delta = validate_delta(global_delta)

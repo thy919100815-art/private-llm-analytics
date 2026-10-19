@@ -1,0 +1,7 @@
+policy,scope_id,releases_attempted,releases_accepted,releases_rejected,effective_epsilon,best_alpha,exhaustion_week,budget_cap
+GLOBAL_EXTERNAL,global_external,30,18,12,5.9752,5.0,8,6.0
+COLLUSION_GROUP,collusion:group_ab,24,18,6,5.9752,5.0,10,6.0
+COLLUSION_GROUP,collusion:group_c,6,6,0,3.2159,10.0,None,6.0
+PER_RECIPIENT,recipient:provider_a,12,12,0,4.663,8.0,None,6.0
+PER_RECIPIENT,recipient:provider_b,12,12,0,4.663,8.0,None,6.0
+PER_RECIPIENT,recipient:provider_c,6,6,0,3.2159,10.0,None,6.0

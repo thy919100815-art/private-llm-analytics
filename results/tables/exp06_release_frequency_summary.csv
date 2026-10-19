@@ -1,0 +1,5 @@
+cadence,horizon_days,releases_attempted,releases_accepted,releases_rejected,effective_epsilon,best_alpha,budget_cap,budget_utilization_pct,utility_mae_mean,utility_top1_accuracy
+daily,90,90,48,42,9.984,4.0,10.0,99.84,6.3e-05,0.8667
+weekly,90,13,13,0,4.8872,8.0,10.0,48.87,6.3e-05,0.8667
+biweekly,90,6,6,0,3.2159,10.0,10.0,32.16,6.3e-05,0.8667
+monthly,90,3,3,0,2.2657,16.0,10.0,22.66,6.3e-05,0.8667
