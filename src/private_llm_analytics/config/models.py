@@ -52,16 +52,44 @@ class GlobalBudgetConfig(BaseModel):
 
 
 class PrivacyAccountantConfig(BaseModel):
+    mode: Literal["basic", "rdp"] = "rdp"
     type: str = "basic"
+    epsilon_cap: float = Field(default=4.0, gt=0)
+    delta_global: float = Field(default=1e-6, gt=0.0, lt=1.0)
+    orders: List[float] = Field(
+        default_factory=lambda: [1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 8.0, 10.0, 16.0, 32.0, 64.0, 128.0]
+    )
 
     @model_validator(mode="after")
-    def validate_accountant_type(self) -> "PrivacyAccountantConfig":
+    def validate_accountant_config(self) -> "PrivacyAccountantConfig":
         if self.type != "basic":
             raise ValueError(
                 f"Unsupported accountant type '{self.type}'. v0.1.1 strictly supports only 'basic' "
                 f"persistent privacy accounting (RDP is scheduled for v0.2)."
             )
+        if self.mode not in ("basic", "rdp"):
+            raise ValueError(f"Unsupported accountant mode '{self.mode}'. Choose 'basic' or 'rdp'.")
+        if self.mode == "rdp":
+            if not self.orders:
+                raise ValueError("RDP orders cannot be empty when accountant mode is 'rdp'.")
+            for alpha in self.orders:
+                if alpha <= 1.0:
+                    raise ValueError(f"RDP order alpha must be strictly greater than 1.0, got {alpha}")
+            if self.delta_global <= 0.0 or self.delta_global >= 1.0:
+                raise ValueError(f"delta_global must be in (0, 1), got {self.delta_global}")
+            if self.epsilon_cap <= 0.0:
+                raise ValueError(f"epsilon_cap must be > 0, got {self.epsilon_cap}")
         return self
+
+
+class PrivacyHistoryConfig(BaseModel):
+    mode: Literal["lifetime", "rolling_reset"] = "lifetime"
+    planning_horizon_days: Optional[int] = None
+
+
+class RecipientCompositionConfig(BaseModel):
+    mode: Literal["per_recipient", "collusion_group", "global_external"] = "global_external"
+    groups: Dict[str, List[str]] = Field(default_factory=dict)
 
 
 class DefaultMechanismConfig(BaseModel):
@@ -85,6 +113,8 @@ class PrivacyConfig(BaseModel):
         default_factory=lambda: GlobalBudgetConfig(epsilon=1.0, delta=1e-6)
     )
     accountant: PrivacyAccountantConfig = Field(default_factory=PrivacyAccountantConfig)
+    history: PrivacyHistoryConfig = Field(default_factory=PrivacyHistoryConfig)
+    recipient_composition: RecipientCompositionConfig = Field(default_factory=RecipientCompositionConfig)
     default_mechanism: DefaultMechanismConfig = Field(default_factory=DefaultMechanismConfig)
     release: PrivacyReleaseConfig = Field(default_factory=PrivacyReleaseConfig)
 

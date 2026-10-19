@@ -14,7 +14,28 @@ privacy:
     delta: 1.0e-6
 
   accountant:
-    type: basic
+    mode: rdp
+    epsilon_cap: 4.0
+    delta_global: 1.0e-6
+    orders:
+      - 1.25
+      - 1.5
+      - 2.0
+      - 3.0
+      - 4.0
+      - 5.0
+      - 8.0
+      - 10.0
+      - 16.0
+      - 32.0
+      - 64.0
+      - 128.0
+
+  history:
+    mode: lifetime
+
+  recipient_composition:
+    mode: global_external
 
   default_mechanism:
     type: gaussian
