@@ -1,0 +1,4 @@
+population_n,epsilon_cap,oracle_candidate,oracle_true_utility,planner_candidate,planner_true_utility,planner_predicted_loss,planner_abs_regret,planner_rel_regret,baseline_a_feasible,baseline_a_true_utility,baseline_b_feasible,baseline_b_true_utility
+500,4.0,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.2053,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.2053,0.1204,0.0,0.0,False,,True,0.9955
+1000,4.0,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1609,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1609,0.08,0.0,0.0,False,,True,1.0015
+5000,4.0,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1257,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1257,0.0476,0.0,0.0,False,,True,0.9993

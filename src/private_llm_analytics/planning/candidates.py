@@ -13,6 +13,13 @@ VALID_GRANULARITIES = (
     "overall_1_cell",
 )
 
+GRANULARITY_DIMENSIONS: Dict[str, int] = {
+    "full_9_cell": 9,
+    "provider_3_cell": 3,
+    "task_3_cell": 3,
+    "overall_1_cell": 1,
+}
+
 VALID_MECHANISMS = (
     "gaussian",
     "laplace",

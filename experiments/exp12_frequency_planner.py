@@ -1,9 +1,9 @@
 """Experiment 12: Longitudinal Frequency Release Planner.
 
-Evaluates frequency adaptation across initial budget exhaustion levels:
-  - Spent budget ratios: {0.0, 0.25, 0.50, 0.75} of epsilon_cap = 4.0
-  - Candidate cadences F in {1 (daily), 7 (weekly), 14 (biweekly), 30 (monthly)}
-  - Over a 90-day planning horizon.
+Evaluates cadence adaptation across discrete integer historical releases:
+  - Finds integer past release counts k closest to {0%, 25%, 50%, 75%} budget exhaustion of epsilon_cap = 4.0
+  - Composes exact Gaussian RDP across longitudinal horizons
+  - Records actual_initial_epsilon, actual_initial_ratio, and selected cadences F in {1, 7, 14, 30}.
 """
 
 import argparse
@@ -21,58 +21,59 @@ from private_llm_analytics.planning.utility import NoiseEstimator
 from private_llm_analytics.privacy.composition import PrivacyView
 from private_llm_analytics.privacy.rdp import (
     compute_gaussian_rdp,
+    compose_rdp_vectors,
     rdp_to_epsilon_delta,
 )
 
 
-class MockPriorHistoryState:
-    """Mock state manager holding pre-existing historical RDP consumption."""
+class DiscreteHistoricalState:
+    """Mock state manager holding exact discrete historical release RDP vectors."""
 
-    def __init__(self, spent_epsilon: float, delta_global: float, orders: Sequence[Decimal]):
-        self.spent_epsilon = float(spent_epsilon)
-        self.delta_global = Decimal(str(delta_global))
+    def __init__(self, historical_release_count: int, single_rdp: Dict[Decimal, Decimal], orders: Sequence[Decimal], delta_global: Decimal, epsilon_cap: Decimal):
+        self.release_count = int(historical_release_count)
         self.orders = list(orders)
+        self.delta_global = delta_global
+        self.epsilon_cap = epsilon_cap
 
-        if spent_epsilon > 0.0:
-            # Construct a base RDP vector that converts to spent_epsilon
-            cand = ReleasePolicyCandidate(contribution_bound=20.0, mechanism="gaussian")
-            sigma, sens = NoiseEstimator.estimate_noise_sigma("interaction_volume", cand)
-            base_rdp = compute_gaussian_rdp(sigma=sigma, sensitivity=sens, orders=self.orders)
-            _, single_eps = rdp_to_epsilon_delta(base_rdp, delta_global=self.delta_global)
-            multiplier = Decimal(str(spent_epsilon)) / single_eps
-            self.hist_rdp = {o: base_rdp[o] * multiplier for o in self.orders}
-            self.release_count = int(float(multiplier))
+        if self.release_count > 0:
+            self.total_rdp = {o: single_rdp[o] * Decimal(str(self.release_count)) for o in self.orders}
+            best_alpha, eff_eps = rdp_to_epsilon_delta(self.total_rdp, delta_global=self.delta_global)
+            self.effective_epsilon = eff_eps
+            self.best_alpha = best_alpha
         else:
-            self.hist_rdp = {o: Decimal("0.0") for o in self.orders}
-            self.release_count = 0
+            self.total_rdp = {o: Decimal("0.0") for o in self.orders}
+            self.effective_epsilon = Decimal("0.0")
+            self.best_alpha = None
+
+        self.remaining_epsilon = max(Decimal("0.0"), self.epsilon_cap - self.effective_epsilon)
 
     def get_privacy_view(self, budget_scope_id, delta_global, orders, epsilon_cap, accountant_mode):
-        _, eff_eps = rdp_to_epsilon_delta(self.hist_rdp, delta_global=self.delta_global) if self.spent_epsilon > 0 else (None, Decimal("0.0"))
-        rem_eps = max(Decimal("0.0"), Decimal(str(epsilon_cap)) - eff_eps)
         return PrivacyView(
             budget_scope_id=budget_scope_id,
             release_count=self.release_count,
-            total_rdp_vector=self.hist_rdp,
-            effective_epsilon=eff_eps,
-            best_alpha=self.orders[0] if self.orders else None,
+            total_rdp_vector=self.total_rdp,
+            effective_epsilon=self.effective_epsilon,
+            best_alpha=self.best_alpha,
             delta_global=self.delta_global,
-            epsilon_cap=Decimal(str(epsilon_cap)),
-            remaining_epsilon=rem_eps,
+            epsilon_cap=self.epsilon_cap,
+            remaining_epsilon=self.remaining_epsilon,
             accountant_mode=accountant_mode,
             orders=self.orders,
         )
 
 
 def run_frequency_planner_experiment(
-    spent_ratios: Sequence[float] = (0.0, 0.25, 0.50, 0.75),
+    target_ratios: Optional[Sequence[float]] = None,
+    spent_ratios: Optional[Sequence[float]] = None,
     epsilon_cap: float = 4.0,
     horizon_days: int = 90,
     candidate_frequencies: Sequence[int] = (1, 7, 14, 30),
     output_dir: str = "results",
 ) -> pd.DataFrame:
+    ratios = target_ratios if target_ratios is not None else (spent_ratios if spent_ratios is not None else (0.0, 0.25, 0.50, 0.75))
     print("\n=======================================================")
     print("Running Exp 12: Longitudinal Frequency Release Planner")
-    print(f"Spent Ratios: {spent_ratios} of Cap = {epsilon_cap}")
+    print(f"Target Spent Ratios: {ratios} of Cap = {epsilon_cap}")
     print(f"Planning Horizon: {horizon_days} days")
     print(f"Candidate Frequencies: {candidate_frequencies}")
     print("=======================================================")
@@ -88,15 +89,38 @@ def run_frequency_planner_experiment(
     app_config.privacy.planner.candidate_frequencies = list(candidate_frequencies)
     app_config.privacy.planner.planning_horizon_days = horizon_days
     eff_orders = [Decimal(str(a)) for a in app_config.privacy.accountant.orders]
+    delta_global = Decimal(str(app_config.privacy.accountant.delta_global))
+    dec_cap = Decimal(str(epsilon_cap))
+
+    # Single release RDP cost
+    cand_single = ReleasePolicyCandidate(contribution_bound=20.0, mechanism="gaussian")
+    sigma, sens = NoiseEstimator.estimate_noise_sigma("interaction_volume", cand_single)
+    single_rdp = compute_gaussian_rdp(sigma=sigma, sensitivity=sens, orders=eff_orders)
+
+    # 1. Precompute discrete release trajectory (k = 0..20)
+    discrete_table: List[Tuple[int, float]] = []
+    for k in range(0, 25):
+        if k == 0:
+            discrete_table.append((0, 0.0))
+        else:
+            k_rdp = {o: single_rdp[o] * Decimal(str(k)) for o in eff_orders}
+            _, eps_k = rdp_to_epsilon_delta(k_rdp, delta_global=delta_global)
+            discrete_table.append((k, float(eps_k)))
 
     records: List[Dict] = []
 
-    for ratio in spent_ratios:
-        spent_eps = ratio * epsilon_cap
-        state_mgr = MockPriorHistoryState(
-            spent_epsilon=spent_eps,
-            delta_global=app_config.privacy.accountant.delta_global,
+    for target_ratio in ratios:
+        target_eps = target_ratio * epsilon_cap
+        # Find closest integer release count k
+        best_k, best_eps = min(discrete_table, key=lambda x: abs(x[1] - target_eps))
+        actual_ratio = best_eps / epsilon_cap
+
+        state_mgr = DiscreteHistoricalState(
+            historical_release_count=best_k,
+            single_rdp=single_rdp,
             orders=eff_orders,
+            delta_global=delta_global,
+            epsilon_cap=dec_cap,
         )
 
         planner = SmallNReleasePlanner(app_config=app_config, state_manager=state_mgr)
@@ -108,9 +132,11 @@ def run_frequency_planner_experiment(
         )
 
         rec = {
-            "spent_budget_ratio": ratio,
-            "initial_spent_epsilon": round(spent_eps, 2),
-            "remaining_epsilon_budget": round(epsilon_cap - spent_eps, 2),
+            "target_ratio": target_ratio,
+            "historical_release_count": best_k,
+            "actual_initial_epsilon": round(best_eps, 4),
+            "actual_initial_ratio": round(actual_ratio, 4),
+            "remaining_epsilon_budget": round(epsilon_cap - best_eps, 4),
             "selected_frequency_days": plan_res.policy.frequency_days if plan_res.policy else None,
             "planned_releases_count": plan_res.planned_releases_count,
             "projected_total_epsilon": round(plan_res.projected_epsilon, 4),
@@ -121,25 +147,25 @@ def run_frequency_planner_experiment(
         }
         records.append(rec)
         print(
-            f"  Spent={spent_eps:4.1f}/{epsilon_cap:4.1f} ({ratio*100:2.0f}%) | "
-            f"Selected F={rec['selected_frequency_days']} days (K={rec['planned_releases_count']} releases) | "
-            f"Projected eps={rec['projected_total_epsilon']:.2f} | Feasible={rec['budget_feasible']}"
+            f"  Target={target_ratio*100:2.0f}% | Discrete Past Releases: k={best_k:2d} (eps={best_eps:4.2f}, ratio={actual_ratio*100:4.1f}%) | "
+            f"Selected F={rec['selected_frequency_days']} days (K={rec['planned_releases_count']} planned) | "
+            f"Projected Total eps={rec['projected_total_epsilon']:4.2f} | Feasible={rec['budget_feasible']}"
         )
 
     results_df = pd.DataFrame(records)
     save_summary_table(results_df, str(tables_dir / "exp12_frequency_planner.csv"))
 
-    # Plot Selected Frequency vs Initial Spent Budget
+    # Plot Selected Frequency vs Actual Initial Budget Exhaustion
     valid_df = results_df[results_df["budget_feasible"] == True]
     plot_single_line_chart(
-        x=(valid_df["spent_budget_ratio"] * 100).tolist(),
+        x=(valid_df["actual_initial_ratio"] * 100).tolist(),
         y_series={
             "Release Cadence Interval (Days)": valid_df["selected_frequency_days"].tolist(),
             "Planned Releases (Count)": valid_df["planned_releases_count"].tolist(),
         },
-        x_label="Pre-existing Budget Exhaustion (%)",
+        x_label="Actual Historical Budget Exhaustion (%)",
         y_label="Cadence / Release Count",
-        title="Adaptive Release Frequency Downshifting vs Privacy Consumption",
+        title="Adaptive Release Frequency Downshifting vs Discrete Past Releases",
         output_path=str(figures_dir / "exp12_frequency_planner"),
         x_log=False,
     )
@@ -157,7 +183,7 @@ def main():
     out_root = "results/verification" if args.smoke else args.output_dir
     if args.smoke:
         run_frequency_planner_experiment(
-            spent_ratios=(0.0, 0.50),
+            target_ratios=(0.0, 0.50),
             output_dir=out_root,
         )
     else:

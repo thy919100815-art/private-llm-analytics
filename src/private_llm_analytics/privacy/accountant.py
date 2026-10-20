@@ -3,7 +3,7 @@
 from abc import ABC, abstractmethod
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Union
 from private_llm_analytics.privacy.budget import PrivacyBudget, PrivacySpent
 from private_llm_analytics.privacy.exceptions import PrivacyBudgetExceededError
 from private_llm_analytics.privacy.ledger import PrivacyLedger

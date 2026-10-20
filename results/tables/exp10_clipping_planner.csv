@@ -1,0 +1,5 @@
+population_n,oracle_optimal_c,oracle_error,planner_selected_c,planner_error,planner_abs_regret,planner_rel_regret,fixed_20_error,fixed_20_abs_regret,fixed_40_error,fixed_40_abs_regret
+500,40.0,196.57,80.0,270.46,73.89,0.3759,1258.03,1061.46,196.57,0.0
+1000,80.0,270.46,80.0,270.46,0.0,0.0,2544.38,2273.92,364.01,93.55
+2500,80.0,270.6,80.0,270.6,0.0,0.0,6523.91,6253.31,955.13,684.54
+5000,80.0,270.81,80.0,270.81,0.0,0.0,12817.87,12547.06,1784.33,1513.52

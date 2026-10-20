@@ -111,6 +111,7 @@ def run_all_experiments(
                 n_users=500,
                 n_trials=5,
                 output_dir=out_root,
+                regimes=["default"],
             )
     else:
         print("============================================================")

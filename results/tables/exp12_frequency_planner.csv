@@ -1,0 +1,5 @@
+target_ratio,historical_release_count,actual_initial_epsilon,actual_initial_ratio,remaining_epsilon_budget,selected_frequency_days,planned_releases_count,projected_total_epsilon,budget_feasible,decision_reason,selected_granularity,selected_clipping
+0.0,0,0.0,0.0,4.0,14,7,3.4961,True,OPTIMAL_POLICY_SELECTED,full_9_cell,80.0
+0.25,1,1.3421,0.3355,2.6579,14,7,3.7666,True,OPTIMAL_POLICY_SELECTED,full_9_cell,80.0
+0.5,2,1.8175,0.4544,2.1825,14,7,3.9907,True,OPTIMAL_POLICY_SELECTED,full_9_cell,80.0
+0.75,5,2.9358,0.7339,1.0642,30,3,3.7666,True,OPTIMAL_POLICY_SELECTED,full_9_cell,80.0

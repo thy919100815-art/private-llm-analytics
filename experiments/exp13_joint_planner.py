@@ -1,29 +1,97 @@
-"""Experiment 13: Joint Policy Release Planner (C, G, W, F).
+"""Experiment 13: Joint Policy Release Planner (C, G, W, F) with True Empirical Oracle.
 
 Evaluates Joint Policy Optimization:
   - Baseline A: Fixed (C=20, G=full_9_cell, W=30, F=7)
   - Baseline B: Fixed (C=40, G=provider_3_cell, W=30, F=14)
   - Static Public Joint Planner (v0.3): automatic joint selection under public prior
-  - Oracle Planner: empirical optimum across finite policy candidate grid
+  - True Empirical Oracle: argmin true_utility evaluated directly on ground truth data
 Across populations N in {500, 1000, 5000} and budget caps epsilon_cap in {2.0, 4.0}.
 """
 
 import argparse
 from pathlib import Path
 import time
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
+import numpy as np
 import pandas as pd
 
 from private_llm_analytics.aggregation.user_matrix import build_user_matrix
 from private_llm_analytics.config.loader import load_app_config
 from private_llm_analytics.evaluation.report import plot_single_line_chart, save_summary_table
-from private_llm_analytics.metrics.interaction_volume import InteractionVolumeMetric
-from private_llm_analytics.planning.candidates import ReleasePolicyCandidate, generate_candidate_set
+from private_llm_analytics.mechanisms.gaussian import calibrate_analytic_gaussian
+from private_llm_analytics.planning.candidates import GRANULARITY_DIMENSIONS, ReleasePolicyCandidate
 from private_llm_analytics.planning.diagnostics import compute_regret
 from private_llm_analytics.planning.planner import SmallNReleasePlanner
-from private_llm_analytics.planning.utility import UtilityEstimator
+from private_llm_analytics.planning.policy import (
+    aggregate_to_granularity,
+    build_volume_contributions_for_granularity,
+    compute_workload_reconstruction_error,
+    reconstruct_to_9_cell,
+)
 from private_llm_analytics.simulator.generator import SyntheticDataGenerator
 from private_llm_analytics.simulator.scenario import SimulationScenario
+
+
+def compute_true_candidate_utility(
+    candidate: ReleasePolicyCandidate,
+    umatrix: Any,
+    cell_names: List[str],
+    reference_days: int = 30,
+    n_trials: int = 10,
+    seed: int = 42,
+) -> float:
+    """Compute true empirical utility on ground truth user data without planner predictions."""
+    raw_mat = umatrix.matrix
+    n_users = raw_mat.shape[0]
+    w_days = candidate.window_days
+
+    # 1. True empirical clipping loss
+    clipped_users, exact_agg, target_names, _ = build_volume_contributions_for_granularity(
+        raw_user_matrix=umatrix,
+        granularity=candidate.granularity,
+        clip_norm=candidate.contribution_bound or 20.0,
+    )
+    unclipped_9 = np.sum(raw_mat, axis=0)
+    true_total_vol = max(1.0, float(np.sum(unclipped_9)))
+
+    # Compute empirical clipping loss against true target unclipped
+    true_target_unclipped, _ = aggregate_to_granularity(unclipped_9, cell_names, candidate.granularity)
+    emp_clip_loss = float(np.sum(np.abs(true_target_unclipped - exact_agg))) / true_total_vol
+
+    # 2. True empirical DP noise error
+    sigma = calibrate_analytic_gaussian(
+        epsilon=candidate.epsilon_per_release,
+        delta=candidate.delta_per_release,
+        l2_sensitivity=candidate.contribution_bound or 20.0,
+    )
+    noise_errors = []
+    for t in range(n_trials):
+        rng = np.random.default_rng(seed + t * 100)
+        noise = rng.normal(loc=0.0, scale=sigma, size=len(exact_agg))
+        noise_errors.append(float(np.sum(np.abs(noise))))
+    emp_noise_loss = float(np.mean(noise_errors)) / true_total_vol
+
+    # 3. True empirical workload reconstruction loss
+    reconstructed_9 = reconstruct_to_9_cell(exact_agg, candidate.granularity, target_names, cell_names)
+    emp_agg_loss = compute_workload_reconstruction_error(
+        true_9_cell=unclipped_9,
+        cell_names=cell_names,
+        granularity=candidate.granularity,
+    )
+
+    # 4. Freshness and window loss
+    emp_stale_loss = float(candidate.frequency_days / (2.0 * w_days))
+    emp_win_loss = float(abs(w_days - reference_days) / float(reference_days))
+
+    # Total True Utility (dimensionless weights: 1.0, 1.0, 1.0, 0.5, 0.2)
+    total_true = (
+        1.0 * emp_clip_loss
+        + 1.0 * emp_noise_loss
+        + 1.0 * emp_agg_loss
+        + 0.5 * emp_stale_loss
+        + 0.2 * emp_win_loss
+    )
+    return float(total_true)
 
 
 def run_joint_planner_experiment(
@@ -61,6 +129,7 @@ def run_joint_planner_experiment(
             gen = SyntheticDataGenerator(scenario)
             df = gen.generate(seed=seed)
         umatrix = build_user_matrix(df, public_population_size=n)
+        cell_names = umatrix.cell_names
         app_config.scenario.population.n_users = n
 
         for cap in epsilon_caps:
@@ -75,58 +144,94 @@ def run_joint_planner_experiment(
                 force_recompute=True,
             )
 
-            # 2. Evaluate all feasible candidates under empirical simulation to identify Oracle
+            # 2. Evaluate all feasible candidates under True Empirical Oracle
             feasible_candidates = [
-                rec for rec in plan_res.candidate_evaluations if rec["feasible"]
+                rec["candidate"] for rec in plan_res.candidate_evaluations if rec["feasible"]
             ]
             if not feasible_candidates:
                 continue
 
-            # In simulation, the utility estimator's total error corresponds to predicted regret
-            best_emp = min(feasible_candidates, key=lambda x: x["total_error"])
-            oracle_cand = best_emp["candidate"]
-            oracle_err = best_emp["total_error"]
+            # Compute true empirical utility for all feasible policies
+            oracle_scores = {}
+            for cand in feasible_candidates:
+                score = compute_true_candidate_utility(
+                    candidate=cand,
+                    umatrix=umatrix,
+                    cell_names=cell_names,
+                    reference_days=app_config.privacy.planner.window_model.reference_days,
+                    n_trials=10,
+                    seed=seed,
+                )
+                oracle_scores[cand] = score
+
+            # True Oracle is argmin of true empirical utility
+            oracle_cand = min(oracle_scores, key=oracle_scores.get)
+            oracle_true_util = oracle_scores[oracle_cand]
 
             planner_cand = plan_res.policy
-            planner_err = plan_res.estimated_utility.total_error if plan_res.estimated_utility else oracle_err
+            planner_true_util = (
+                compute_true_candidate_utility(
+                    candidate=planner_cand,
+                    umatrix=umatrix,
+                    cell_names=cell_names,
+                    reference_days=app_config.privacy.planner.window_model.reference_days,
+                    n_trials=10,
+                    seed=seed,
+                )
+                if planner_cand
+                else oracle_true_util
+            )
 
             # 3. Baseline A: C=20, G=full_9_cell, W=30, F=7
-            base_a = next(
+            base_a_rec = next(
                 (c for c in plan_res.candidate_evaluations
                  if c["candidate"].contribution_bound == 20.0
                  and c["candidate"].granularity == "full_9_cell"
                  and c["candidate"].frequency_days == 7),
                 None
             )
+            base_a_true = (
+                compute_true_candidate_utility(base_a_rec["candidate"], umatrix, cell_names, seed=seed)
+                if base_a_rec and base_a_rec["feasible"]
+                else None
+            )
 
             # 4. Baseline B: C=40, G=provider_3_cell, W=30, F=14
-            base_b = next(
+            base_b_rec = next(
                 (c for c in plan_res.candidate_evaluations
                  if c["candidate"].contribution_bound == 40.0
                  and c["candidate"].granularity == "provider_3_cell"
                  and c["candidate"].frequency_days == 14),
                 None
             )
+            base_b_true = (
+                compute_true_candidate_utility(base_b_rec["candidate"], umatrix, cell_names, seed=seed)
+                if base_b_rec and base_b_rec["feasible"]
+                else None
+            )
 
-            abs_reg_plan, rel_reg_plan = compute_regret(planner_err, oracle_err)
+            abs_reg_plan, rel_reg_plan = compute_regret(planner_true_util, oracle_true_util)
 
             rec = {
                 "population_n": n,
                 "epsilon_cap": cap,
                 "oracle_candidate": oracle_cand.candidate_id,
-                "oracle_total_error": round(oracle_err, 2),
+                "oracle_true_utility": round(oracle_true_util, 4),
                 "planner_candidate": planner_cand.candidate_id if planner_cand else None,
-                "planner_total_error": round(planner_err, 2),
+                "planner_true_utility": round(planner_true_util, 4),
+                "planner_predicted_loss": round(plan_res.estimated_utility.total_error, 4) if plan_res.estimated_utility else None,
+                "planner_abs_regret": round(abs_reg_plan, 4),
                 "planner_rel_regret": round(rel_reg_plan, 4),
-                "baseline_a_feasible": base_a["feasible"] if base_a else False,
-                "baseline_a_error": round(base_a["total_error"], 2) if base_a else None,
-                "baseline_b_feasible": base_b["feasible"] if base_b else False,
-                "baseline_b_error": round(base_b["total_error"], 2) if base_b else None,
+                "baseline_a_feasible": base_a_rec["feasible"] if base_a_rec else False,
+                "baseline_a_true_utility": round(base_a_true, 4) if base_a_true is not None else None,
+                "baseline_b_feasible": base_b_rec["feasible"] if base_b_rec else False,
+                "baseline_b_true_utility": round(base_b_true, 4) if base_b_true is not None else None,
             }
             records.append(rec)
             print(
-                f"  N={n:4d}, Cap={cap:3.1f} | Planner: {planner_cand.candidate_id if planner_cand else 'NONE'} "
-                f"(Err={planner_err:6.1f}, Regret={rel_reg_plan*100:4.1f}%) | "
+                f"  N={n:4d}, Cap={cap:3.1f} | Oracle: {oracle_cand.candidate_id} (TrueUtil={oracle_true_util:.4f}) | "
+                f"Planner: {planner_cand.candidate_id if planner_cand else 'NONE'} "
+                f"(TrueUtil={planner_true_util:.4f}, Regret={rel_reg_plan*100:4.1f}%) | "
                 f"BaseA Feas={rec['baseline_a_feasible']} | BaseB Feas={rec['baseline_b_feasible']}"
             )
 
@@ -141,8 +246,8 @@ def run_joint_planner_experiment(
             "Static Public Joint Planner": (sub_cap4["planner_rel_regret"] * 100).tolist(),
         },
         x_label="Enterprise Population (N)",
-        y_label="Relative Regret vs Oracle (%)",
-        title="Joint Release Planner Regret across Population Sizes (Cap=4.0)",
+        y_label="Relative Regret vs True Oracle (%)",
+        title="Joint Release Planner Regret vs True Empirical Oracle (Cap=4.0)",
         output_path=str(figures_dir / "exp13_joint_planner"),
         x_log=True,
     )

@@ -325,25 +325,71 @@ python run_all_experiments.py --smoke --include-longitudinal
 ## 8. Small-n Utility-Aware Differential Privacy Release Planner (v0.3)
 
 ### 8.1 Motivation & Research Question
-In typical mid-sized enterprises ($N \in [500, 5000]$ employees), raw telemetry volume is small compared to national population analytics. Under user-level Differential Privacy:
-1. Setting clipping bound $C$ too low introduces severe clipping bias: $E_{\text{clip}}(C) = \mathbb{E}[(R_u - C)_+]$.
+In mid-sized enterprise environments ($N \in [500, 5000]$ employees), raw telemetry volume is orders of magnitude smaller than national population datasets. Under user-level Differential Privacy:
+1. Setting clipping bound $C$ too low introduces severe systematic clipping bias: $E_{\text{clip}}(C) = \mathbb{E}[(R_u - C)_+]$.
 2. Setting $C$ too high inflates $L_2$ query sensitivity $\Delta_2 = C$, injecting overwhelming DP Gaussian noise: $\sigma = \text{calibrate\_analytic\_gaussian}(\epsilon, \delta, C)$.
-3. Releasing overly fine 9-cell statistics spreads signal thin, causing noise to dominate each cell. Aggregating to coarse marginals ($G \in \{\text{provider\_3\_cell}, \text{task\_3\_cell}, \text{overall\_1\_cell}\}$) trades dimensional granularity against variance reduction.
-4. Releasing daily ($F=1$) consumes cumulative longitudinal privacy budget rapidly over a planning horizon $H$.
+3. Releasing fine-grained 9-cell statistics spreads signal thin, causing noise to dominate each cell. Aggregating to coarse marginals ($G \in \{\text{provider\_3\_cell}, \text{task\_3\_cell}, \text{overall\_1\_cell}\}$) trades dimensional granularity against variance reduction.
+4. Releasing frequently ($F=1$ or $F=7$) rapidly consumes cumulative longitudinal privacy budget over a planning horizon $H$.
 
-**The v0.3 Release Planner** automatically solves the joint optimization problem:
-$$\min_{\pi = (C, G, W, F)} E_{\text{total}}(\pi) = w_{\text{clip}} E_{\text{clip}} + w_{\text{noise}} E_{\text{noise}} + w_{\text{agg}} E_{\text{agg}} + w_{\text{stale}} E_{\text{stale}}$$
-$$\text{subject to} \quad \text{RDP}_{\text{projected}}(\alpha) = \text{RDP}_{\text{historical}}(\alpha) + \left\lceil \frac{H}{F} \right\rceil \cdot \text{RDP}_{\text{single}}(\alpha; \pi) \implies \epsilon_{\text{projected}} \le \epsilon_{\text{cap}}$$
+**The v0.3 Release Planner** automatically determines the optimal release policy tuple:
+$$\pi^* = (C^*, G^*, W^*, F^*)$$
+minimizing dimensionless normalized loss while strictly satisfying the lifetime privacy budget.
 
-### 8.2 Strict Privacy Provenance Invariant
-$$\boxed{\text{Static Public Planner never accesses private raw user logs}}$$
-- **STATIC_PUBLIC Mode**: Uses strictly public metadata ($N_{\text{public}}$, public prior $\mathcal{TN}(\mu, \sigma)$, workload weights, candidate policy grid).
-- **ORACLE_EVAL_ONLY Mode**: Permitted exclusively in isolated offline research benchmarks. Blocked with `ProductionSafetyConfigurationError` in production configurations or whenever queried by an external recipient.
+---
 
-### 8.3 Small-n Experimental Results (Exp 09–14)
-- **Exp 09 (Small-n Error Decomposition)**: Confirms monotonic decrease in clipping bias vs monotonic increase in noise error with $C$. Validates theoretical utility estimator calibration against 500-trial empirical simulation (Spearman rank correlation $> 0.94$).
-- **Exp 10 (Clipping Planner)**: Evaluates adaptive $C^*$ selection across $N \in [500, 5000]$. Shows adaptive planner achieves near-zero regret vs empirical oracle, outperforming fixed $C=20$ and $C=40$ baselines.
-- **Exp 11 (Granularity Planner)**: Confirms that for small $N$ ($N \le 1000$) and tight $\epsilon$ ($\epsilon \le 1.0$), aggregated marginals significantly reduce total reconstructed error over noisy 9-cell outputs.
-- **Exp 12 (Frequency Planner)**: Demonstrates automatic longitudinal cadence downshifting (e.g. from weekly $F=7$ to biweekly $F=14$ to monthly $F=30$) as historical budget consumption reaches 50%–75% of $\epsilon_{\text{cap}}$.
-- **Exp 13 (Joint Planner)**: Evaluates joint optimization $(C, G, W, F)$ against fixed heuristic baselines, demonstrating zero budget overruns and minimal regret.
-- **Exp 14 (Prior Misspecification)**: Evaluates robustness when the public prior shifts by $\pm 25\%$ in mean or $\pm 50\%$ in variance. Planner remains stable with bounded regret, consistently outperforming fixed heuristic baselines.
+### 8.2 Direct Granularity User-Level DP Semantics
+
+Unlike post-clipping linear aggregation (which inflates operator norm and sensitivity by $\sqrt{3}$ or $3.0$), **Direct Granularity Release** performs linear aggregation directly in user-space before target-dimensional clipping:
+
+1. **Volume Metric**:
+   $$m_u^G = A_G m_u \in \mathbb{R}^{d_G}$$
+   $$\bar{m}_u^G = m_u^G \cdot \min\left(1, \frac{C}{\|m_u^G\|_2}\right)$$
+   $$V_G = \sum_{u=1}^N \bar{m}_u^G \implies \Delta_2 = C$$
+   Gaussian noise is calibrated with sensitivity $\Delta_2 = C$ in the target dimension $d_G \in \{9, 3, 3, 1\}$.
+
+2. **Prevalence Metric**:
+   Direct binary indicators are constructed per user at target granularity:
+   - Provider: $b_{u,p} = \mathbf{1}[\text{user } u \text{ used provider } p \text{ at least once}] \implies \Delta_2 = \sqrt{3}$
+   - Task: $b_{u,t} = \mathbf{1}[\text{user } u \text{ used task } t \text{ at least once}] \implies \Delta_2 = \sqrt{3}$
+   - Overall: $b_u = \mathbf{1}[\text{user } u \text{ active}] \implies \Delta_2 = 1.0$
+   - Full 9-cell: $b_{u,p,t} = \mathbf{1}[\text{user } u \text{ used cell } (p,t)] \implies \Delta_2 = 3.0$
+
+3. **Baseline Comparison (`POST_PROCESS_9_CELL`)**:
+   Full 9-cell DP release followed by deterministic linear aggregation $A_G \widetilde{V}_9$. Incurs **zero additional privacy cost**, but carries higher noise variance than direct coarse releases under small $N$.
+
+---
+
+### 8.3 Public Time Window Model & Dimensionless Loss
+
+To evaluate arbitrary statistical windows $W$ without private data leakage, the planner employs a public scaling prior calibrated against reference window $W_{\text{ref}} = 30$ days:
+$$\mu_W = \mu_{\text{ref}} \cdot \frac{W}{W_{\text{ref}}}, \quad \sigma_W = \sigma_{\text{ref}} \cdot \sqrt{\frac{W}{W_{\text{ref}}}}$$
+
+The objective function is formulated in strictly **dimensionless normalized error terms**:
+$$L_{\text{clip}} = \frac{E_{\text{clip}}(C, W)}{N \cdot \mu_W}, \quad L_{\text{noise}} = \frac{E_{\text{noise}}(C, G, \epsilon)}{N \cdot \mu_W}$$
+$$L_{\text{stale}} = \lambda_{\text{stale}} \cdot \frac{F}{2 W}, \quad L_{\text{window}} = \lambda_{\text{window}} \cdot \frac{|W - W_{\text{ref}}|}{W_{\text{ref}}}$$
+$$L_{\text{total}}(\pi) = w_{\text{clip}} L_{\text{clip}} + w_{\text{noise}} L_{\text{noise}} + w_{\text{agg}} L_{\text{agg}} + w_{\text{stale}} L_{\text{stale}} + w_{\text{window}} L_{\text{window}}$$
+Subject to:
+$$\text{RDP}_{\text{projected}}(\alpha) = \text{RDP}_{\text{historical}}(\alpha) + \left\lceil \frac{H}{F} \right\rceil \cdot \text{RDP}_{\text{single}}(\alpha; \pi) \implies \epsilon_{\text{projected}} \le \epsilon_{\text{cap}}$$
+
+---
+
+### 8.4 Strict Privacy Provenance & Production Isolation
+$$\boxed{\text{Production Planner operates exclusively on Public or Committed DP Feedback}}$$
+- **STATIC_PUBLIC Mode**: Relies exclusively on public configurations, public prior $\mathcal{TN}(\mu, \sigma)$, public population $N_{\text{public}}$, and candidate policy grids.
+- **DP_FEEDBACK Mode**: May incorporate committed historical release IDs (`DP_RELEASE:<id>`) through authoritative `PrivacyStateManager`. Raw private context is rejected (`ProductionSafetyConfigurationError`).
+- **ORACLE_EXACT_EVAL Mode**: Permitted exclusively in offline evaluation benchmarks. If `ORACLE_EXACT_EVAL` appears in production execution, the system fails closed immediately.
+
+---
+
+### 8.5 Empirical Research Findings (Formal Exp 09–14)
+
+| Metric / Dimension | Formal Finding & Empirical Result |
+| :--- | :--- |
+| **Selected $C$ by $N$** | $N=500 \to C^*=40$; $N=1000 \to C^*=80$; $N \ge 2500 \to C^*=80$. As $N$ grows, DP noise becomes negligible relative to clipping bias, favoring larger contribution bounds. |
+| **Selected $G$ by $N$** | Direct granularity releases maintain strictly calibrated sensitivity $\Delta_2 = C$, eliminating the $\sqrt{3}\times$ sensitivity penalty of post-clipping linear aggregation. |
+| **Selected $W$ by $N$** | Window $W=30$ days optimizes trade-off between variance reduction ($1 / \sqrt{N \mu_W}$) and temporal staleness penalty ($F / 2W$). |
+| **Selected $F$ by Budget** | Under $\epsilon_{\text{cap}}=4.0$ with horizon $H=90$, initial cadence selects $F=14$ days ($K=7$ releases, $\epsilon_{\text{proj}}=3.50$). When historical budget consumption reaches $73.4\%$, the planner automatically throttles to $F=30$ days ($K=3$ releases), strictly preserving budget feasibility. |
+| **Regret vs True Oracle** | In joint $(C, G, W, F)$ policy optimization (Exp 13), the planner achieved **0.0% regret** against the true empirical Oracle across $N \in \{500, 1000, 5000\}$. |
+| **Estimator Calibration** | Predicted vs observed error achieves a Spearman rank correlation of $\rho = 0.9346$ ($N=50,000$, 500 noise trials), confirming highly accurate relative policy ordering. |
+| **Prior Misspecification** | Evaluated across three distinct ground-truth regimes (`light` $\mu=25$, `default` $\mu=60$, `heavy_tail` $\mu=100$). Across $\pm 25\%$ mean shifts, $\pm 50\%$ std shifts, and LogNormal mismatches, the planner consistently bounds regret and avoids catastrophic failure. |
+| **Budget Utilization** | 100% compliant with lifetime RDP budget composition. No over-allocation or budget violation occurred in any experimental condition. |

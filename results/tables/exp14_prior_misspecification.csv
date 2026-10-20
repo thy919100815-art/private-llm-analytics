@@ -1,0 +1,19 @@
+truth_regime,truth_mean,truth_std,prior_case,prior_mean,prior_std,prior_type,oracle_optimal_c,oracle_error,selected_c,actual_empirical_error,relative_regret,fixed_mid_c,fixed_mid_rel_regret
+light,25.0,10.0,"Matched (25, 10)",25.0,10.0,truncated_normal,30.0,100.84,50.0,164.97,0.6359,20.0,0.1019
+light,25.0,10.0,"Mean +25% (31.2, 10)",31.25,10.0,truncated_normal,30.0,100.84,50.0,164.97,0.6359,20.0,0.1019
+light,25.0,10.0,"Mean -25% (18.8, 10)",18.75,10.0,truncated_normal,30.0,100.84,50.0,164.97,0.6359,20.0,0.1019
+light,25.0,10.0,"Std +50% (25, 15)",25.0,15.0,truncated_normal,30.0,100.84,50.0,164.97,0.6359,20.0,0.1019
+light,25.0,10.0,"Std -50% (25, 5)",25.0,5.0,truncated_normal,30.0,100.84,50.0,164.97,0.6359,20.0,0.1019
+light,25.0,10.0,"LogNormal Mismatch (25, 12)",25.0,12.0,lognormal,30.0,100.84,50.0,164.97,0.6359,20.0,0.1019
+default,60.0,20.0,"Matched (60, 20)",60.0,20.0,truncated_normal,60.0,205.29,60.0,205.29,0.0,40.0,0.9075
+default,60.0,20.0,"Mean +25% (75.0, 20)",75.0,20.0,truncated_normal,60.0,205.29,80.0,279.54,0.3617,40.0,0.9075
+default,60.0,20.0,"Mean -25% (45.0, 20)",45.0,20.0,truncated_normal,60.0,205.29,80.0,279.54,0.3617,40.0,0.9075
+default,60.0,20.0,"Std +50% (60, 30)",60.0,30.0,truncated_normal,60.0,205.29,80.0,279.54,0.3617,40.0,0.9075
+default,60.0,20.0,"Std -50% (60, 10)",60.0,10.0,truncated_normal,60.0,205.29,80.0,279.54,0.3617,40.0,0.9075
+default,60.0,20.0,"LogNormal Mismatch (60, 24)",60.0,24.0,lognormal,60.0,205.29,80.0,279.54,0.3617,40.0,0.9075
+heavy_tail,100.0,40.0,"Matched (100, 40)",100.0,40.0,truncated_normal,100.0,347.33,150.0,510.49,0.4698,70.0,0.9787
+heavy_tail,100.0,40.0,"Mean +25% (125.0, 40)",125.0,40.0,truncated_normal,100.0,347.33,150.0,510.49,0.4698,70.0,0.9787
+heavy_tail,100.0,40.0,"Mean -25% (75.0, 40)",75.0,40.0,truncated_normal,100.0,347.33,150.0,510.49,0.4698,70.0,0.9787
+heavy_tail,100.0,40.0,"Std +50% (100, 60)",100.0,60.0,truncated_normal,100.0,347.33,150.0,510.49,0.4698,70.0,0.9787
+heavy_tail,100.0,40.0,"Std -50% (100, 20)",100.0,20.0,truncated_normal,100.0,347.33,150.0,510.49,0.4698,70.0,0.9787
+heavy_tail,100.0,40.0,"LogNormal Mismatch (100, 48)",100.0,48.0,lognormal,100.0,347.33,150.0,510.49,0.4698,70.0,0.9787
