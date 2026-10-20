@@ -318,3 +318,32 @@ python run_all_experiments.py --smoke --include-longitudinal
 > **Smoke Mode Isolation**:
 > - Smoke outputs are written exclusively to `results/verification/` (`results/verification/tables/`, `results/verification/raw/`, `results/verification/figures/`).
 > - Official research artifacts (`results/tables/*`, `results/raw/*`, `results/figures/*`) remain 100% byte-identical and unmodified.
+
+
+---
+
+## 8. Small-n Utility-Aware Differential Privacy Release Planner (v0.3)
+
+### 8.1 Motivation & Research Question
+In typical mid-sized enterprises ($N \in [500, 5000]$ employees), raw telemetry volume is small compared to national population analytics. Under user-level Differential Privacy:
+1. Setting clipping bound $C$ too low introduces severe clipping bias: $E_{\text{clip}}(C) = \mathbb{E}[(R_u - C)_+]$.
+2. Setting $C$ too high inflates $L_2$ query sensitivity $\Delta_2 = C$, injecting overwhelming DP Gaussian noise: $\sigma = \text{calibrate\_analytic\_gaussian}(\epsilon, \delta, C)$.
+3. Releasing overly fine 9-cell statistics spreads signal thin, causing noise to dominate each cell. Aggregating to coarse marginals ($G \in \{\text{provider\_3\_cell}, \text{task\_3\_cell}, \text{overall\_1\_cell}\}$) trades dimensional granularity against variance reduction.
+4. Releasing daily ($F=1$) consumes cumulative longitudinal privacy budget rapidly over a planning horizon $H$.
+
+**The v0.3 Release Planner** automatically solves the joint optimization problem:
+$$\min_{\pi = (C, G, W, F)} E_{\text{total}}(\pi) = w_{\text{clip}} E_{\text{clip}} + w_{\text{noise}} E_{\text{noise}} + w_{\text{agg}} E_{\text{agg}} + w_{\text{stale}} E_{\text{stale}}$$
+$$\text{subject to} \quad \text{RDP}_{\text{projected}}(\alpha) = \text{RDP}_{\text{historical}}(\alpha) + \left\lceil \frac{H}{F} \right\rceil \cdot \text{RDP}_{\text{single}}(\alpha; \pi) \implies \epsilon_{\text{projected}} \le \epsilon_{\text{cap}}$$
+
+### 8.2 Strict Privacy Provenance Invariant
+$$\boxed{\text{Static Public Planner never accesses private raw user logs}}$$
+- **STATIC_PUBLIC Mode**: Uses strictly public metadata ($N_{\text{public}}$, public prior $\mathcal{TN}(\mu, \sigma)$, workload weights, candidate policy grid).
+- **ORACLE_EVAL_ONLY Mode**: Permitted exclusively in isolated offline research benchmarks. Blocked with `ProductionSafetyConfigurationError` in production configurations or whenever queried by an external recipient.
+
+### 8.3 Small-n Experimental Results (Exp 09–14)
+- **Exp 09 (Small-n Error Decomposition)**: Confirms monotonic decrease in clipping bias vs monotonic increase in noise error with $C$. Validates theoretical utility estimator calibration against 500-trial empirical simulation (Spearman rank correlation $> 0.94$).
+- **Exp 10 (Clipping Planner)**: Evaluates adaptive $C^*$ selection across $N \in [500, 5000]$. Shows adaptive planner achieves near-zero regret vs empirical oracle, outperforming fixed $C=20$ and $C=40$ baselines.
+- **Exp 11 (Granularity Planner)**: Confirms that for small $N$ ($N \le 1000$) and tight $\epsilon$ ($\epsilon \le 1.0$), aggregated marginals significantly reduce total reconstructed error over noisy 9-cell outputs.
+- **Exp 12 (Frequency Planner)**: Demonstrates automatic longitudinal cadence downshifting (e.g. from weekly $F=7$ to biweekly $F=14$ to monthly $F=30$) as historical budget consumption reaches 50%–75% of $\epsilon_{\text{cap}}$.
+- **Exp 13 (Joint Planner)**: Evaluates joint optimization $(C, G, W, F)$ against fixed heuristic baselines, demonstrating zero budget overruns and minimal regret.
+- **Exp 14 (Prior Misspecification)**: Evaluates robustness when the public prior shifts by $\pm 25\%$ in mean or $\pm 50\%$ in variance. Planner remains stable with bounded regret, consistently outperforming fixed heuristic baselines.

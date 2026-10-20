@@ -105,9 +105,9 @@ class SmallNReleasePlanner:
                 )
             elif prior_cfg.distribution == "lognormal":
                 prior = LogNormalPrior(
-                    mean_log=prior_cfg.mean,
-                    std_log=prior_cfg.std,
-                    max_val=prior_cfg.upper,
+                    mean=prior_cfg.mean,
+                    std=prior_cfg.std,
+                    max_cutoff=prior_cfg.upper,
                 )
             else:
                 raise ValueError(f"Unsupported prior distribution '{prior_cfg.distribution}'")
