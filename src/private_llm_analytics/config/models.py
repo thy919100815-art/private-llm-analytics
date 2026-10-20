@@ -110,11 +110,13 @@ class DefaultMechanismConfig(BaseModel):
 
 
 class PublicPriorConfig(BaseModel):
-    distribution: Literal["truncated_normal", "lognormal"] = "truncated_normal"
+    distribution: Literal["truncated_normal", "lognormal", "contribution_model"] = "contribution_model"
     mean: float = Field(default=60.0, gt=0)
     std: float = Field(default=20.0, gt=0)
     lower: float = Field(default=5.0, ge=0)
     upper: float = Field(default=150.0, gt=0)
+    public_seed: int = 900001
+    num_reference_users: int = 2000
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "PublicPriorConfig":

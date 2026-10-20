@@ -48,7 +48,7 @@ privacy:
     enabled: true
     mode: static_public
     prior:
-      distribution: truncated_normal
+      distribution: contribution_model
       mean: 60.0
       std: 20.0
       lower: 5.0

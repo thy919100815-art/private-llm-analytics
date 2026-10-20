@@ -105,6 +105,7 @@ def run_all_experiments(
             run_joint_planner_experiment(
                 populations=(500, 1000),
                 epsilon_caps=(2.0, 4.0),
+                n_trials=5,
                 output_dir=out_root,
             )
             run_prior_misspecification_experiment(
@@ -112,6 +113,12 @@ def run_all_experiments(
                 n_trials=5,
                 output_dir=out_root,
                 regimes=["default"],
+            )
+
+            from experiments.generate_key_results_summary import generate_key_results_json
+            generate_key_results_json(
+                tables_dir=f"{out_root}/tables",
+                output_file=f"{out_root}/tables/v03_key_results.json",
             )
     else:
         print("============================================================")
@@ -164,6 +171,12 @@ def run_all_experiments(
             run_frequency_planner_experiment(output_dir=out_root)
             run_joint_planner_experiment(output_dir=out_root)
             run_prior_misspecification_experiment(output_dir=out_root)
+
+            from experiments.generate_key_results_summary import generate_key_results_json
+            generate_key_results_json(
+                tables_dir=f"{out_root}/tables",
+                output_file=f"{out_root}/tables/v03_key_results.json",
+            )
 
     total_time = time.time() - t_start
     print("======================================================================")

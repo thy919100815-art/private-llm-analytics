@@ -32,7 +32,7 @@ def run_clipping_planner_experiment(
     c_candidates: Sequence[float] = (5.0, 10.0, 20.0, 40.0, 80.0),
     epsilon: float = 1.0,
     delta: float = 1e-6,
-    n_trials: int = 200,
+    n_trials: int = 500,
     seed: int = 42,
     output_dir: str = "results",
 ) -> pd.DataFrame:
@@ -156,7 +156,33 @@ def run_clipping_planner_experiment(
     )
 
     print(f"\n[SUCCESS] Exp 10 completed. Saved to {tables_dir}/ and {figures_dir}/")
+    generate_exp10_summary_from_csv(tables_dir / "exp10_clipping_planner.csv")
     return results_df
+
+
+def generate_exp10_summary_from_csv(csv_path: Path) -> Dict[str, Any]:
+    """Parse exp10 summary CSV and return verified key findings."""
+    p = Path(csv_path)
+    if not p.is_file():
+        return {}
+    df = pd.read_csv(p)
+    summary: Dict[str, Any] = {
+        "selected_c_by_n": {},
+        "oracle_c_by_n": {},
+        "regret_by_n": {},
+    }
+    for _, row in df.iterrows():
+        n = int(row["population_n"])
+        summary["selected_c_by_n"][n] = float(row["planner_selected_c"])
+        summary["oracle_c_by_n"][n] = float(row["oracle_optimal_c"])
+        summary["regret_by_n"][n] = float(row["planner_rel_regret"])
+    print("\n--- Exp 10 Verified Summary from CSV ---")
+    for n in sorted(summary["selected_c_by_n"].keys()):
+        sel = summary["selected_c_by_n"][n]
+        orc = summary["oracle_c_by_n"][n]
+        reg = summary["regret_by_n"][n]
+        print(f"  N={n:5d}: Planner C*={sel:2.0f}, Oracle C*={orc:2.0f}, Regret={reg*100:4.1f}%")
+    return summary
 
 
 def main():

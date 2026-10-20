@@ -13,6 +13,9 @@ on:
         required: true
         type: boolean
         default: true
+  push:
+    branches:
+      - v0.3-dev
 
 jobs:
   verification-gate:
@@ -40,7 +43,7 @@ jobs:
 
       - name: Run Verification Scripts
         env:
-          RUN_NOISE_TRIALS: ${{ github.event.inputs.run_noise_trials }}
+          RUN_NOISE_TRIALS: ${{ github.event.inputs.run_noise_trials || 'true' }}
         run: |
           python -c "
           import os, subprocess, sys, glob
@@ -61,7 +64,7 @@ jobs:
   formal-experiments:
     name: Formal Small-N Release Planning Experiments
     needs: verification-gate
-    if: ${{ github.event.inputs.run_formal_experiments == 'true' || github.event.inputs.run_formal_experiments == true }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.run_formal_experiments == 'true' || github.event.inputs.run_formal_experiments == true }}
     runs-on: ubuntu-latest
 
     steps:
@@ -111,7 +114,7 @@ jobs:
           from private_llm_analytics.config.loader import load_app_config
           from private_llm_analytics.planning.planner import compute_planner_config_fingerprint
           cfg = load_app_config('configs')
-          fp = compute_planner_config_fingerprint(cfg.privacy.planner)
+          fp = compute_planner_config_fingerprint(cfg)
           manifest = {
               'timestamp': time.time(),
               'planner_config_fingerprint': fp,

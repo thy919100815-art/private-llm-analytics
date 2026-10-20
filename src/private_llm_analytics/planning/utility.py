@@ -211,6 +211,179 @@ class LogNormalPrior(PublicPriorDistribution):
         }
 
 
+class PublicContributionPrior(PublicPriorDistribution):
+    """Public generative contribution prior modeling target-space user norm distributions.
+
+    Models the joint 9-cell interaction vector m_u under public reference parameters:
+      - Total interactions T ~ TruncatedNormal(mean, std, min_val, max_val)
+      - Category distribution: provider preferences conditional on tasks (via sample_user_profiles)
+      - Target-space linear aggregation A_G:
+          R_G = ||A_G m_u||_2
+      - User total count T = ||A_G m_u||_1
+      - Expected target-space clipping excess:
+          E[ T * max(0, 1 - C / R_G) ]
+
+    Evaluated via deterministic public Monte Carlo with a fixed public seed (default 900001).
+    Strictly isolated from private runtime data.
+    """
+
+    def __init__(
+        self,
+        mean: float = 60.0,
+        std: float = 20.0,
+        min_val: float = 5.0,
+        max_val: float = 150.0,
+        distribution: str = "truncated_normal",
+        reference_days: int = 30,
+        window_days: int = 30,
+        providers: Optional[List[str]] = None,
+        tasks: Optional[List[str]] = None,
+        provider_shares: Optional[Dict[str, float]] = None,
+        task_shares: Optional[Dict[str, float]] = None,
+        public_seed: int = 900001,
+        num_reference_users: int = 2000,
+    ):
+        if std <= 0:
+            raise ValueError(f"std must be > 0, got {std}")
+        if min_val >= max_val:
+            raise ValueError(f"min_val ({min_val}) must be < max_val ({max_val})")
+        if reference_days <= 0 or window_days <= 0:
+            raise ValueError("reference_days and window_days must be > 0")
+
+        self.mean = float(mean)
+        self.std = float(std)
+        self.min_val = float(min_val)
+        self.max_val = float(max_val)
+        self.distribution = str(distribution).lower().strip()
+        self.reference_days = int(reference_days)
+        self.window_days = int(window_days)
+        self.providers = list(providers or ["provider_a", "provider_b", "provider_c"])
+        self.tasks = list(tasks or ["technical", "document", "analysis"])
+        self.provider_shares = dict(provider_shares or {"provider_a": 0.5, "provider_b": 0.3, "provider_c": 0.2})
+        self.task_shares = dict(task_shares or {"technical": 0.4, "document": 0.35, "analysis": 0.25})
+        self.public_seed = int(public_seed)
+        self.num_reference_users = int(num_reference_users)
+
+        self._generate_reference_sample()
+
+    def _generate_reference_sample(self):
+        rng = np.random.default_rng(self.public_seed)
+        if self.distribution == "lognormal":
+            var = self.std**2
+            sigma_ln = math.sqrt(math.log(1.0 + var / (self.mean**2)))
+            mu_ln = math.log(self.mean) - 0.5 * (sigma_ln**2)
+            raw = rng.lognormal(mean=mu_ln, sigma=sigma_ln, size=self.num_reference_users)
+        else:
+            a = (self.min_val - self.mean) / self.std
+            b = (self.max_val - self.mean) / self.std
+            from scipy.stats import truncnorm
+            raw = truncnorm.rvs(a, b, loc=self.mean, scale=self.std, size=self.num_reference_users, random_state=rng)
+        counts = np.clip(np.rint(raw).astype(np.int64), int(self.min_val), int(self.max_val))
+
+        from private_llm_analytics.simulator.users import sample_user_profiles
+        _, joint_probs = sample_user_profiles(self.num_reference_users, counts, self.providers, self.tasks, rng)
+        base_mat = np.zeros((self.num_reference_users, 9), dtype=np.float64)
+        for u in range(self.num_reference_users):
+            base_mat[u] = rng.multinomial(counts[u], joint_probs[u])
+
+        # Scale by window ratio
+        win_scale = float(self.window_days) / float(self.reference_days)
+        self.ref_matrix = base_mat * win_scale
+        self.ref_totals = np.sum(self.ref_matrix, axis=1)
+        self.expected_user_volume = float(np.mean(self.ref_totals))
+
+        # Precompute target-space norms for each granularity
+        self._norms: Dict[str, np.ndarray] = {}
+        # 1. full_9_cell
+        self._norms["full_9_cell"] = np.sqrt(np.sum(self.ref_matrix**2, axis=1))
+
+        # 2. provider_3_cell
+        prov_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
+        for p in range(3):
+            prov_mat[:, p] = np.sum(self.ref_matrix[:, p * 3 : (p + 1) * 3], axis=1)
+        self._norms["provider_3_cell"] = np.sqrt(np.sum(prov_mat**2, axis=1))
+
+        # 3. task_3_cell
+        task_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
+        for t in range(3):
+            task_mat[:, t] = np.sum(self.ref_matrix[:, t::3], axis=1)
+        self._norms["task_3_cell"] = np.sqrt(np.sum(task_mat**2, axis=1))
+
+        # 4. overall_1_cell
+        self._norms["overall_1_cell"] = self.ref_totals.copy()
+
+        # Cache for expected excess
+        self._excess_cache: Dict[Tuple[float, str], float] = {}
+
+    def expected_excess(
+        self,
+        threshold: float,
+        granularity: str = "full_9_cell",
+        window_days: Optional[int] = None,
+    ) -> float:
+        """Compute E[ T_u * max(0, 1 - C / R_{G,u}) ]. Monotonically non-increasing in threshold."""
+        if window_days is not None and window_days != self.window_days:
+            scaled = self.with_window(window_days)
+            return scaled.expected_excess(threshold, granularity=granularity)
+
+        c = float(threshold)
+        if c <= 0:
+            raise ValueError(f"threshold must be > 0, got {c}")
+
+        cache_key = (c, granularity)
+        if cache_key in self._excess_cache:
+            return self._excess_cache[cache_key]
+
+        norms = self._norms.get(granularity, self._norms["full_9_cell"])
+        excess_factor = np.maximum(0.0, 1.0 - c / np.maximum(norms, 1e-9))
+        excess_l1 = self.ref_totals * excess_factor
+        val = float(np.mean(excess_l1))
+        self._excess_cache[cache_key] = val
+        return val
+
+    def expected_norm_clipping_loss(
+        self,
+        threshold: float,
+        granularity: str = "full_9_cell",
+        window_days: Optional[int] = None,
+    ) -> float:
+        excess = self.expected_excess(threshold, granularity=granularity, window_days=window_days)
+        denom = max(1.0, self.expected_user_volume)
+        return float(excess / denom)
+
+    def with_window(self, window_days: int, reference_days: Optional[int] = None) -> "PublicContributionPrior":
+        ref_days = reference_days if reference_days is not None else self.reference_days
+        return PublicContributionPrior(
+            mean=self.mean,
+            std=self.std,
+            min_val=self.min_val,
+            max_val=self.max_val,
+            distribution=self.distribution,
+            reference_days=ref_days,
+            window_days=window_days,
+            providers=self.providers,
+            tasks=self.tasks,
+            provider_shares=self.provider_shares,
+            task_shares=self.task_shares,
+            public_seed=self.public_seed,
+            num_reference_users=self.num_reference_users,
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "type": "contribution_model",
+            "distribution": self.distribution,
+            "mean": self.mean,
+            "std": self.std,
+            "min_val": self.min_val,
+            "max_val": self.max_val,
+            "reference_days": self.reference_days,
+            "window_days": self.window_days,
+            "public_seed": self.public_seed,
+            "num_reference_users": self.num_reference_users,
+        }
+
+
 def scale_prior_for_window(
     prior: PublicPriorDistribution,
     window_days: int,
@@ -226,6 +399,9 @@ def scale_prior_for_window(
         raise ValueError(f"window_days must be > 0, got {window_days}")
     if reference_days <= 0:
         raise ValueError(f"reference_days must be > 0, got {reference_days}")
+
+    if isinstance(prior, PublicContributionPrior):
+        return prior.with_window(window_days, reference_days)
 
     rho = float(window_days) / float(reference_days)
 
@@ -262,14 +438,22 @@ class ClippingEstimator:
         contribution_bound: Optional[float],
         population_size: int,
         prior: PublicPriorDistribution,
+        granularity: str = "full_9_cell",
+        window_days: int = 30,
     ) -> float:
-        """Estimate E_clip(C) = N * E[(R - C)_+]."""
+        """Estimate E_clip(C) = N * E[excess]."""
         if contribution_bound is None:
             return 0.0
         c = float(contribution_bound)
         if c <= 0:
             raise ValueError(f"contribution_bound must be > 0, got {c}")
-        excess = prior.expected_excess(c)
+        if isinstance(prior, PublicContributionPrior):
+            excess = prior.expected_excess(c, granularity=granularity, window_days=window_days)
+        else:
+            try:
+                excess = prior.expected_excess(c, granularity=granularity, window_days=window_days)
+            except TypeError:
+                excess = prior.expected_excess(c)
         return float(population_size * excess)
 
 
@@ -416,7 +600,10 @@ class UtilityEstimator:
         lambda_window: float = 0.2,
     ):
         self.weights = weights or UtilityWeights()
-        self.public_prior = public_prior or TruncatedNormalPrior()
+        self.public_prior = public_prior or PublicContributionPrior(
+            reference_days=int(reference_days),
+            window_days=int(reference_days),
+        )
         self.reference_days = int(reference_days)
         self.workload_weights = workload_weights or {
             "full_9_cell": 0.4,
@@ -444,7 +631,11 @@ class UtilityEstimator:
         )
 
         n_pop = max(1, population_size)
-        expected_user_volume = window_prior.mean
+        expected_user_volume = (
+            window_prior.expected_user_volume
+            if hasattr(window_prior, "expected_user_volume")
+            else window_prior.mean
+        )
         expected_pop_volume = max(1.0, float(n_pop * expected_user_volume))
 
         # 1. Clipping bias
@@ -453,6 +644,8 @@ class UtilityEstimator:
                 contribution_bound=candidate.contribution_bound,
                 population_size=n_pop,
                 prior=window_prior,
+                granularity=candidate.granularity,
+                window_days=w_days,
             )
             norm_clip = raw_clip / expected_pop_volume
         else:

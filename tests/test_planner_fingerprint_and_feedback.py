@@ -181,3 +181,14 @@ def test_dp_feedback_fallback_is_explicit():
     assert res.metadata.get("fallback") == "static_public"
     assert res.metadata.get("feedback_used") is False
     assert "DP_FEEDBACK_SAFE_FALLBACK_TO_STATIC_PUBLIC" in res.decision_reason
+
+
+def test_release_gate_manifest_fingerprint_call():
+    """Verify that compute_planner_config_fingerprint accepts either AppConfig or PlannerConfig."""
+    cfg = load_app_config("configs")
+    fp1 = compute_planner_config_fingerprint(cfg)
+    fp2 = compute_planner_config_fingerprint(cfg.privacy.planner)
+    assert fp1 == fp2
+    assert fp1.startswith("pcfg_")
+    assert len(fp1) == 29
+

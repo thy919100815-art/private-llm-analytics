@@ -13,6 +13,7 @@ from private_llm_analytics.planning.utility import (
     GranularityEstimator,
     LogNormalPrior,
     NoiseEstimator,
+    PublicContributionPrior,
     PublicPriorDistribution,
     StalenessEstimator,
     TruncatedNormalPrior,

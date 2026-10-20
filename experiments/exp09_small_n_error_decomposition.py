@@ -3,26 +3,24 @@
 Evaluates empirical clipping bias and analytic DP noise across:
 - Sample sizes N in {500, 1000, 2500, 5000, 10000, 50000}
 - Clipping bounds C in {5, 10, 20, 40, 80}
-- Validates theoretical utility estimator calibration against empirical ground truth.
+- Validates theoretical utility estimator calibration against empirical ground truth under unified normalized total L1 loss.
 """
 
 import argparse
 from pathlib import Path
 import time
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 import numpy as np
 import pandas as pd
+from scipy.stats import spearmanr
 
 from private_llm_analytics.aggregation.user_matrix import build_user_matrix
-from private_llm_analytics.evaluation.privacy_utility import run_repeated_noise_trials
 from private_llm_analytics.evaluation.report import plot_single_line_chart, save_summary_table
-from private_llm_analytics.metrics.interaction_volume import InteractionVolumeMetric
+from private_llm_analytics.mechanisms.gaussian import calibrate_analytic_gaussian
 from private_llm_analytics.planning.candidates import ReleasePolicyCandidate
-from private_llm_analytics.planning.diagnostics import compute_calibration_error
+from private_llm_analytics.planning.policy import build_volume_contributions_for_granularity
 from private_llm_analytics.planning.utility import (
-    ClippingEstimator,
-    NoiseEstimator,
-    TruncatedNormalPrior,
+    PublicContributionPrior,
     UtilityEstimator,
     UtilityWeights,
 )
@@ -40,7 +38,7 @@ def run_error_decomposition_experiment(
     output_dir: str = "results",
 ) -> pd.DataFrame:
     print("\n=======================================================")
-    print("Running Exp 09: Small-n Error Decomposition")
+    print("Running Exp 09: Small-n Error Decomposition (Unified Normalized L1 Loss)")
     print(f"Populations: {populations}")
     print(f"Clipping Norms: {clipping_norms}")
     print(f"Trials: {n_trials}, Epsilon: {epsilon}, Delta: {delta}")
@@ -52,15 +50,23 @@ def run_error_decomposition_experiment(
     tables_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
 
-    prior = TruncatedNormalPrior(mean=60.0, std=20.0, min_val=5.0, max_val=150.0)
+    prior = PublicContributionPrior(
+        mean=60.0,
+        std=20.0,
+        min_val=5.0,
+        max_val=150.0,
+        reference_days=30,
+        public_seed=900001,
+        num_reference_users=2000,
+    )
     estimator = UtilityEstimator(
-        weights=UtilityWeights(clipping=1.0, noise=1.0, aggregation=0.0, staleness=0.0),
+        weights=UtilityWeights(clipping=1.0, noise=1.0, aggregation=0.0, staleness=0.0, window=0.0),
         public_prior=prior,
     )
 
-    records: List[Dict] = []
-    pred_errors: List[float] = []
-    obs_errors: List[float] = []
+    records: List[Dict[str, Any]] = []
+    pred_totals: List[float] = []
+    obs_totals: List[float] = []
 
     for n in populations:
         print(f"\n--- Population N = {n} ---")
@@ -72,9 +78,12 @@ def run_error_decomposition_experiment(
             gen = SyntheticDataGenerator(scenario)
             df = gen.generate(seed=seed)
         umatrix = build_user_matrix(df, public_population_size=n)
+        raw_mat = umatrix.matrix
+        v_raw = np.sum(raw_mat, axis=0)
+        pop_total_vol = max(1.0, float(np.sum(v_raw)))
 
         for c in clipping_norms:
-            metric = InteractionVolumeMetric(clip_norm=c)
+            t0 = time.time()
             cand = ReleasePolicyCandidate(
                 contribution_bound=c,
                 granularity="full_9_cell",
@@ -83,64 +92,99 @@ def run_error_decomposition_experiment(
                 delta_per_release=delta,
             )
 
-            # Empirical simulation
-            t0 = time.time()
-            trials_df, summary = run_repeated_noise_trials(
-                user_matrix=umatrix,
-                metric=metric,
-                mechanism_type="gaussian",
+            # 1. Exact direct target-space clipping
+            _, exact_target, _, sens = build_volume_contributions_for_granularity(
+                raw_user_matrix=umatrix,
+                granularity="full_9_cell",
+                clip_norm=c,
+            )
+            v_clip = exact_target
+
+            # Empirical clipping loss
+            emp_norm_clip = float(np.sum(np.abs(v_raw - v_clip))) / pop_total_vol
+
+            # 2. Calibrate noise
+            sigma = calibrate_analytic_gaussian(
                 epsilon=epsilon,
                 delta=delta,
-                n_trials=n_trials,
-                seed=seed + int(c * 10),
+                l2_sensitivity=sens,
             )
-            sim_time = time.time() - t0
 
-            # Theoretical prediction from utility estimator
+            # 3. Empirical noise trials
+            noise_l1_trials: List[float] = []
+            total_l1_trials: List[float] = []
+            for t in range(n_trials):
+                rng = np.random.default_rng(seed + int(c * 100) + t)
+                noise = rng.normal(loc=0.0, scale=sigma, size=len(v_clip))
+                dp_release = v_clip + noise
+                noise_l1_trials.append(float(np.sum(np.abs(noise))))
+                total_l1_trials.append(float(np.sum(np.abs(dp_release - v_raw))))
+
+            emp_norm_noise = float(np.mean(noise_l1_trials)) / pop_total_vol
+            emp_norm_total = float(np.mean(total_l1_trials)) / pop_total_vol
+            per_cell_mae = float(np.mean(total_l1_trials)) / float(len(v_clip))
+
+            # Theoretical predictions from utility estimator
             theory_eval = estimator.evaluate_candidate("interaction_volume", cand, population_size=n)
-            pred_total = theory_eval.clipping_error + theory_eval.noise_error
-            obs_total = summary["total_volume_mae_mean"]
+            pred_norm_clip = float(theory_eval.norm_clipping_loss)
+            pred_norm_noise = float(theory_eval.norm_noise_loss)
+            pred_norm_total = float(pred_norm_clip + pred_norm_noise)
 
-            pred_errors.append(pred_total)
-            obs_errors.append(obs_total)
+            pred_totals.append(pred_norm_total)
+            obs_totals.append(emp_norm_total)
 
             rec = {
                 "population_n": n,
                 "clip_norm_c": c,
-                "empirical_clipping_bias": summary["clipping_bias_mae"],
-                "empirical_noise_mae": summary["dp_noise_mae_mean"],
-                "empirical_total_mae": obs_total,
-                "predicted_clipping_bias": theory_eval.clipping_error,
-                "predicted_noise_mae": theory_eval.noise_error,
-                "predicted_total_mae": pred_total,
-                "prediction_error_mae": abs(pred_total - obs_total),
-                "sim_time_sec": round(sim_time, 2),
+                "empirical_norm_clip": round(emp_norm_clip, 4),
+                "predicted_norm_clip": round(pred_norm_clip, 4),
+                "empirical_norm_noise": round(emp_norm_noise, 4),
+                "predicted_norm_noise": round(pred_norm_noise, 4),
+                "empirical_norm_total": round(emp_norm_total, 4),
+                "predicted_norm_total": round(pred_norm_total, 4),
+                "per_cell_mae": round(per_cell_mae, 2),
+                "calibration_bias": round(pred_norm_total - emp_norm_total, 4),
+                "calibration_MAE": round(abs(pred_norm_total - emp_norm_total), 4),
+                "sim_time_sec": round(time.time() - t0, 2),
             }
             records.append(rec)
             print(
-                f"  N={n:5d}, C={c:4.1f} | Obs Total={obs_total:7.2f} | "
-                f"Pred Total={pred_total:7.2f} | Diff={abs(pred_total - obs_total):6.2f}"
+                f"  N={n:5d}, C={c:4.1f} | Emp Total={emp_norm_total:6.4f} | "
+                f"Pred Total={pred_norm_total:6.4f} | Diff={abs(pred_norm_total - emp_norm_total):6.4f} | "
+                f"PerCell MAE={per_cell_mae:6.1f}"
             )
 
     results_df = pd.DataFrame(records)
+
+    # Compute overall calibration error across all conditions
+    bias = float(np.mean(np.array(pred_totals) - np.array(obs_totals)))
+    mae = float(np.mean(np.abs(np.array(pred_totals) - np.array(obs_totals))))
+    rel_calib = float(np.mean(np.abs(np.array(pred_totals) - np.array(obs_totals)) / np.maximum(1e-4, np.array(obs_totals))))
+    spearman_corr, _ = spearmanr(pred_totals, obs_totals)
+
+    results_df["Spearman"] = round(float(spearman_corr), 4)
     save_summary_table(results_df, str(tables_dir / "exp09_small_n_error_decomposition.csv"))
 
-    # Compute overall calibration error
-    calib = compute_calibration_error(predicted_errors=pred_errors, observed_errors=obs_errors)
-    print(f"\n[CALIBRATION] Bias: {calib['bias']:.2f}, MAE: {calib['mae']:.2f}, Spearman: {calib['spearman_corr']:.4f}")
+    print("\n=======================================================")
+    print(f"[CALIBRATION SUMMARY]")
+    print(f"  Absolute Calibration MAE:    {mae:.4f}")
+    print(f"  Relative Calibration Error:  {rel_calib * 100:.2f}%")
+    print(f"  Calibration Bias:            {bias:+.4f}")
+    print(f"  Spearman Rank Correlation:   {spearman_corr:.4f}")
+    print("=======================================================")
 
     # Plot tradeoff for N=1000
     sub_1000 = results_df[results_df["population_n"] == (1000 if 1000 in populations else populations[0])]
     plot_single_line_chart(
         x=sub_1000["clip_norm_c"].tolist(),
         y_series={
-            "Observed Total": sub_1000["empirical_total_mae"].tolist(),
-            "Predicted Total": sub_1000["predicted_total_mae"].tolist(),
-            "Clipping Bias": sub_1000["empirical_clipping_bias"].tolist(),
-            "Noise Error": sub_1000["empirical_noise_mae"].tolist(),
+            "Observed Total Normalized L1": sub_1000["empirical_norm_total"].tolist(),
+            "Predicted Total Normalized L1": sub_1000["predicted_norm_total"].tolist(),
+            "Empirical Clipping Loss": sub_1000["empirical_norm_clip"].tolist(),
+            "Empirical Noise Loss": sub_1000["empirical_norm_noise"].tolist(),
         },
         x_label="User L2 Clipping Bound (C)",
-        y_label="Error (MAE on cell volume)",
+        y_label="Normalized L1 Error",
         title=f"Small-n Error Decomposition vs C (N={sub_1000['population_n'].iloc[0]})",
         output_path=str(figures_dir / "exp09_small_n_error_decomposition"),
         x_log=True,

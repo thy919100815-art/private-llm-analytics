@@ -1,4 +1,7 @@
-population_n,epsilon_cap,oracle_candidate,oracle_true_utility,planner_candidate,planner_true_utility,planner_predicted_loss,planner_abs_regret,planner_rel_regret,baseline_a_feasible,baseline_a_true_utility,baseline_b_feasible,baseline_b_true_utility
-500,4.0,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.2053,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.2053,0.1204,0.0,0.0,False,,True,0.9955
-1000,4.0,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1609,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1609,0.08,0.0,0.0,False,,True,1.0015
-5000,4.0,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1257,C80_Gfull_9_cell_W30_F14_Mgaussian_eps1.00,0.1257,0.0476,0.0,0.0,False,,True,0.9993
+population_n,epsilon_cap,status,planner_candidate,oracle_candidate,oracle_true_utility,planner_true_utility,planner_rel_regret,minimum_projected_epsilon,feasible_candidate_count,base_a_feasible,base_b_feasible,oracle_stderr,oracle_ci_95,planner_stderr,planner_ci_95,planner_abs_regret
+500,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,2.2657,0,False,False,,,,,
+500,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C20_Gfull_9_cell_W30_F14,0.1841,0.3644,0.9796,,200,False,True,0.0011,"[0.1820, 0.1862]",0.0042,"[0.3562, 0.3727]",0.1803
+1000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,2.2657,0,False,False,,,,,
+1000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C20_Gfull_9_cell_W30_F14,0.1561,0.2409,0.5436,,200,False,True,0.0005,"[0.1550, 0.1571]",0.0021,"[0.2368, 0.2450]",0.0848
+5000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,2.2657,0,False,False,,,,,
+5000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C40_Gfull_9_cell_W30_F14,0.1291,0.1415,0.0963,,200,False,True,0.0002,"[0.1287, 0.1295]",0.0004,"[0.1407, 0.1424]",0.0124

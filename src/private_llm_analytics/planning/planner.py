@@ -24,6 +24,7 @@ from private_llm_analytics.planning.candidates import (
 from private_llm_analytics.planning.utility import (
     LogNormalPrior,
     NoiseEstimator,
+    PublicContributionPrior,
     PublicPriorDistribution,
     TruncatedNormalPrior,
     UtilityComponents,
@@ -42,13 +43,33 @@ from private_llm_analytics.privacy.rdp import (
 )
 
 
-def compute_planner_config_fingerprint(config: AppConfig) -> str:
+def compute_planner_config_fingerprint(config: Union[AppConfig, PlannerConfig, Any]) -> str:
     """Compute deterministic SHA-256 fingerprint over complete planner configuration."""
-    planner = config.privacy.planner
+    if hasattr(config, "privacy") and hasattr(config.privacy, "planner"):
+        planner = config.privacy.planner
+        priv = config.privacy
+    elif hasattr(config, "candidate_clipping"):
+        planner = config
+        priv = getattr(config, "privacy", None)
+    else:
+        raise ValueError(f"Expected AppConfig or PlannerConfig, got {type(config)}")
+
     workload = planner.workloads
     prior = planner.prior
     weights = planner.weights
     win_model = planner.window_model
+
+    mech_type = priv.default_mechanism.type if priv and hasattr(priv, "default_mechanism") else "gaussian"
+    q_eps = float(priv.default_query_budget.epsilon) if priv and hasattr(priv, "default_query_budget") else 1.0
+    q_delta = float(priv.default_query_budget.delta) if priv and hasattr(priv, "default_query_budget") else 1e-6
+    acc_mode = priv.accountant.mode if priv and hasattr(priv, "accountant") else "rdp"
+    eps_cap = float(priv.accountant.epsilon_cap) if priv and hasattr(priv, "accountant") else 4.0
+    delta_global = float(priv.accountant.delta_global) if priv and hasattr(priv, "accountant") else 1e-6
+    orders = (
+        [float(o) for o in priv.accountant.orders]
+        if priv and hasattr(priv, "accountant")
+        else [1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 8.0, 10.0, 16.0, 32.0, 64.0, 128.0]
+    )
 
     canonical: Dict[str, Any] = {
         "planner_mode": planner.mode,
@@ -86,13 +107,13 @@ def compute_planner_config_fingerprint(config: AppConfig) -> str:
             "std_scaling": win_model.std_scaling,
             "temporal_averaging_penalty": float(win_model.temporal_averaging_penalty),
         },
-        "default_mechanism": config.privacy.default_mechanism.type,
-        "query_epsilon": float(config.privacy.default_query_budget.epsilon),
-        "query_delta": float(config.privacy.default_query_budget.delta),
-        "accountant_mode": config.privacy.accountant.mode,
-        "epsilon_cap": float(config.privacy.accountant.epsilon_cap),
-        "delta_global": float(config.privacy.accountant.delta_global),
-        "orders": [float(o) for o in config.privacy.accountant.orders],
+        "default_mechanism": mech_type,
+        "query_epsilon": q_eps,
+        "query_delta": q_delta,
+        "accountant_mode": acc_mode,
+        "epsilon_cap": eps_cap,
+        "delta_global": delta_global,
+        "orders": orders,
     }
 
     raw = json.dumps(canonical, sort_keys=True)
@@ -175,12 +196,16 @@ class SmallNReleasePlanner:
             self.utility_estimator = utility_estimator
         else:
             prior_cfg = self.planner_config.prior
-            if prior_cfg.distribution == "truncated_normal":
-                prior: PublicPriorDistribution = TruncatedNormalPrior(
+            if prior_cfg.distribution in ("contribution_model", "truncated_normal"):
+                prior: PublicPriorDistribution = PublicContributionPrior(
                     mean=prior_cfg.mean,
                     std=prior_cfg.std,
                     min_val=prior_cfg.lower,
                     max_val=prior_cfg.upper,
+                    reference_days=self.planner_config.window_model.reference_days,
+                    window_days=self.planner_config.window_model.reference_days,
+                    provider_shares=self.planner_config.workloads.provider_shares,
+                    task_shares=self.planner_config.workloads.task_shares,
                 )
             elif prior_cfg.distribution == "lognormal":
                 prior = LogNormalPrior(
