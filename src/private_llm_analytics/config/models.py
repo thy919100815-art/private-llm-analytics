@@ -109,6 +109,65 @@ class DefaultMechanismConfig(BaseModel):
     type: Literal["gaussian", "laplace"] = "gaussian"
 
 
+class PublicPriorConfig(BaseModel):
+    distribution: Literal["truncated_normal", "lognormal"] = "truncated_normal"
+    mean: float = Field(default=60.0, gt=0)
+    std: float = Field(default=20.0, gt=0)
+    lower: float = Field(default=5.0, ge=0)
+    upper: float = Field(default=150.0, gt=0)
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "PublicPriorConfig":
+        if self.lower >= self.upper:
+            raise ValueError(f"lower ({self.lower}) must be strictly less than upper ({self.upper})")
+        return self
+
+
+class UtilityWeightsConfig(BaseModel):
+    clipping: float = Field(default=1.0, ge=0)
+    noise: float = Field(default=1.0, ge=0)
+    aggregation: float = Field(default=1.0, ge=0)
+    staleness: float = Field(default=0.5, ge=0)
+
+    @model_validator(mode="after")
+    def validate_non_zero_sum(self) -> "UtilityWeightsConfig":
+        total = self.clipping + self.noise + self.aggregation + self.staleness
+        if total <= 0:
+            raise ValueError("Sum of utility weights must be strictly positive.")
+        return self
+
+
+class PlannerWorkloadConfig(BaseModel):
+    default_arrival_rate: float = Field(default=0.1, gt=0)
+    provider_shares: Dict[str, float] = Field(
+        default_factory=lambda: {"provider_a": 0.5, "provider_b": 0.3, "provider_c": 0.2}
+    )
+    task_shares: Dict[str, float] = Field(
+        default_factory=lambda: {"technical": 0.4, "document": 0.35, "analysis": 0.25}
+    )
+
+
+class PlannerConfig(BaseModel):
+    enabled: bool = False
+    mode: Literal["static_public", "dp_feedback", "oracle_eval_only"] = "static_public"
+    prior: PublicPriorConfig = Field(default_factory=PublicPriorConfig)
+    weights: UtilityWeightsConfig = Field(default_factory=UtilityWeightsConfig)
+    workloads: PlannerWorkloadConfig = Field(default_factory=PlannerWorkloadConfig)
+    candidate_clipping: List[float] = Field(
+        default_factory=lambda: [5.0, 10.0, 20.0, 40.0, 80.0]
+    )
+    candidate_granularities: List[str] = Field(
+        default_factory=lambda: ["full_9_cell", "provider_3_cell", "task_3_cell", "overall_1_cell"]
+    )
+    candidate_windows: List[int] = Field(
+        default_factory=lambda: [30, 60, 90]
+    )
+    candidate_frequencies: List[int] = Field(
+        default_factory=lambda: [1, 7, 14, 30]
+    )
+    planning_horizon_days: int = Field(default=90, gt=0)
+
+
 class PrivacyReleaseConfig(BaseModel):
     reuse_existing_release: bool = True
     allow_budget_overrun: bool = False
@@ -130,6 +189,7 @@ class PrivacyConfig(BaseModel):
     recipient_composition: RecipientCompositionConfig = Field(default_factory=RecipientCompositionConfig)
     default_mechanism: DefaultMechanismConfig = Field(default_factory=DefaultMechanismConfig)
     release: PrivacyReleaseConfig = Field(default_factory=PrivacyReleaseConfig)
+    planner: PlannerConfig = Field(default_factory=PlannerConfig)
 
 
 class ContributionConfig(BaseModel):
@@ -169,7 +229,6 @@ class MetricDefinition(BaseModel):
     dimensions: List[str] = Field(default_factory=lambda: ["provider", "task"])
     contribution: ContributionConfig
     mechanism: MechanismItemConfig = Field(default_factory=MechanismItemConfig)
-
 
 
 class MetricsConfig(BaseModel):

@@ -43,3 +43,39 @@ privacy:
   release:
     reuse_existing_release: true
     allow_budget_overrun: false
+
+  planner:
+    enabled: true
+    mode: static_public
+    prior:
+      distribution: truncated_normal
+      mean: 60.0
+      std: 20.0
+      lower: 5.0
+      upper: 150.0
+    weights:
+      clipping: 1.0
+      noise: 1.0
+      aggregation: 1.0
+      staleness: 0.5
+    candidate_clipping:
+      - 5.0
+      - 10.0
+      - 20.0
+      - 40.0
+      - 80.0
+    candidate_granularities:
+      - full_9_cell
+      - provider_3_cell
+      - task_3_cell
+      - overall_1_cell
+    candidate_windows:
+      - 30
+      - 60
+      - 90
+    candidate_frequencies:
+      - 1
+      - 7
+      - 14
+      - 30
+    planning_horizon_days: 90

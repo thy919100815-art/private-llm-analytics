@@ -24,6 +24,11 @@ from private_llm_analytics.planning.diagnostics import (
     compute_calibration_error,
     compute_regret,
 )
+from private_llm_analytics.planning.policy import (
+    aggregate_to_granularity,
+    reconstruct_to_9_cell,
+    compute_workload_reconstruction_error,
+)
 
 __all__ = [
     "ReleasePolicyCandidate",
@@ -44,4 +49,7 @@ __all__ = [
     "UtilityEstimator",
     "compute_regret",
     "compute_calibration_error",
+    "aggregate_to_granularity",
+    "reconstruct_to_9_cell",
+    "compute_workload_reconstruction_error",
 ]

@@ -1,6 +1,7 @@
 """Tests for Utility Estimation Framework, Monotonicity, and Tradeoffs (v0.3)."""
 
 import math
+import numpy as np
 import pytest
 from private_llm_analytics.planning.candidates import (
     ReleasePolicyCandidate,
@@ -20,6 +21,20 @@ from private_llm_analytics.planning.diagnostics import (
     compute_calibration_error,
     compute_regret,
 )
+from private_llm_analytics.planning.policy import (
+    aggregate_to_granularity,
+    reconstruct_to_9_cell,
+    compute_workload_reconstruction_error,
+)
+from private_llm_analytics.config.loader import load_app_config
+from private_llm_analytics.config.models import (
+    AppConfig,
+    PlannerConfig,
+    PublicPriorConfig,
+    UtilityWeightsConfig,
+)
+from private_llm_analytics.config.validator import validate_production_config
+from private_llm_analytics.privacy.exceptions import ProductionSafetyConfigurationError
 
 
 def test_clipping_error_monotonic_decreases_with_C():
@@ -156,3 +171,72 @@ def test_diagnostics_regret_and_calibration():
     assert cal["bias"] == -2.0
     assert cal["mae"] == 2.0
     assert cal["spearman_corr"] == 1.0
+
+
+def test_granularity_aggregation_and_reconstruction():
+    """Granularity transformations aggregate correctly and compute reconstruction error."""
+    cell_names = [
+        "provider_a:technical", "provider_a:document", "provider_a:analysis",
+        "provider_b:technical", "provider_b:document", "provider_b:analysis",
+        "provider_c:technical", "provider_c:document", "provider_c:analysis",
+    ]
+    # Synthetic ground truth
+    true_9_cell = np.array([10.0, 20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0])
+
+    # Full 9 cell aggregation is identity
+    agg_full, names_full = aggregate_to_granularity(true_9_cell, cell_names, "full_9_cell")
+    np.testing.assert_array_equal(agg_full, true_9_cell)
+    assert names_full == cell_names
+
+    # Provider 3 cell
+    agg_prov, names_prov = aggregate_to_granularity(true_9_cell, cell_names, "provider_3_cell")
+    assert len(agg_prov) == 3
+    assert agg_prov[0] == 60.0  # 10 + 20 + 30
+    assert agg_prov[1] == 150.0 # 40 + 50 + 60
+    assert agg_prov[2] == 240.0 # 70 + 80 + 90
+
+    # Task 3 cell
+    agg_task, names_task = aggregate_to_granularity(true_9_cell, cell_names, "task_3_cell")
+    assert len(agg_task) == 3
+    # Technical: 10 + 40 + 70 = 120
+    # Document: 20 + 50 + 80 = 150
+    # Analysis: 30 + 60 + 90 = 180
+    assert 120.0 in agg_task and 150.0 in agg_task and 180.0 in agg_task
+
+    # Overall 1 cell
+    agg_over, names_over = aggregate_to_granularity(true_9_cell, cell_names, "overall_1_cell")
+    assert len(agg_over) == 1
+    assert agg_over[0] == 450.0
+
+    # Reconstruction error
+    err_full = compute_workload_reconstruction_error(true_9_cell, cell_names, "full_9_cell")
+    err_prov = compute_workload_reconstruction_error(true_9_cell, cell_names, "provider_3_cell")
+    err_over = compute_workload_reconstruction_error(true_9_cell, cell_names, "overall_1_cell")
+
+    assert err_full == 0.0
+    assert err_prov > 0.0
+    assert err_over >= err_prov
+
+
+def test_planner_config_validation_and_production_isolation():
+    """Planner config correctly enforces bounds and forbids oracle_eval_only in production."""
+    # Invalid bounds on prior
+    with pytest.raises(ValueError, match="lower .* must be strictly less than upper"):
+        PublicPriorConfig(lower=100.0, upper=50.0)
+
+    # Invalid weights (all zeros)
+    with pytest.raises(ValueError, match="Sum of utility weights must be strictly positive"):
+        UtilityWeightsConfig(clipping=0.0, noise=0.0, aggregation=0.0, staleness=0.0)
+
+    # Load default app config
+    app_config = load_app_config("configs")
+    assert app_config.privacy.planner.enabled is True
+    assert app_config.privacy.planner.mode == "static_public"
+
+    # Production safety check passes with static_public
+    validate_production_config(app_config)
+
+    # Production safety check FAILS if planner is oracle_eval_only
+    app_config.privacy.planner.mode = "oracle_eval_only"
+    with pytest.raises(ProductionSafetyConfigurationError, match="strictly forbids privacy.planner.mode='oracle_eval_only'"):
+        validate_production_config(app_config)
