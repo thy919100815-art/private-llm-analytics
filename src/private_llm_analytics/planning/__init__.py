@@ -29,6 +29,10 @@ from private_llm_analytics.planning.policy import (
     reconstruct_to_9_cell,
     compute_workload_reconstruction_error,
 )
+from private_llm_analytics.planning.planner import (
+    ReleasePlanResult,
+    SmallNReleasePlanner,
+)
 
 __all__ = [
     "ReleasePolicyCandidate",
@@ -52,4 +56,6 @@ __all__ = [
     "aggregate_to_granularity",
     "reconstruct_to_9_cell",
     "compute_workload_reconstruction_error",
+    "ReleasePlanResult",
+    "SmallNReleasePlanner",
 ]

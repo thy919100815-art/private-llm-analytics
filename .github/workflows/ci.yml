@@ -41,3 +41,4 @@ jobs:
           python experiments/verify_fencing.py
           python experiments/verify_policy_binding_atomicity.py
           python experiments/verify_recipient_collusion.py
+          python experiments/verify_planner_architecture.py
