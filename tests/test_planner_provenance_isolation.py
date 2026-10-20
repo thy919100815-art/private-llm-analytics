@@ -226,7 +226,7 @@ def test_no_feasible_policy_fail_closed():
 def test_utility_weights_validation():
     """Utility weights must have positive sum and non-negative coefficients."""
     with pytest.raises(ValueError, match="Sum of utility weights must be strictly positive"):
-        UtilityWeightsConfig(clipping=0.0, noise=0.0, aggregation=0.0, staleness=0.0)
+        UtilityWeightsConfig(clipping=0.0, noise=0.0, aggregation=0.0, staleness=0.0, window=0.0)
 
     # Valid weights
     w = UtilityWeightsConfig(clipping=1.0, noise=2.0, aggregation=0.5, staleness=0.1)

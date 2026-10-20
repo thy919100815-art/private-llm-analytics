@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import uuid
 import numpy as np
 

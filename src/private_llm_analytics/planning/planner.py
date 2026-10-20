@@ -4,15 +4,17 @@ Automatically plans release policies (C, G, W, F) under:
 - user-level central DP
 - multi-recipient privacy isolation (per-recipient, collusion-group, global-external)
 - longitudinal RDP composition without privacy resets
-- strictly isolated execution modes (STATIC_PUBLIC vs ORACLE_EVAL_ONLY)
+- strictly isolated execution modes (STATIC_PUBLIC, DP_FEEDBACK, ORACLE_EVAL_ONLY)
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from decimal import Decimal
 import hashlib
 import json
 import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+import uuid
 
 from private_llm_analytics.config.models import AppConfig, PlannerConfig
 from private_llm_analytics.planning.candidates import (
@@ -40,6 +42,76 @@ from private_llm_analytics.privacy.rdp import (
 )
 
 
+def compute_planner_config_fingerprint(config: AppConfig) -> str:
+    """Compute deterministic SHA-256 fingerprint over complete planner configuration."""
+    planner = config.privacy.planner
+    workload = planner.workloads
+    prior = planner.prior
+    weights = planner.weights
+    win_model = planner.window_model
+
+    canonical: Dict[str, Any] = {
+        "planner_mode": planner.mode,
+        "candidate_clipping": sorted([float(c) for c in planner.candidate_clipping]),
+        "candidate_granularities": sorted(list(planner.candidate_granularities)),
+        "candidate_windows": sorted([int(w) for w in planner.candidate_windows]),
+        "candidate_frequencies": sorted([int(f) for f in planner.candidate_frequencies]),
+        "planning_horizon_days": int(planner.planning_horizon_days),
+        "prior": {
+            "distribution": prior.distribution,
+            "mean": float(prior.mean),
+            "std": float(prior.std),
+            "lower": float(prior.lower),
+            "upper": float(prior.upper),
+        },
+        "weights": {
+            "clipping": float(weights.clipping),
+            "noise": float(weights.noise),
+            "aggregation": float(weights.aggregation),
+            "staleness": float(weights.staleness),
+            "window": float(weights.window),
+        },
+        "workloads": {
+            "default_arrival_rate": float(workload.default_arrival_rate),
+            "full_9_cell_weight": float(workload.full_9_cell_weight),
+            "provider_weight": float(workload.provider_weight),
+            "task_weight": float(workload.task_weight),
+            "overall_weight": float(workload.overall_weight),
+            "provider_shares": {k: float(v) for k, v in sorted(workload.provider_shares.items())},
+            "task_shares": {k: float(v) for k, v in sorted(workload.task_shares.items())},
+        },
+        "window_model": {
+            "reference_days": int(win_model.reference_days),
+            "mean_scaling": win_model.mean_scaling,
+            "std_scaling": win_model.std_scaling,
+            "temporal_averaging_penalty": float(win_model.temporal_averaging_penalty),
+        },
+        "default_mechanism": config.privacy.default_mechanism.type,
+        "query_epsilon": float(config.privacy.default_query_budget.epsilon),
+        "query_delta": float(config.privacy.default_query_budget.delta),
+        "accountant_mode": config.privacy.accountant.mode,
+        "epsilon_cap": float(config.privacy.accountant.epsilon_cap),
+        "delta_global": float(config.privacy.accountant.delta_global),
+        "orders": [float(o) for o in config.privacy.accountant.orders],
+    }
+
+    raw = json.dumps(canonical, sort_keys=True)
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"pcfg_{digest[:24]}"
+
+
+def compute_history_fingerprint(
+    scope_id: str,
+    release_count: int,
+    total_rdp_vector: Dict[Decimal, Decimal],
+) -> str:
+    """Compute deterministic SHA-256 fingerprint of historical privacy state."""
+    rdp_sorted = sorted([(str(k), str(v)) for k, v in total_rdp_vector.items()])
+    raw = f"{scope_id}|{release_count}|{rdp_sorted}"
+    digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+    return f"hist_{digest[:24]}"
+
+
 @dataclass(frozen=True)
 class ReleasePlanResult:
     """Outcome of utility-aware release planning."""
@@ -55,6 +127,9 @@ class ReleasePlanResult:
     decision_reason: str
     metadata: Dict[str, Any] = field(default_factory=dict)
     candidate_evaluations: List[Dict[str, Any]] = field(default_factory=list)
+    input_provenance: List[str] = field(default_factory=list)
+    planner_config_fingerprint: str = ""
+    history_fingerprint: str = ""
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -68,6 +143,9 @@ class ReleasePlanResult:
             "budget_scope_id": self.budget_scope_id,
             "decision_reason": self.decision_reason,
             "metadata": self.metadata,
+            "input_provenance": self.input_provenance,
+            "planner_config_fingerprint": self.planner_config_fingerprint,
+            "history_fingerprint": self.history_fingerprint,
         }
 
 
@@ -79,6 +157,7 @@ class SmallNReleasePlanner:
     2. Oracle mode is strictly blocked in production configurations.
     3. Future releases compose with historical RDP; planning horizon != privacy reset.
     4. Deterministic policy ranking with fail-closed behavior when unfeasible.
+    5. Cache key strictly binds full planner configuration and historical state.
     """
 
     def __init__(
@@ -118,11 +197,24 @@ class SmallNReleasePlanner:
                 noise=w_cfg.noise,
                 aggregation=w_cfg.aggregation,
                 staleness=w_cfg.staleness,
+                window=w_cfg.window,
             )
+            workload_cfg = self.planner_config.workloads
+            workload_weights = {
+                "full_9_cell": workload_cfg.full_9_cell_weight,
+                "provider": workload_cfg.provider_weight,
+                "task": workload_cfg.task_weight,
+                "overall": workload_cfg.overall_weight,
+            }
             self.utility_estimator = UtilityEstimator(
                 weights=weights,
                 public_prior=prior,
-                lambda_stale=self.planner_config.workloads.default_arrival_rate,
+                reference_days=self.planner_config.window_model.reference_days,
+                workload_weights=workload_weights,
+                provider_shares=workload_cfg.provider_shares,
+                task_shares=workload_cfg.task_shares,
+                lambda_stale=workload_cfg.default_arrival_rate,
+                lambda_window=self.planner_config.window_model.temporal_averaging_penalty,
             )
 
         self._plan_cache: Dict[str, ReleasePlanResult] = {}
@@ -143,28 +235,21 @@ class SmallNReleasePlanner:
         recip_policy = self.app_config.recipients.recipients.get(recipient)
         recip_role = recip_policy.role if recip_policy else "external"
 
+        is_production_config = (
+            self.app_config.privacy.release.reuse_existing_release
+            and not self.app_config.privacy.release.allow_budget_overrun
+            and self.app_config.privacy.history.mode == "lifetime"
+        )
+
         if mode == "oracle_eval_only":
-            # Forbid in production or when recipient is external
             if recip_role == "external":
                 raise ProductionSafetyConfigurationError(
                     "Security violation: Oracle evaluation planning is strictly forbidden for external recipients."
                 )
-            if self.app_config.privacy.planner.mode == "oracle_eval_only":
-                # Check production invariants
-                if (
-                    self.app_config.privacy.release.reuse_existing_release
-                    and not self.app_config.privacy.release.allow_budget_overrun
-                    and self.app_config.privacy.history.mode == "lifetime"
-                ):
-                    # In production configuration, oracle_eval_only is blocked
-                    raise ProductionSafetyConfigurationError(
-                        "Production configuration strictly forbids privacy.planner.mode='oracle_eval_only'."
-                    )
-
-        # In static_public mode, strictly do not touch user_matrix
-        if mode == "static_public":
-            # user_matrix is intentionally ignored to protect private data provenance
-            pass
+            if is_production_config:
+                raise ProductionSafetyConfigurationError(
+                    "Production configuration strictly forbids privacy.planner.mode='oracle_eval_only'."
+                )
 
         # 2. Parameters & Budget scope resolution
         horizon = int(planning_horizon_days or self.planner_config.planning_horizon_days)
@@ -203,12 +288,79 @@ class SmallNReleasePlanner:
             historical_eps = 0.0
             historical_releases = 0
 
-        # 4. Fingerprint & Memoization
-        rdp_sig = tuple((str(k), str(v)) for k, v in sorted(historical_rdp.items()))
-        cache_key = (
-            f"{metric}|{recipient}|{budget_scope_id}|{historical_releases}|"
-            f"{rdp_sig}|{horizon}|{str(epsilon_cap)}|{mode}"
-        )
+        # 4. Fingerprint computation & Input Provenance
+        config_fp = compute_planner_config_fingerprint(self.app_config)
+        history_fp = compute_history_fingerprint(budget_scope_id, historical_releases, historical_rdp)
+
+        input_provenance: List[str] = []
+        feedback_used = False
+        decision_reason_prefix = ""
+        metadata_extra: Dict[str, Any] = {}
+
+        if mode == "oracle_eval_only":
+            input_provenance.append("ORACLE_EXACT_EVAL")
+            # In production, presence of ORACLE_EXACT_EVAL is an immediate safety violation
+            if is_production_config:
+                raise ProductionSafetyConfigurationError(
+                    "Production safety violation: ORACLE_EXACT_EVAL input provenance detected."
+                )
+        elif mode == "dp_feedback":
+            # Strict validation of feedback context
+            if public_context is not None:
+                # Reject raw exact data or non-DP aggregates
+                forbidden_keys = {"raw_data", "exact_results", "unclipped_data", "raw_user_matrix"}
+                if any(k in public_context for k in forbidden_keys):
+                    raise ValueError(
+                        "Security violation: dp_feedback mode strictly rejects non-DP raw data in feedback context."
+                    )
+
+                release_ids = public_context.get("feedback_release_ids", [])
+                valid_ids = []
+                if self.state_manager is not None and release_ids:
+                    # Validate each release in state store
+                    with self.state_manager._connection() as conn:
+                        cursor = conn.cursor()
+                        for rid in release_ids:
+                            cursor.execute(
+                                "SELECT status, budget_scope_id, release_key FROM release_store WHERE release_id = ?",
+                                (rid,),
+                            )
+                            row = cursor.fetchone()
+                            if row and row[0] == "COMMITTED" and row[1] == budget_scope_id:
+                                valid_ids.append(rid)
+
+                if valid_ids:
+                    feedback_used = True
+                    input_provenance.extend(["PUBLIC_CONFIG", "PUBLIC_PRIOR", "PUBLIC_POPULATION"])
+                    for vid in valid_ids:
+                        input_provenance.append(f"DP_RELEASE:{vid}")
+                    metadata_extra["feedback_release_ids"] = valid_ids
+                    metadata_extra["feedback_used"] = True
+                else:
+                    # Explicit fallback
+                    feedback_used = False
+                    input_provenance.extend(["PUBLIC_CONFIG", "PUBLIC_PRIOR", "PUBLIC_POPULATION"])
+                    decision_reason_prefix = "DP_FEEDBACK_SAFE_FALLBACK_TO_STATIC_PUBLIC"
+                    metadata_extra["planner_mode"] = "dp_feedback"
+                    metadata_extra["feedback_used"] = False
+                    metadata_extra["fallback"] = "static_public"
+            else:
+                # No context provided -> explicit fallback
+                feedback_used = False
+                input_provenance.extend(["PUBLIC_CONFIG", "PUBLIC_PRIOR", "PUBLIC_POPULATION"])
+                decision_reason_prefix = "DP_FEEDBACK_SAFE_FALLBACK_TO_STATIC_PUBLIC"
+                metadata_extra["planner_mode"] = "dp_feedback"
+                metadata_extra["feedback_used"] = False
+                metadata_extra["fallback"] = "static_public"
+        else:
+            # STATIC_PUBLIC
+            input_provenance.extend(["PUBLIC_CONFIG", "PUBLIC_PRIOR", "PUBLIC_POPULATION"])
+
+        # Context fingerprint
+        ctx_raw = json.dumps(public_context or {}, sort_keys=True)
+        ctx_fp = hashlib.sha256(ctx_raw.encode("utf-8")).hexdigest()[:12]
+
+        cache_key = f"{metric}|{recipient}|{budget_scope_id}|{history_fp}|{config_fp}|{horizon}|{ctx_fp}"
         if not force_recompute and cache_key in self._plan_cache:
             return self._plan_cache[cache_key]
 
@@ -256,14 +408,13 @@ class SmallNReleasePlanner:
                 best_alpha, dec_eps_proj = rdp_to_epsilon_delta(projected_rdp, delta_global=delta_global)
                 eps_projected = float(dec_eps_proj)
             else:
-                # Basic accountant: linear addition of epsilon
                 eps_projected = historical_eps + (k_releases * cand.epsilon_per_release)
                 projected_rdp = {}
 
             # Budget feasibility check against authoritative epsilon_cap
             is_feasible = to_decimal(eps_projected) <= epsilon_cap
 
-            # Estimate utility
+            # Estimate utility loss (normalized dimensionless loss)
             util_comp = self.utility_estimator.evaluate_candidate(
                 metric=metric,
                 candidate=cand,
@@ -285,8 +436,40 @@ class SmallNReleasePlanner:
 
         # 7. Select optimal policy or fail closed
         if not feasible_candidates:
-            # No candidate can satisfy the remaining budget over planning horizon
             min_proj_eps = min(r["projected_epsilon"] for r in evaluated_candidates) if evaluated_candidates else float("inf")
+            reason = decision_reason_prefix or "NO_FEASIBLE_POLICY"
+            if decision_reason_prefix and decision_reason_prefix != "NO_FEASIBLE_POLICY":
+                reason = f"{decision_reason_prefix}_NO_FEASIBLE_POLICY"
+
+            meta = {
+                "total_candidates": len(candidates),
+                "feasible_candidates": 0,
+                "planning_horizon_days": horizon,
+                "epsilon_cap": float(epsilon_cap),
+                "historical_spent_epsilon": historical_eps,
+                **metadata_extra,
+            }
+
+            decision_record = {
+                "planner_id": f"plan_{uuid.uuid4().hex[:12]}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metric": metric,
+                "recipient": recipient,
+                "scope": budget_scope_id,
+                "selected_policy": None,
+                "candidate_count": len(candidates),
+                "predicted_utility": None,
+                "privacy_projection": {
+                    "projected_epsilon": min_proj_eps,
+                    "epsilon_cap": float(epsilon_cap),
+                    "budget_feasible": False,
+                },
+                "config_fingerprint": config_fp,
+                "history_fingerprint": history_fp,
+                "input_provenance": input_provenance,
+            }
+            meta["decision_record"] = decision_record
+
             result = ReleasePlanResult(
                 policy=None,
                 budget_feasible=False,
@@ -296,36 +479,67 @@ class SmallNReleasePlanner:
                 planned_releases_count=0,
                 estimated_utility=None,
                 budget_scope_id=budget_scope_id,
-                decision_reason="NO_FEASIBLE_POLICY",
-                metadata={
-                    "total_candidates": len(candidates),
-                    "feasible_candidates": 0,
-                    "planning_horizon_days": horizon,
-                    "epsilon_cap": float(epsilon_cap),
-                    "historical_spent_epsilon": historical_eps,
-                },
+                decision_reason=reason,
+                metadata=meta,
                 candidate_evaluations=evaluated_candidates,
+                input_provenance=input_provenance,
+                planner_config_fingerprint=config_fp,
+                history_fingerprint=history_fp,
             )
         else:
-            # Tie-break priority:
-            # 1. Total utility error (ascending)
-            # 2. Projected epsilon (ascending: lower budget consumption)
-            # 3. Frequency days (ascending: 1 > 7 > 14 > 30, fresher releases)
-            # 4. Granularity ranking (full_9_cell > provider_3_cell / task_3_cell > overall_1_cell)
-            # 5. Deterministic candidate_id
+            # Multi-objective lexicographic ranking:
+            # 1. Total normalized loss (ascending)
+            # 2. Projected epsilon (ascending)
+            # 3. Frequency days (ascending: fresher releases)
+            # 4. Granularity rank (richer cells first)
+            # 5. Window days (closer to reference days first)
+            # 6. Deterministic candidate ID
             g_rank = {"full_9_cell": 0, "provider_3_cell": 1, "task_3_cell": 1, "overall_1_cell": 2}
 
-            def ranking_key(item: Dict[str, Any]) -> Tuple[float, float, int, int, str]:
+            def ranking_key(item: Dict[str, Any]) -> Tuple[float, float, int, int, int, str]:
                 cand = item["candidate"]
+                w_dist = abs(cand.window_days - self.planner_config.window_model.reference_days)
                 return (
-                    round(item["total_error"], 6),
+                    round(item["total_error"], 7),
                     round(item["projected_epsilon"], 6),
                     cand.frequency_days,
                     g_rank.get(cand.granularity, 3),
+                    w_dist,
                     cand.candidate_id,
                 )
 
             best = min(feasible_candidates, key=ranking_key)
+            reason = decision_reason_prefix or "OPTIMAL_POLICY_SELECTED"
+
+            meta = {
+                "total_candidates": len(candidates),
+                "feasible_candidates": len(feasible_candidates),
+                "planning_horizon_days": horizon,
+                "epsilon_cap": float(epsilon_cap),
+                "historical_spent_epsilon": historical_eps,
+                **metadata_extra,
+            }
+
+            decision_record = {
+                "planner_id": f"plan_{uuid.uuid4().hex[:12]}",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "metric": metric,
+                "recipient": recipient,
+                "scope": budget_scope_id,
+                "selected_policy": best["candidate"].candidate_id,
+                "candidate_count": len(candidates),
+                "predicted_utility": best["utility"].to_dict(),
+                "privacy_projection": {
+                    "projected_epsilon": best["projected_epsilon"],
+                    "epsilon_cap": float(epsilon_cap),
+                    "budget_feasible": True,
+                },
+                "config_fingerprint": config_fp,
+                "history_fingerprint": history_fp,
+                "input_provenance": input_provenance,
+            }
+            meta["decision_record"] = decision_record
+
             result = ReleasePlanResult(
                 policy=best["candidate"],
                 budget_feasible=True,
@@ -335,15 +549,12 @@ class SmallNReleasePlanner:
                 planned_releases_count=best["k_releases"],
                 estimated_utility=best["utility"],
                 budget_scope_id=budget_scope_id,
-                decision_reason="OPTIMAL_POLICY_SELECTED",
-                metadata={
-                    "total_candidates": len(candidates),
-                    "feasible_candidates": len(feasible_candidates),
-                    "planning_horizon_days": horizon,
-                    "epsilon_cap": float(epsilon_cap),
-                    "historical_spent_epsilon": historical_eps,
-                },
+                decision_reason=reason,
+                metadata=meta,
                 candidate_evaluations=evaluated_candidates,
+                input_provenance=input_provenance,
+                planner_config_fingerprint=config_fp,
+                history_fingerprint=history_fp,
             )
 
         self._plan_cache[cache_key] = result

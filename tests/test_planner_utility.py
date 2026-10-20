@@ -226,7 +226,7 @@ def test_planner_config_validation_and_production_isolation():
 
     # Invalid weights (all zeros)
     with pytest.raises(ValueError, match="Sum of utility weights must be strictly positive"):
-        UtilityWeightsConfig(clipping=0.0, noise=0.0, aggregation=0.0, staleness=0.0)
+        UtilityWeightsConfig(clipping=0.0, noise=0.0, aggregation=0.0, staleness=0.0, window=0.0)
 
     # Load default app config
     app_config = load_app_config("configs")

@@ -19,6 +19,7 @@ from private_llm_analytics.planning.utility import (
     UtilityComponents,
     UtilityEstimator,
     UtilityWeights,
+    scale_prior_for_window,
 )
 from private_llm_analytics.planning.diagnostics import (
     compute_calibration_error,
@@ -28,10 +29,16 @@ from private_llm_analytics.planning.policy import (
     aggregate_to_granularity,
     reconstruct_to_9_cell,
     compute_workload_reconstruction_error,
+    build_volume_contributions_for_granularity,
+    build_prevalence_contributions_for_granularity,
+    build_share_contributions_for_granularity,
+    get_direct_granularity_sensitivity,
 )
 from private_llm_analytics.planning.planner import (
     ReleasePlanResult,
     SmallNReleasePlanner,
+    compute_planner_config_fingerprint,
+    compute_history_fingerprint,
 )
 
 __all__ = [
@@ -44,6 +51,7 @@ __all__ = [
     "PublicPriorDistribution",
     "TruncatedNormalPrior",
     "LogNormalPrior",
+    "scale_prior_for_window",
     "ClippingEstimator",
     "NoiseEstimator",
     "GranularityEstimator",
@@ -56,6 +64,12 @@ __all__ = [
     "aggregate_to_granularity",
     "reconstruct_to_9_cell",
     "compute_workload_reconstruction_error",
+    "build_volume_contributions_for_granularity",
+    "build_prevalence_contributions_for_granularity",
+    "build_share_contributions_for_granularity",
+    "get_direct_granularity_sensitivity",
     "ReleasePlanResult",
     "SmallNReleasePlanner",
+    "compute_planner_config_fingerprint",
+    "compute_history_fingerprint",
 ]

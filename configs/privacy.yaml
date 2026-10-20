@@ -58,6 +58,18 @@ privacy:
       noise: 1.0
       aggregation: 1.0
       staleness: 0.5
+      window: 0.2
+    workloads:
+      default_arrival_rate: 0.1
+      full_9_cell_weight: 0.4
+      provider_weight: 0.3
+      task_weight: 0.2
+      overall_weight: 0.1
+    window_model:
+      reference_days: 30
+      mean_scaling: linear
+      std_scaling: sqrt_time
+      temporal_averaging_penalty: 0.2
     candidate_clipping:
       - 5.0
       - 10.0
@@ -70,6 +82,8 @@ privacy:
       - task_3_cell
       - overall_1_cell
     candidate_windows:
+      - 7
+      - 14
       - 30
       - 60
       - 90

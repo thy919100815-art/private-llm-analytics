@@ -128,10 +128,11 @@ class UtilityWeightsConfig(BaseModel):
     noise: float = Field(default=1.0, ge=0)
     aggregation: float = Field(default=1.0, ge=0)
     staleness: float = Field(default=0.5, ge=0)
+    window: float = Field(default=0.2, ge=0)
 
     @model_validator(mode="after")
     def validate_non_zero_sum(self) -> "UtilityWeightsConfig":
-        total = self.clipping + self.noise + self.aggregation + self.staleness
+        total = self.clipping + self.noise + self.aggregation + self.staleness + self.window
         if total <= 0:
             raise ValueError("Sum of utility weights must be strictly positive.")
         return self
@@ -139,12 +140,30 @@ class UtilityWeightsConfig(BaseModel):
 
 class PlannerWorkloadConfig(BaseModel):
     default_arrival_rate: float = Field(default=0.1, gt=0)
+    full_9_cell_weight: float = Field(default=0.4, ge=0)
+    provider_weight: float = Field(default=0.3, ge=0)
+    task_weight: float = Field(default=0.2, ge=0)
+    overall_weight: float = Field(default=0.1, ge=0)
     provider_shares: Dict[str, float] = Field(
         default_factory=lambda: {"provider_a": 0.5, "provider_b": 0.3, "provider_c": 0.2}
     )
     task_shares: Dict[str, float] = Field(
         default_factory=lambda: {"technical": 0.4, "document": 0.35, "analysis": 0.25}
     )
+
+    @model_validator(mode="after")
+    def validate_workload_weights(self) -> "PlannerWorkloadConfig":
+        total = self.full_9_cell_weight + self.provider_weight + self.task_weight + self.overall_weight
+        if total <= 0:
+            raise ValueError("Sum of workload weights must be strictly positive.")
+        return self
+
+
+class WindowModelConfig(BaseModel):
+    reference_days: int = Field(default=30, gt=0)
+    mean_scaling: Literal["linear", "sublinear"] = "linear"
+    std_scaling: Literal["sqrt_time", "linear"] = "sqrt_time"
+    temporal_averaging_penalty: float = Field(default=0.2, ge=0)
 
 
 class PlannerConfig(BaseModel):
@@ -153,6 +172,7 @@ class PlannerConfig(BaseModel):
     prior: PublicPriorConfig = Field(default_factory=PublicPriorConfig)
     weights: UtilityWeightsConfig = Field(default_factory=UtilityWeightsConfig)
     workloads: PlannerWorkloadConfig = Field(default_factory=PlannerWorkloadConfig)
+    window_model: WindowModelConfig = Field(default_factory=WindowModelConfig)
     candidate_clipping: List[float] = Field(
         default_factory=lambda: [5.0, 10.0, 20.0, 40.0, 80.0]
     )
@@ -160,7 +180,7 @@ class PlannerConfig(BaseModel):
         default_factory=lambda: ["full_9_cell", "provider_3_cell", "task_3_cell", "overall_1_cell"]
     )
     candidate_windows: List[int] = Field(
-        default_factory=lambda: [30, 60, 90]
+        default_factory=lambda: [7, 14, 30, 60, 90]
     )
     candidate_frequencies: List[int] = Field(
         default_factory=lambda: [1, 7, 14, 30]
