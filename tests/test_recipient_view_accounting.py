@@ -665,13 +665,22 @@ def test_rdp_accountant_public_interface_fail_closed(tmp_path):
 
 
 
-def _concurrent_policy_worker(db_path_str: str, mode: str, groups=None, roles=None):
+def _concurrent_policy_proc(db_path_str: str, mode: str, groups, roles, barrier, result_queue):
     from decimal import Decimal
     from private_llm_analytics.privacy.state import PrivacyStateManager
     from private_llm_analytics.privacy.budget import PrivacyBudget
     state_mgr = PrivacyStateManager(db_path_str)
     gb = PrivacyBudget(epsilon=10.0, delta=1e-5)
     bn = PrivacyBudget(epsilon=1.0, delta=1e-6)
+
+    # Barrier synchronization ensures both workers enter reserve_or_get_release simultaneously
+    if barrier is not None:
+        try:
+            barrier.wait(timeout=10.0)
+        except Exception as e:
+            result_queue.put({"success": False, "error": "BarrierTimeout", "msg": str(e), "mode": mode})
+            return
+
     try:
         res = state_mgr.reserve_or_get_release(
             release_key=f"k_{mode}",
@@ -691,28 +700,41 @@ def _concurrent_policy_worker(db_path_str: str, mode: str, groups=None, roles=No
             policy_groups=groups,
             recipient_roles=roles,
         )
-        return {"success": True, "error": None, "mode": mode}
+        result_queue.put({"success": True, "error": None, "mode": mode})
     except Exception as e:
-        return {"success": False, "error": type(e).__name__, "msg": str(e), "mode": mode}
+        result_queue.put({"success": False, "error": type(e).__name__, "msg": str(e), "mode": mode})
 
 
 def test_concurrent_conflicting_policy_processes_fail_closed(tmp_path):
-    """Two concurrent processes attempting conflicting policy binding fail closed atomically (Item 7)."""
-    import concurrent.futures
+    """Two concurrent processes attempting conflicting policy binding fail closed atomically with barrier (Item 7 & F)."""
+    import multiprocessing
 
     db_path = tmp_path / "concurrent_policy.db"
     # Ensure tables exist
     PrivacyStateManager(db_path)
 
     roles = {"provider_a": "external", "analyst_internal": "internal"}
-    tasks = [
-        (str(db_path), "global_external", None, roles),
-        (str(db_path), "per_recipient", None, roles),
-    ]
+    barrier = multiprocessing.Barrier(2)
+    queue = multiprocessing.Queue()
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(_concurrent_policy_worker, *t) for t in tasks]
-        results = [f.result() for f in futures]
+    p1 = multiprocessing.Process(
+        target=_concurrent_policy_proc,
+        args=(str(db_path), "global_external", None, roles, barrier, queue),
+    )
+    p2 = multiprocessing.Process(
+        target=_concurrent_policy_proc,
+        args=(str(db_path), "per_recipient", None, roles, barrier, queue),
+    )
+
+    p1.start()
+    p2.start()
+
+    p1.join(timeout=10.0)
+    p2.join(timeout=10.0)
+
+    results = []
+    while not queue.empty():
+        results.append(queue.get())
 
     successes = [r for r in results if r["success"]]
     failures = [r for r in results if not r["success"]]
@@ -936,13 +958,13 @@ def test_rdp_accountant_spent_api_per_recipient_collusion_group(tmp_path, test_u
     # Specific scope queries via get_total_spent
     spent_a_budget = orch.rdp_accountant.get_total_spent(budget_scope_id="recipient:provider_a")
     spent_b_budget = orch.rdp_accountant.get_total_spent(budget_scope_id="recipient:provider_b")
-    assert spent_a_budget.epsilon == spent_a
-    assert spent_b_budget.epsilon == spent_max
+    assert float(spent_a_budget.epsilon) == spent_a
+    assert float(spent_b_budget.epsilon) == spent_max
 
     # Global total spent matches spent_max
     spent_global_budget = orch.rdp_accountant.get_total_spent()
-    assert spent_global_budget.epsilon == spent_max
-    assert spent_global_budget.delta == 1e-6
+    assert float(spent_global_budget.epsilon) == spent_max
+    assert float(spent_global_budget.delta) == 1e-6
 
 
 def test_blank_mechanism_fails_closed_without_guessing(tmp_path):
@@ -971,4 +993,112 @@ def test_blank_mechanism_fails_closed_without_guessing(tmp_path):
     conn.close()
 
     with pytest.raises(ValueError, match="missing, blank, or unsupported mechanism"):
+        PrivacyStateManager(db_path)
+
+
+def test_empty_rdp_accountant_reports_exact_zero(tmp_path):
+    """Empty RDPAccountant reports exact zero without returning fake epsilon (Item D & E)."""
+    from private_llm_analytics.privacy.rdp_accountant import RDPAccountant
+
+    db_path = tmp_path / "empty_rdp.db"
+    state_mgr = PrivacyStateManager(db_path)
+    acct = RDPAccountant(epsilon_cap=5.0, delta_global=1e-6, state_manager=state_mgr)
+
+    assert acct.spent_epsilon == 0.0
+    spent = acct.get_total_spent()
+    assert spent.epsilon == 0
+    assert spent.epsilon == Decimal("0.0")
+    assert float(spent.epsilon) == 0.0
+    assert spent.delta == Decimal("1e-6")
+
+
+def test_empty_specific_scope_reports_exact_zero(tmp_path):
+    """Querying specific empty scope via get_total_spent returns exact zero (Item D & E)."""
+    from private_llm_analytics.privacy.rdp_accountant import RDPAccountant
+
+    db_path = tmp_path / "empty_scope.db"
+    state_mgr = PrivacyStateManager(db_path)
+    acct = RDPAccountant(epsilon_cap=5.0, delta_global=1e-6, state_manager=state_mgr)
+
+    spent_a = acct.get_total_spent(budget_scope_id="recipient:provider_a")
+    assert spent_a.epsilon == 0
+    assert spent_a.epsilon == Decimal("0.0")
+    assert float(spent_a.epsilon) == 0.0
+
+
+def test_legacy_policy_metadata_multiple_rows_fails_closed(tmp_path):
+    """Legacy privacy_policy_metadata with > 1 rows fails closed without dropping old data (Item A & C)."""
+    db_path = tmp_path / "multi_policy_legacy.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE privacy_policy_metadata (
+            policy_fingerprint TEXT PRIMARY KEY,
+            recipient_composition_mode TEXT NOT NULL,
+            canonicalized_collusion_groups TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO privacy_policy_metadata VALUES
+        ('fp_global', 'global_external', '{}', '2026-01-01T00:00:00Z'),
+        ('fp_per', 'per_recipient', '{}', '2026-01-01T00:00:00Z')
+    """)
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="contains multiple policy bindings"):
+        PrivacyStateManager(db_path)
+
+    # Confirm old records were NOT dropped or lost
+    conn2 = sqlite3.connect(db_path)
+    rows = conn2.execute("SELECT policy_fingerprint FROM privacy_policy_metadata").fetchall()
+    conn2.close()
+    assert len(rows) == 2
+    assert {r[0] for r in rows} == {"fp_global", "fp_per"}
+
+
+def test_legacy_single_policy_inconsistent_scopes_fails_closed(tmp_path):
+    """Legacy single policy row with conflicting historical scope fails closed during migration (Item B & C)."""
+    db_path = tmp_path / "inconsistent_scope.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE privacy_policy_metadata (
+            policy_fingerprint TEXT PRIMARY KEY,
+            recipient_composition_mode TEXT NOT NULL,
+            canonicalized_collusion_groups TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO privacy_policy_metadata VALUES
+        ('fp_global', 'global_external', '{}', '2026-01-01T00:00:00Z')
+    """)
+    conn.execute("""
+        CREATE TABLE release_store (
+            release_key TEXT PRIMARY KEY, reservation_id TEXT NOT NULL, owner_id TEXT NOT NULL DEFAULT '',
+            generation INTEGER NOT NULL DEFAULT 1, release_id TEXT NOT NULL, created_at TEXT NOT NULL,
+            status TEXT NOT NULL, canonical_semantics_json TEXT NOT NULL, metric TEXT NOT NULL,
+            window_start TEXT, window_end TEXT, dataset_version TEXT NOT NULL, mechanism TEXT NOT NULL,
+            epsilon TEXT NOT NULL, delta TEXT NOT NULL, sensitivity REAL NOT NULL, noise_scale REAL NOT NULL,
+            cell_names_json TEXT NOT NULL, n_users INTEGER NOT NULL, public_population_size INTEGER,
+            dp_vector_json TEXT, post_processed_json TEXT, committed_at TEXT,
+            recipient TEXT NOT NULL DEFAULT 'provider_a', recipient_role TEXT NOT NULL DEFAULT 'external',
+            budget_scope_id TEXT NOT NULL DEFAULT 'recipient:provider_a', accountant_mode TEXT NOT NULL DEFAULT 'rdp',
+            rdp_cost_json TEXT NOT NULL, rdp_orders_json TEXT NOT NULL,
+            delta_global TEXT NOT NULL DEFAULT '1e-6', effective_epsilon TEXT, best_alpha TEXT
+        )
+    """)
+    rdp_dummy = json.dumps({"2.0": "0.1", "3.0": "0.2"})
+    orders_dummy = json.dumps([2.0, 3.0])
+    conn.execute("""
+        INSERT INTO release_store VALUES (
+            'k1', 'r1', '', 1, 'rel1', '2026-01-01', 'COMMITTED', '{}',
+            'user_prevalence', NULL, NULL, 'v1.0', 'gaussian', '1.0', '1e-6', 1.0, 1.0, '[]', 50, 50, '[]', '[]', '2026-01-01',
+            'provider_a', 'external', 'recipient:provider_a', 'rdp', ?, ?, '1e-6', '1.0', '2.0'
+        )
+    """, (rdp_dummy, orders_dummy))
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="is inconsistent with legacy policy mode 'global_external'"):
         PrivacyStateManager(db_path)

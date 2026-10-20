@@ -7,7 +7,7 @@ and (epsilon, delta) conversion against global privacy policy caps.
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from private_llm_analytics.privacy.accountant import PrivacyAccountant
-from private_llm_analytics.privacy.budget import PrivacyBudget
+from private_llm_analytics.privacy.budget import PrivacyBudget, PrivacySpent
 from private_llm_analytics.privacy.composition import PrivacyView, RDPReleaseCost
 from private_llm_analytics.privacy.exceptions import PrivacyBudgetExceededError
 from private_llm_analytics.privacy.rdp import (
@@ -177,11 +177,12 @@ class RDPAccountant(PrivacyAccountant):
             "All privacy accounting must be performed atomically via PrivacyStateManager."
         )
 
-    def get_total_spent(self, budget_scope_id: Optional[str] = None) -> PrivacyBudget:
+    def get_total_spent(self, budget_scope_id: Optional[str] = None) -> PrivacySpent:
         """Return effective epsilon and delta_global from current persistent state.
 
         If budget_scope_id is specified, queries that specific scope.
         Otherwise, evaluates across active external budget scopes (maximum effective epsilon).
+        Returns PrivacySpent allowing exact zero spend (epsilon = Decimal('0.0')).
         """
         if budget_scope_id is not None:
             view = self.state_manager.get_privacy_view(
@@ -191,16 +192,16 @@ class RDPAccountant(PrivacyAccountant):
                 epsilon_cap=self.epsilon_cap,
                 accountant_mode="rdp",
             )
-            return PrivacyBudget(
-                epsilon=float(view.effective_epsilon),
-                delta=float(self.delta_global),
+            return PrivacySpent(
+                epsilon=to_decimal(view.effective_epsilon),
+                delta=to_decimal(self.delta_global),
             )
 
         active_scopes = self.state_manager.get_active_budget_scopes(exclude_internal=True)
         if not active_scopes:
             active_scopes = ["global_external"]
 
-        max_eps = 0.0
+        max_eps = Decimal("0.0")
         for scope in active_scopes:
             view = self.state_manager.get_privacy_view(
                 budget_scope_id=scope,
@@ -209,13 +210,9 @@ class RDPAccountant(PrivacyAccountant):
                 epsilon_cap=self.epsilon_cap,
                 accountant_mode="rdp",
             )
-            max_eps = max(max_eps, float(view.effective_epsilon))
+            max_eps = max(max_eps, to_decimal(view.effective_epsilon))
 
-        if max_eps <= 0.0:
-            total_eps, _ = self.state_manager.get_total_spent()
-            max_eps = max(float(total_eps), 1e-12)
-
-        return PrivacyBudget(
+        return PrivacySpent(
             epsilon=max_eps,
-            delta=float(self.delta_global),
+            delta=to_decimal(self.delta_global),
         )

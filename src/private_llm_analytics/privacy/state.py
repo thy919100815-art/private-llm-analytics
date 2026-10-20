@@ -230,23 +230,112 @@ class PrivacyStateManager:
             cursor.execute("PRAGMA table_info(privacy_policy_metadata)")
             ppm_cols = {row[1] for row in cursor.fetchall()}
             if ppm_cols and "id" not in ppm_cols:
-                cursor.execute("ALTER TABLE privacy_policy_metadata RENAME TO _ppm_old")
-                cursor.execute("""
-                    CREATE TABLE privacy_policy_metadata (
-                        id INTEGER PRIMARY KEY CHECK (id = 1),
-                        policy_fingerprint TEXT NOT NULL,
-                        recipient_composition_mode TEXT NOT NULL,
-                        canonicalized_collusion_groups TEXT NOT NULL,
-                        canonicalized_recipient_roles TEXT NOT NULL,
-                        created_at TEXT NOT NULL
+                # 1. Check legacy row count (Requirement A)
+                cursor.execute("SELECT COUNT(*) FROM privacy_policy_metadata")
+                legacy_count = cursor.fetchone()[0]
+                if legacy_count > 1:
+                    raise ProductionSafetyConfigurationError(
+                        "Legacy privacy_policy_metadata contains multiple policy bindings. "
+                        "Historical privacy scope provenance is ambiguous. "
+                        "Automatic migration is forbidden."
                     )
-                """)
-                cursor.execute("""
-                    INSERT OR IGNORE INTO privacy_policy_metadata (id, policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups, canonicalized_recipient_roles, created_at)
-                    SELECT 1, policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups, '{}', created_at
-                    FROM _ppm_old LIMIT 1
-                """)
-                cursor.execute("DROP TABLE _ppm_old")
+
+                if legacy_count == 1:
+                    cursor.execute(
+                        "SELECT policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups, created_at "
+                        "FROM privacy_policy_metadata"
+                    )
+                    leg_row = cursor.fetchone()
+                    leg_fp, leg_mode, leg_groups, leg_created = leg_row[0], leg_row[1], leg_row[2], leg_row[3]
+
+                    # 2. Verify Historical Scope Consistency (Requirement B)
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='release_store'")
+                    has_rel_store = cursor.fetchone() is not None
+                    cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='privacy_reservations'")
+                    has_priv_res = cursor.fetchone() is not None
+
+                    hist_scopes = set()
+                    if has_rel_store:
+                        cursor.execute("PRAGMA table_info(release_store)")
+                        rs_cols = {r[1] for r in cursor.fetchall()}
+                        if "budget_scope_id" in rs_cols:
+                            cursor.execute("""
+                                SELECT DISTINCT budget_scope_id FROM release_store
+                                WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
+                                  AND status = 'COMMITTED'
+                            """)
+                            hist_scopes.update({r[0] for r in cursor.fetchall() if r[0] and r[0] != "internal"})
+
+                    if has_priv_res:
+                        cursor.execute("PRAGMA table_info(privacy_reservations)")
+                        pr_cols = {r[1] for r in cursor.fetchall()}
+                        if "budget_scope_id" in pr_cols:
+                            cursor.execute("""
+                                SELECT DISTINCT budget_scope_id FROM privacy_reservations
+                                WHERE budget_scope_id != 'internal'
+                                  AND status IN ('COMMITTED', 'PENDING')
+                            """)
+                            hist_scopes.update({r[0] for r in cursor.fetchall() if r[0] and r[0] != "internal"})
+
+                    leg_mode_norm = str(leg_mode).lower().strip()
+                    for s in sorted(list(hist_scopes)):
+                        if leg_mode_norm == "global_external":
+                            if s != "global_external":
+                                raise ProductionSafetyConfigurationError(
+                                    f"Historical budget scope '{s}' is inconsistent with legacy policy mode 'global_external'. "
+                                    "Historical privacy scope provenance is ambiguous. Automatic migration is forbidden."
+                                )
+                        elif leg_mode_norm == "per_recipient":
+                            if not s.startswith("recipient:"):
+                                raise ProductionSafetyConfigurationError(
+                                    f"Historical budget scope '{s}' is inconsistent with legacy policy mode 'per_recipient'. "
+                                    "Historical privacy scope provenance is ambiguous. Automatic migration is forbidden."
+                                )
+                        elif leg_mode_norm == "collusion_group":
+                            if not (s.startswith("group:") or s.startswith("collusion:")):
+                                raise ProductionSafetyConfigurationError(
+                                    f"Historical budget scope '{s}' is inconsistent with legacy policy mode 'collusion_group'. "
+                                    "Historical privacy scope provenance is ambiguous. Automatic migration is forbidden."
+                                )
+                        else:
+                            raise ProductionSafetyConfigurationError(
+                                f"Legacy privacy_policy_metadata has unknown mode '{leg_mode}'. "
+                                "Historical privacy scope provenance is ambiguous. Automatic migration is forbidden."
+                            )
+
+                    # Replace old table with new singleton table and insert single row
+                    cursor.execute("DROP TABLE privacy_policy_metadata")
+                    cursor.execute("""
+                        CREATE TABLE privacy_policy_metadata (
+                            id INTEGER PRIMARY KEY CHECK (id = 1),
+                            policy_fingerprint TEXT NOT NULL,
+                            recipient_composition_mode TEXT NOT NULL,
+                            canonicalized_collusion_groups TEXT NOT NULL,
+                            canonicalized_recipient_roles TEXT NOT NULL,
+                            created_at TEXT NOT NULL
+                        )
+                    """)
+                    cursor.execute("""
+                        INSERT INTO privacy_policy_metadata (
+                            id, policy_fingerprint, recipient_composition_mode,
+                            canonicalized_collusion_groups, canonicalized_recipient_roles, created_at
+                        ) VALUES (1, ?, ?, ?, '{}', ?)
+                    """, (leg_fp, leg_mode, leg_groups, leg_created))
+                else:
+                    # legacy_count == 0: drop empty table and create new singleton table
+                    cursor.execute("DROP TABLE privacy_policy_metadata")
+                    cursor.execute("""
+                        CREATE TABLE privacy_policy_metadata (
+                            id INTEGER PRIMARY KEY CHECK (id = 1),
+                            policy_fingerprint TEXT NOT NULL,
+                            recipient_composition_mode TEXT NOT NULL,
+                            canonicalized_collusion_groups TEXT NOT NULL,
+                            canonicalized_recipient_roles TEXT NOT NULL,
+                            created_at TEXT NOT NULL
+                        )
+                    """)
+            elif ppm_cols and "id" in ppm_cols and "canonicalized_recipient_roles" not in ppm_cols:
+                cursor.execute("ALTER TABLE privacy_policy_metadata ADD COLUMN canonicalized_recipient_roles TEXT NOT NULL DEFAULT '{}'")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS privacy_ledger (
                     release_id TEXT PRIMARY KEY,

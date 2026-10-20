@@ -2,20 +2,24 @@
 
 Verifies that:
   1. privacy_policy_metadata is strictly a singleton table (id INTEGER PRIMARY KEY CHECK (id = 1)).
-  2. First reservation and policy binding occur atomically in a single BEGIN IMMEDIATE transaction.
+  2. First reservation and policy binding occur atomically in a single BEGIN IMMEDIATE transaction with Barrier synchronization.
   3. Concurrent processes with conflicting composition policies fail closed atomically.
   4. Legacy v0.1 databases with external history and no policy metadata can only migrate to GLOBAL_EXTERNAL.
-  5. Recipient role alterations on a database with external history fail closed.
-  6. Blank and unknown mechanisms fail closed without guessing from delta.
+  5. Legacy v0.2 metadata with multiple policy rows strictly fails closed without dropping records (Item A).
+  6. Legacy single policy row with inconsistent historical scope strictly fails closed (Item B).
+  7. Empty RDP accountant reports exact zero spend without faking epsilon (Item D).
+  8. Recipient role alterations on a database with external history fail closed.
+  9. Blank and unknown mechanisms fail closed without guessing from delta.
 """
 
 from decimal import Decimal
 import json
+import multiprocessing
 from pathlib import Path
 import sqlite3
 import sys
 import tempfile
-import concurrent.futures
+import time
 
 # Ensure project root is in sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
@@ -31,18 +35,27 @@ from private_llm_analytics.privacy.rdp import (
     compute_gaussian_rdp,
     rdp_vector_to_json,
 )
+from private_llm_analytics.privacy.rdp_accountant import RDPAccountant
 from private_llm_analytics.privacy.state import (
     PrivacyStateManager,
     compute_recipient_policy_fingerprint,
 )
 
 
-def _worker_policy_binding_task(db_path_str: str, mode: str, groups=None, roles=None):
-    """Worker task executed in separate OS process attempting atomic policy binding & reservation."""
+def _worker_policy_binding_proc(db_path_str: str, mode: str, groups, roles, barrier, result_queue):
+    """Worker task executed in separate OS process attempting atomic policy binding & reservation with barrier."""
     state_mgr = PrivacyStateManager(db_path_str)
     gb = PrivacyBudget(epsilon=10.0, delta=1e-5)
     bn = PrivacyBudget(epsilon=1.0, delta=1e-6)
     cand_rdp = compute_gaussian_rdp(sigma=2.0, sensitivity=1.0, orders=DEFAULT_RDP_ORDERS)
+
+    # Barrier synchronization ensures simultaneous arrival at the reservation gate
+    if barrier is not None:
+        try:
+            barrier.wait(timeout=10.0)
+        except Exception as e:
+            result_queue.put({"success": False, "error": "BarrierTimeout", "msg": str(e), "mode": mode})
+            return
 
     try:
         res = state_mgr.reserve_or_get_release(
@@ -63,9 +76,9 @@ def _worker_policy_binding_task(db_path_str: str, mode: str, groups=None, roles=
             policy_groups=groups,
             recipient_roles=roles,
         )
-        return {"success": True, "error": None, "mode": mode}
+        result_queue.put({"success": True, "error": None, "mode": mode})
     except Exception as e:
-        return {"success": False, "error": type(e).__name__, "msg": str(e), "mode": mode}
+        result_queue.put({"success": False, "error": type(e).__name__, "msg": str(e), "mode": mode})
 
 
 def verify_singleton_constraint(tmp_dir: Path):
@@ -107,20 +120,33 @@ def verify_singleton_constraint(tmp_dir: Path):
     print("    [PASS] Singleton constraint (id = 1) physically enforced by SQLite engine.")
 
 
-def verify_concurrent_conflicting_policies(tmp_dir: Path):
-    print("[2] Verifying concurrent conflicting policy binding fail-closed safety...")
-    db_path = tmp_dir / "concurrent_conflicts.db"
+def verify_concurrent_conflicting_policies_barrier(tmp_dir: Path):
+    print("[2] Verifying concurrent conflicting policy binding with true Barrier synchronization (Item F)...")
+    db_path = tmp_dir / "concurrent_conflicts_barrier.db"
     PrivacyStateManager(db_path)
 
     roles = {"provider_a": "external", "provider_b": "external", "analyst_internal": "internal"}
-    tasks = [
-        (str(db_path), "global_external", None, roles),
-        (str(db_path), "per_recipient", None, roles),
-    ]
+    barrier = multiprocessing.Barrier(2)
+    queue = multiprocessing.Queue()
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(_worker_policy_binding_task, *t) for t in tasks]
-        results = [f.result() for f in futures]
+    p1 = multiprocessing.Process(
+        target=_worker_policy_binding_proc,
+        args=(str(db_path), "global_external", None, roles, barrier, queue),
+    )
+    p2 = multiprocessing.Process(
+        target=_worker_policy_binding_proc,
+        args=(str(db_path), "per_recipient", None, roles, barrier, queue),
+    )
+
+    p1.start()
+    p2.start()
+
+    p1.join(timeout=10.0)
+    p2.join(timeout=10.0)
+
+    results = []
+    while not queue.empty():
+        results.append(queue.get())
 
     successes = [r for r in results if r["success"]]
     failures = [r for r in results if not r["success"]]
@@ -136,7 +162,7 @@ def verify_concurrent_conflicting_policies(tmp_dir: Path):
         assert row[0] == 1
         assert row[1] == successes[0]["mode"]
 
-    print(f"    [PASS] Exactly 1 process bound policy ('{successes[0]['mode']}'); conflicting process failed closed.")
+    print(f"    [PASS] Barrier race: Exactly 1 process bound policy ('{successes[0]['mode']}'); conflicting process failed closed.")
 
 
 def verify_legacy_v01_migration(tmp_dir: Path):
@@ -197,8 +223,115 @@ def verify_legacy_v01_migration(tmp_dir: Path):
     print("    [PASS] Legacy database with external history strictly restricted to global_external.")
 
 
+def verify_legacy_policy_metadata_multiple_rows(tmp_dir: Path):
+    print("[4] Verifying legacy metadata multiple rows fail-closed safety (Item A)...")
+    db_path = tmp_dir / "multi_policy_legacy.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE privacy_policy_metadata (
+            policy_fingerprint TEXT PRIMARY KEY,
+            recipient_composition_mode TEXT NOT NULL,
+            canonicalized_collusion_groups TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO privacy_policy_metadata VALUES
+        ('fp_global', 'global_external', '{}', '2026-01-01T00:00:00Z'),
+        ('fp_per', 'per_recipient', '{}', '2026-01-01T00:00:00Z')
+    """)
+    conn.commit()
+    conn.close()
+
+    try:
+        PrivacyStateManager(db_path)
+        assert False, "Should have failed closed on multiple policy bindings"
+    except ProductionSafetyConfigurationError as e:
+        assert "contains multiple policy bindings" in str(e)
+
+    # Confirm old records were NOT dropped or lost
+    conn2 = sqlite3.connect(db_path)
+    rows = conn2.execute("SELECT policy_fingerprint FROM privacy_policy_metadata").fetchall()
+    conn2.close()
+    assert len(rows) == 2
+    assert {r[0] for r in rows} == {"fp_global", "fp_per"}
+    print("    [PASS] Legacy metadata with >1 rows fails closed; old records preserved intact.")
+
+
+def verify_legacy_single_policy_inconsistent_scopes(tmp_dir: Path):
+    print("[5] Verifying legacy single policy inconsistent scope safety (Item B)...")
+    db_path = tmp_dir / "inconsistent_scope.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE privacy_policy_metadata (
+            policy_fingerprint TEXT PRIMARY KEY,
+            recipient_composition_mode TEXT NOT NULL,
+            canonicalized_collusion_groups TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
+    conn.execute("""
+        INSERT INTO privacy_policy_metadata VALUES
+        ('fp_global', 'global_external', '{}', '2026-01-01T00:00:00Z')
+    """)
+    conn.execute("""
+        CREATE TABLE release_store (
+            release_key TEXT PRIMARY KEY, reservation_id TEXT NOT NULL, owner_id TEXT NOT NULL DEFAULT '',
+            generation INTEGER NOT NULL DEFAULT 1, release_id TEXT NOT NULL, created_at TEXT NOT NULL,
+            status TEXT NOT NULL, canonical_semantics_json TEXT NOT NULL, metric TEXT NOT NULL,
+            window_start TEXT, window_end TEXT, dataset_version TEXT NOT NULL, mechanism TEXT NOT NULL,
+            epsilon TEXT NOT NULL, delta TEXT NOT NULL, sensitivity REAL NOT NULL, noise_scale REAL NOT NULL,
+            cell_names_json TEXT NOT NULL, n_users INTEGER NOT NULL, public_population_size INTEGER,
+            dp_vector_json TEXT, post_processed_json TEXT, committed_at TEXT,
+            recipient TEXT NOT NULL DEFAULT 'provider_a', recipient_role TEXT NOT NULL DEFAULT 'external',
+            budget_scope_id TEXT NOT NULL DEFAULT 'recipient:provider_a', accountant_mode TEXT NOT NULL DEFAULT 'rdp',
+            rdp_cost_json TEXT NOT NULL, rdp_orders_json TEXT NOT NULL,
+            delta_global TEXT NOT NULL DEFAULT '1e-6', effective_epsilon TEXT, best_alpha TEXT
+        )
+    """)
+    rdp_dummy = json.dumps({"2.0": "0.1", "3.0": "0.2"})
+    orders_dummy = json.dumps([2.0, 3.0])
+    conn.execute("""
+        INSERT INTO release_store VALUES (
+            'k1', 'r1', '', 1, 'rel1', '2026-01-01', 'COMMITTED', '{}',
+            'user_prevalence', NULL, NULL, 'v1.0', 'gaussian', '1.0', '1e-6', 1.0, 1.0, '[]', 50, 50, '[]', '[]', '2026-01-01',
+            'provider_a', 'external', 'recipient:provider_a', 'rdp', ?, ?, '1e-6', '1.0', '2.0'
+        )
+    """, (rdp_dummy, orders_dummy))
+    conn.commit()
+    conn.close()
+
+    try:
+        PrivacyStateManager(db_path)
+        assert False, "Should have failed closed on inconsistent historical scope"
+    except ProductionSafetyConfigurationError as e:
+        assert "is inconsistent with legacy policy mode 'global_external'" in str(e)
+
+    print("    [PASS] Legacy policy with inconsistent historical scope strictly fails closed.")
+
+
+def verify_empty_rdp_status_exact_zero(tmp_dir: Path):
+    print("[6] Verifying empty RDP status reports exact zero spend (Item D)...")
+    db_path = tmp_dir / "empty_rdp_status.db"
+    state_mgr = PrivacyStateManager(db_path)
+    acct = RDPAccountant(epsilon_cap=5.0, delta_global=1e-6, state_manager=state_mgr)
+
+    assert acct.spent_epsilon == 0.0, f"Expected 0.0, got {acct.spent_epsilon}"
+    spent = acct.get_total_spent()
+    assert spent.epsilon == 0, f"Expected 0, got {spent.epsilon}"
+    assert spent.epsilon == Decimal("0.0")
+    assert float(spent.epsilon) == 0.0
+    assert spent.delta == Decimal("1e-6")
+
+    spent_a = acct.get_total_spent(budget_scope_id="recipient:provider_a")
+    assert spent_a.epsilon == 0
+    assert spent_a.epsilon == Decimal("0.0")
+    assert float(spent_a.epsilon) == 0.0
+    print("    [PASS] Empty RDP status strictly reports exact zero spend.")
+
+
 def verify_recipient_role_binding(tmp_dir: Path):
-    print("[4] Verifying recipient role modification fail-closed protection...")
+    print("[7] Verifying recipient role modification fail-closed protection...")
     db_path = tmp_dir / "role_binding.db"
     state_mgr = PrivacyStateManager(db_path)
 
@@ -260,7 +393,7 @@ def verify_recipient_role_binding(tmp_dir: Path):
 
 
 def verify_blank_mechanism_fail_closed(tmp_dir: Path):
-    print("[5] Verifying blank and unknown mechanism fail-closed rejection...")
+    print("[8] Verifying blank and unknown mechanism fail-closed rejection...")
     db_path = tmp_dir / "blank_mechanism_test.db"
     conn = sqlite3.connect(db_path)
     conn.execute("""
@@ -300,8 +433,11 @@ def main():
     with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp_dir_str:
         tmp_dir = Path(tmp_dir_str)
         verify_singleton_constraint(tmp_dir)
-        verify_concurrent_conflicting_policies(tmp_dir)
+        verify_concurrent_conflicting_policies_barrier(tmp_dir)
         verify_legacy_v01_migration(tmp_dir)
+        verify_legacy_policy_metadata_multiple_rows(tmp_dir)
+        verify_legacy_single_policy_inconsistent_scopes(tmp_dir)
+        verify_empty_rdp_status_exact_zero(tmp_dir)
         verify_recipient_role_binding(tmp_dir)
         verify_blank_mechanism_fail_closed(tmp_dir)
 
