@@ -143,7 +143,7 @@ class ReleaseOrchestrator:
         self.cache = cache or PersistentReleaseStore(default_cache_p)
         self.ledger = ledger or PrivacyLedger(default_ledger_p)
 
-        self.accountant = accountant or BasicAccountant(
+        self.basic_accountant = accountant or BasicAccountant(
             global_budget=PrivacyBudget(
                 epsilon=app_config.privacy.global_budget.epsilon,
                 delta=app_config.privacy.global_budget.delta,
@@ -170,6 +170,19 @@ class ReleaseOrchestrator:
             orders=self.orders,
             state_manager=self.state_manager,
         )
+
+        if self.accountant_mode == "rdp":
+            self.accountant = self.rdp_accountant
+        else:
+            self.accountant = self.basic_accountant
+
+        # Fail-closed check: verify recipient composition policy binding in production
+        if self.execution_mode == ExecutionMode.PRODUCTION:
+            rc_config = getattr(app_config.privacy, "recipient_composition", None)
+            rc_mode = rc_config.mode if rc_config else "global_external"
+            rc_groups = rc_config.groups if rc_config else None
+            if self.state_manager.has_external_releases():
+                self.state_manager.verify_or_bind_policy(rc_mode, rc_groups)
 
     def _get_rdp_policy(self):
         acct_cfg = getattr(self.config.privacy, "accountant", None)
@@ -264,27 +277,6 @@ class ReleaseOrchestrator:
                 f"Recipient '{rec_name}' is not authorized to query metric '{query.metric}'"
             )
 
-        # Populate public population size from config if mode is fixed_public_population
-        if user_matrix.public_population_size is None and self.config.scenario.population.mode == "fixed_public_population":
-            user_matrix.public_population_size = self.config.scenario.population.n_users
-
-        # 6. Pre-validation and Plan generation (validates metric, mechanism, population size, etc.)
-        plan: ExecutionPlan = self.planner.create_plan(
-            query,
-            dataset_version=dataset_version,
-            public_population_size=user_matrix.public_population_size,
-            execution_mode=self.execution_mode,
-            noise_seed=noise_seed,
-            trial_id=trial_id,
-        )
-
-        # 7. Check if cache reuse is enabled (fail-closed in production)
-        reuse_cache = (
-            True
-            if self.execution_mode == ExecutionMode.PRODUCTION
-            else self.config.privacy.release.reuse_existing_release
-        )
-
         recipient_role = policy.role
         rc_config = getattr(self.config.privacy, "recipient_composition", None)
         rc_mode = rc_config.mode if rc_config else "global_external"
@@ -295,6 +287,12 @@ class ReleaseOrchestrator:
             mode=rc_mode,
             groups=rc_groups,
         )
+
+        # Policy immutability check in Production (Section B)
+        # MUST occur BEFORE cache lookup, raw data access, noise generation, budget reservation!
+        if recipient_role == "external" and self.execution_mode == ExecutionMode.PRODUCTION:
+            self.state_manager.verify_or_bind_policy(rc_mode, rc_groups)
+
         effective_accountant_mode = "basic" if budget_scope_id == "internal" else self.accountant_mode
         if effective_accountant_mode == "rdp":
             effective_epsilon_cap, effective_delta_global, effective_orders = self._get_rdp_policy()
@@ -302,6 +300,32 @@ class ReleaseOrchestrator:
             effective_epsilon_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
             effective_delta_global = _to_decimal(self.config.privacy.global_budget.delta)
             effective_orders = DEFAULT_RDP_ORDERS
+
+        # Populate public population size from config if mode is fixed_public_population
+        if user_matrix.public_population_size is None and self.config.scenario.population.mode == "fixed_public_population":
+            user_matrix.public_population_size = self.config.scenario.population.n_users
+
+        # 6. Pre-validation and Plan generation with budget_scope_id (Section A)
+        plan: ExecutionPlan = self.planner.create_plan(
+            query,
+            dataset_version=dataset_version,
+            public_population_size=user_matrix.public_population_size,
+            execution_mode=self.execution_mode,
+            noise_seed=noise_seed,
+            trial_id=trial_id,
+            privacy_scope_id=budget_scope_id,
+        )
+
+        view_before = self.get_privacy_view(query.recipient)
+        eps_before = float(view_before.effective_epsilon)
+        count_before = view_before.release_count
+
+        # 7. Check if cache reuse is enabled (fail-closed in production)
+        reuse_cache = (
+            True
+            if self.execution_mode == ExecutionMode.PRODUCTION
+            else self.config.privacy.release.reuse_existing_release
+        )
 
         # 8. Check persistent state (single source of truth: no legacy cache fallback)
         if reuse_cache:
@@ -323,8 +347,11 @@ class ReleaseOrchestrator:
                     release_key=plan.release_key,
                     budget_scope_id=budget_scope_id,
                     accountant_mode=effective_accountant_mode,
-                    effective_epsilon=getattr(committed, "effective_epsilon", None),
-                    best_alpha=getattr(committed, "best_alpha", None),
+                    effective_epsilon_before=eps_before,
+                    effective_epsilon_after=eps_before,
+                    best_alpha=float(view_before.best_alpha) if view_before.best_alpha is not None else None,
+                    release_count=count_before,
+                    candidate_rdp=None,
                 )
 
         # 9. Fault hook: before_budget_reserve
@@ -426,8 +453,11 @@ class ReleaseOrchestrator:
                 release_key=plan.release_key,
                 budget_scope_id=budget_scope_id,
                 accountant_mode=effective_accountant_mode,
-                effective_epsilon=getattr(res_tuple, "effective_epsilon", None),
-                best_alpha=getattr(res_tuple, "best_alpha", None),
+                effective_epsilon_before=eps_before,
+                effective_epsilon_after=eps_before,
+                best_alpha=float(view_before.best_alpha) if view_before.best_alpha is not None else None,
+                release_count=count_before,
+                candidate_rdp=None,
             )
 
         # 11. Execute DP Generation with reservation active
@@ -517,6 +547,11 @@ class ReleaseOrchestrator:
                     pass
             raise exc
 
+        view_after = self.get_privacy_view(query.recipient)
+        eps_after = float(view_after.effective_epsilon)
+        best_alpha_after = float(view_after.best_alpha) if view_after.best_alpha is not None else None
+        count_after = view_after.release_count
+
         return self._finalize_output(
             release_result=release_result,
             query=query,
@@ -527,8 +562,11 @@ class ReleaseOrchestrator:
             release_key=plan.release_key,
             budget_scope_id=budget_scope_id,
             accountant_mode=effective_accountant_mode,
-            effective_epsilon=eff_eps_committed,
-            best_alpha=best_a_committed,
+            effective_epsilon_before=eps_before,
+            effective_epsilon_after=eps_after,
+            best_alpha=best_alpha_after,
+            release_count=count_after,
+            candidate_rdp=candidate_rdp,
         )
 
     def _record_cache_hit(
@@ -583,8 +621,11 @@ class ReleaseOrchestrator:
         release_key: str,
         budget_scope_id: str = "global_external",
         accountant_mode: str = "basic",
-        effective_epsilon: Optional[Any] = None,
-        best_alpha: Optional[Any] = None,
+        effective_epsilon_before: Optional[float] = None,
+        effective_epsilon_after: Optional[float] = None,
+        best_alpha: Optional[float] = None,
+        release_count: int = 0,
+        candidate_rdp: Optional[Dict[Any, Any]] = None,
     ) -> Dict[str, Any]:
         exact_data = None
         if policy.role == "trusted" and include_exact:
@@ -607,23 +648,39 @@ class ReleaseOrchestrator:
         output["incremental_privacy_cost"] = 0.0 if cache_hit else float(release_result.epsilon)
         output["incremental_privacy_cost_decimal"] = "0.0" if cache_hit else str(_to_decimal(release_result.epsilon))
 
-        # Attach privacy accounting metadata
-        eff_eps_float = float(effective_epsilon) if effective_epsilon is not None else None
-        eff_eps_str = str(effective_epsilon) if effective_epsilon is not None else None
-        best_alpha_float = float(best_alpha) if best_alpha is not None else None
+        req_eps = float(query.epsilon) if query.epsilon is not None else float(getattr(getattr(self.config.privacy, "default_query_budget", None), "epsilon", self.config.privacy.global_budget.epsilon))
+        calib_delta = float(query.delta) if query.delta is not None else float(getattr(getattr(self.config.privacy, "default_query_budget", None), "delta", self.config.privacy.global_budget.delta))
 
+        # Build candidate RDP vector dict representation
         if accountant_mode == "rdp":
-            eff_cap, eff_delta_g, _ = self._get_rdp_policy()
+            eff_cap, eff_delta_g, eff_orders = self._get_rdp_policy()
+            if cache_hit:
+                cand_rdp_dict = {str(k): "0.0" for k in eff_orders}
+            elif candidate_rdp:
+                cand_rdp_dict = {str(k): str(candidate_rdp[k]) for k in eff_orders if k in candidate_rdp}
+            else:
+                cand_rdp_dict = None
         else:
             eff_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
             eff_delta_g = _to_decimal(self.config.privacy.global_budget.delta)
+            cand_rdp_dict = None
+
+        eff_eps_float = float(effective_epsilon_after) if effective_epsilon_after is not None else None
+        eff_eps_str = str(effective_epsilon_after) if effective_epsilon_after is not None else None
+        best_alpha_float = float(best_alpha) if best_alpha is not None else None
 
         output["privacy_accounting"] = {
             "accountant_mode": accountant_mode,
             "budget_scope_id": budget_scope_id,
+            "requested_epsilon": req_eps,
+            "calibration_delta": calib_delta,
+            "effective_epsilon_before": effective_epsilon_before,
+            "effective_epsilon_after": eff_eps_float,
             "effective_epsilon": eff_eps_float,
             "effective_epsilon_decimal": eff_eps_str,
             "best_alpha": best_alpha_float,
+            "history_release_count": release_count,
+            "candidate_rdp_vector": cand_rdp_dict,
             "epsilon_cap": float(eff_cap),
             "delta_global": float(eff_delta_g),
         }

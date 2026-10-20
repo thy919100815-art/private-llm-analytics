@@ -19,10 +19,13 @@ from typing import Dict, List, Optional
 import numpy as np
 import pandas as pd
 
+import tempfile
 from private_llm_analytics.aggregation.user_matrix import build_user_matrix
+from private_llm_analytics.config.loader import load_app_config
 from private_llm_analytics.evaluation.report import plot_single_line_chart, save_summary_table
 from private_llm_analytics.mechanisms.gaussian import GaussianMechanism
 from private_llm_analytics.metrics.normalized_share import UserNormalizedShareMetric
+from private_llm_analytics.planner.query import AnalyticsQuery
 from private_llm_analytics.privacy.composition import resolve_budget_scope_id
 from private_llm_analytics.privacy.rdp import (
     DEFAULT_RDP_ORDERS,
@@ -30,8 +33,82 @@ from private_llm_analytics.privacy.rdp import (
     compose_rdp_vectors,
     rdp_to_epsilon_delta,
 )
+from private_llm_analytics.privacy.state import PrivacyStateManager
+from private_llm_analytics.release.release import ReleaseOrchestrator
 from private_llm_analytics.simulator.generator import SyntheticDataGenerator
 from private_llm_analytics.simulator.scenario import SimulationScenario
+
+
+def verify_recipient_view_orchestration_integration(umatrix) -> None:
+    """Rigorous end-to-end integration check executing queries through ReleaseOrchestrator."""
+    print("\n--- Running ReleaseOrchestrator Recipient-View Integration Check ---")
+
+    # 1. GLOBAL_EXTERNAL check
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "privacy_state.db"
+        config = load_app_config("configs")
+        config.privacy.recipient_composition.mode = "global_external"
+        config.privacy.accountant.epsilon_cap = 6.0
+        config.privacy.accountant.delta_global = 1e-6
+        orch = ReleaseOrchestrator(app_config=config, state_manager=PrivacyStateManager(db_path))
+
+        q_a = AnalyticsQuery(metric="user_normalized_share", recipient="provider_a", epsilon=1.0, delta=1e-6)
+        q_b = AnalyticsQuery(metric="user_normalized_share", recipient="provider_b", epsilon=1.0, delta=1e-6)
+
+        res_a = orch.execute_release(q_a, umatrix)
+        res_b = orch.execute_release(q_b, umatrix)
+
+        assert not res_a["cache_hit"]
+        assert res_b["cache_hit"]
+        assert res_b["incremental_privacy_cost"] == 0.0
+        assert orch.get_privacy_view("global_external").release_count == 1
+        print("  [✓] Policy 1 (GLOBAL_EXTERNAL): Provider B successfully replayed Provider A release with 0 additional cost.")
+
+    # 2. PER_RECIPIENT check
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "privacy_state.db"
+        config = load_app_config("configs")
+        config.privacy.recipient_composition.mode = "per_recipient"
+        config.privacy.accountant.epsilon_cap = 6.0
+        config.privacy.accountant.delta_global = 1e-6
+        orch = ReleaseOrchestrator(app_config=config, state_manager=PrivacyStateManager(db_path))
+
+        res_a = orch.execute_release(q_a, umatrix)
+        res_b = orch.execute_release(q_b, umatrix)
+
+        assert not res_a["cache_hit"]
+        assert not res_b["cache_hit"]
+        assert orch.get_privacy_view("provider_a").release_count == 1
+        assert orch.get_privacy_view("provider_b").release_count == 1
+        print("  [✓] Policy 2 (PER_RECIPIENT): Provider A and Provider B charged independently in separate views.")
+
+    # 3. COLLUSION_GROUP check
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        db_path = Path(tmp_dir) / "privacy_state.db"
+        config = load_app_config("configs")
+        config.privacy.recipient_composition.mode = "collusion_group"
+        config.privacy.recipient_composition.groups = {
+            "group_ab": ["provider_a", "provider_b"],
+            "group_c": ["provider_c"],
+        }
+        config.privacy.accountant.epsilon_cap = 6.0
+        config.privacy.accountant.delta_global = 1e-6
+        orch = ReleaseOrchestrator(app_config=config, state_manager=PrivacyStateManager(db_path))
+
+        q_c = AnalyticsQuery(metric="user_normalized_share", recipient="provider_c", epsilon=1.0, delta=1e-6)
+
+        res_a = orch.execute_release(q_a, umatrix)
+        res_b = orch.execute_release(q_b, umatrix)
+        res_c = orch.execute_release(q_c, umatrix)
+
+        assert not res_a["cache_hit"]
+        assert res_b["cache_hit"]
+        assert not res_c["cache_hit"]
+        assert orch.get_privacy_view("provider_a").release_count == 1
+        assert orch.get_privacy_view("provider_c").release_count == 1
+        print("  [✓] Policy 3 (COLLUSION_GROUP): group_ab shared replay verified; group_c charged independently.")
+
+    print("[SUCCESS] Exp07 ReleaseOrchestrator recipient-view integration check passed!\n")
 
 
 def run_recipient_composition_experiment(
@@ -58,6 +135,9 @@ def run_recipient_composition_experiment(
         df = gen.generate_and_save(p, file_format="parquet", seed=seed)
 
     umatrix = build_user_matrix(df, public_population_size=n_users)
+
+    # Integration check through ReleaseOrchestrator (Section I)
+    verify_recipient_view_orchestration_integration(umatrix)
     metric = UserNormalizedShareMetric(norm_bound=1.0)
     sensitivity = metric.get_sensitivity("gaussian")
 

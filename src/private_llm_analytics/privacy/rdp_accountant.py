@@ -97,17 +97,72 @@ class RDPAccountant(PrivacyAccountant):
             "candidate_rdp": {str(k): str(v) for k, v in candidate_rdp.items()},
         }
 
+    def preview_candidate_rdp(
+        self,
+        candidate_rdp: Dict[Decimal, Decimal],
+        budget_scope_id: str = "global_external",
+    ) -> Dict[str, Any]:
+        """Preview resulting effective epsilon and decision for a candidate RDP vector against current scope state."""
+        view = self.state_manager.get_privacy_view(
+            budget_scope_id=budget_scope_id,
+            delta_global=self.delta_global,
+            orders=self.orders,
+            epsilon_cap=self.epsilon_cap,
+            accountant_mode="rdp",
+        )
+        return self.preview_composition(
+            current_total_rdp=view.total_rdp_vector,
+            candidate_rdp=candidate_rdp,
+        )
+
+    @property
+    def spent_epsilon(self) -> float:
+        """Cumulative committed effective epsilon from authoritative state.
+
+        If external releases exist, returns the global_external RDP effective epsilon.
+        Otherwise falls back to total committed releases from state manager for backward compatibility.
+        """
+        view = self.state_manager.get_privacy_view(
+            budget_scope_id="global_external",
+            delta_global=self.delta_global,
+            orders=self.orders,
+            epsilon_cap=self.epsilon_cap,
+            accountant_mode="rdp",
+        )
+        if view.release_count > 0:
+            return float(view.effective_epsilon)
+        total_eps, _ = self.state_manager.get_total_spent()
+        return float(total_eps)
+
+    @property
+    def spent_delta(self) -> float:
+        """Global delta policy parameter."""
+        view = self.state_manager.get_privacy_view(
+            budget_scope_id="global_external",
+            delta_global=self.delta_global,
+            orders=self.orders,
+            epsilon_cap=self.epsilon_cap,
+            accountant_mode="rdp",
+        )
+        if view.release_count > 0:
+            return float(self.delta_global)
+        _, total_delta = self.state_manager.get_total_spent()
+        return float(total_delta)
+
     # Backward compatibility with PrivacyAccountant interface
     def check_budget_available(self, budget_needed: PrivacyBudget) -> bool:
-        """Legacy check against global epsilon/delta assuming single/basic evaluation."""
-        spent = self.get_total_spent()
-        eps_ok = (to_decimal(spent.epsilon) + to_decimal(budget_needed.epsilon)) <= self.epsilon_cap
-        del_ok = (to_decimal(spent.delta) + to_decimal(budget_needed.delta)) <= self.delta_global
-        return bool(eps_ok and del_ok)
+        """Fail-closed: RDP composition cannot be performed from scalar PrivacyBudget."""
+        raise NotImplementedError(
+            "RDPAccountant cannot evaluate budget availability solely from scalar (epsilon, delta) PrivacyBudget. "
+            "Use preview_candidate_rdp() or state_manager.reserve_or_get_release() with candidate RDP vector."
+        )
 
     def consume_budget(self, budget: PrivacyBudget, query_id: str) -> None:
-        """Legacy consume method."""
-        pass
+        """Fail-closed: RDP budget consumption cannot be performed as a non-atomic scalar no-op."""
+        raise NotImplementedError(
+            "RDPAccountant does not support non-atomic scalar consume_budget(). "
+            "All privacy accounting must be performed atomically via PrivacyStateManager."
+        )
 
     def get_total_spent(self) -> PrivacyBudget:
         """Return effective epsilon and delta_global from current persistent state.
@@ -122,7 +177,11 @@ class RDPAccountant(PrivacyAccountant):
             epsilon_cap=self.epsilon_cap,
             accountant_mode="rdp",
         )
+        eps_f = float(view.effective_epsilon)
+        if eps_f <= 0.0:
+            total_eps, _ = self.state_manager.get_total_spent()
+            eps_f = max(float(total_eps), 1e-12)
         return PrivacyBudget(
-            epsilon=float(view.effective_epsilon),
+            epsilon=eps_f,
             delta=float(self.delta_global),
         )

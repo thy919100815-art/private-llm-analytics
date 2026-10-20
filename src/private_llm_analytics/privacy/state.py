@@ -9,6 +9,7 @@ and privacy accounting.
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from decimal import Decimal
+import hashlib
 import json
 from pathlib import Path
 import sqlite3
@@ -23,12 +24,15 @@ from private_llm_analytics.privacy.composition import PrivacyView
 from private_llm_analytics.privacy.exceptions import (
     CommitIrreversibleError,
     PrivacyBudgetExceededError,
+    PrivacyConfigurationError,
+    ProductionSafetyConfigurationError,
     ReleaseInProgressError,
     ReservationLostError,
 )
 from private_llm_analytics.privacy.rdp import (
     DEFAULT_RDP_ORDERS,
     compute_gaussian_rdp,
+    compute_laplace_rdp_bound,
     compose_rdp_vectors,
     rdp_to_epsilon_delta,
     rdp_vector_from_json,
@@ -59,6 +63,26 @@ def _json_serializable(obj: Any) -> Any:
     if isinstance(obj, (list, tuple)):
         return [_json_serializable(item) for item in obj]
     return obj
+
+
+def compute_recipient_policy_fingerprint(
+    mode: str,
+    groups: Optional[Dict[str, List[str]]] = None,
+) -> Tuple[str, str, str]:
+    """Compute canonical policy fingerprint covering recipient composition mode and groups."""
+    mode_norm = str(mode).lower().strip()
+    if groups and mode_norm == "collusion_group":
+        canon_groups = {str(k): sorted([str(m) for m in v]) for k, v in sorted(groups.items())}
+    else:
+        canon_groups = {}
+    canon_groups_str = json.dumps(canon_groups, sort_keys=True, separators=(",", ":"))
+    payload = {
+        "mode": mode_norm,
+        "groups": json.loads(canon_groups_str),
+    }
+    raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    fp = hashlib.sha256(raw).hexdigest()
+    return fp, mode_norm, canon_groups_str
 
 
 class ReservationTuple(tuple):
@@ -181,6 +205,14 @@ class PrivacyStateManager:
                     delta_global TEXT,
                     effective_epsilon TEXT,
                     best_alpha TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS privacy_policy_metadata (
+                    policy_fingerprint TEXT PRIMARY KEY,
+                    recipient_composition_mode TEXT NOT NULL,
+                    canonicalized_collusion_groups TEXT NOT NULL,
+                    created_at TEXT NOT NULL
                 )
             """)
             cursor.execute("""
@@ -420,15 +452,19 @@ class PrivacyStateManager:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_res_scope_status ON privacy_reservations (budget_scope_id, status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_led_scope ON privacy_ledger (budget_scope_id)")
 
-            # Deterministic migration of legacy Gaussian records to RDP vectors (v0.2 Item 31)
+            # Deterministic migration of legacy Gaussian & Laplace records to RDP vectors (v0.2 Section D)
             cursor.execute("""
-                SELECT release_key, mechanism, sensitivity, noise_scale, reservation_id, metric
+                SELECT release_key, mechanism, sensitivity, noise_scale, reservation_id, metric, epsilon, delta, budget_scope_id
                 FROM release_store
                 WHERE rdp_cost_json IS NULL AND status = 'COMMITTED'
             """)
             legacy_releases = cursor.fetchall()
-            for r_key, mech, sens, sig, r_res_id, r_metric in legacy_releases:
-                if "gaussian" in str(mech).lower():
+            for r_key, mech, sens, sig, r_res_id, r_metric, r_eps, r_del, r_scope in legacy_releases:
+                mech_str = str(mech).lower() if mech else ""
+                del_float = float(r_del) if r_del is not None else 0.0
+
+                # Migrate Gaussian
+                if "gaussian" in mech_str or (not mech_str and del_float > 0):
                     if sens is not None and sens > 0 and sig is not None and sig > 0:
                         rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=DEFAULT_RDP_ORDERS)
                         rdp_j = rdp_vector_to_json(rdp_v)
@@ -438,16 +474,131 @@ class PrivacyStateManager:
                             (rdp_j, orders_j, sens, r_key),
                         )
                         cursor.execute(
-                            "UPDATE privacy_reservations SET rdp_cost_json = ?, rdp_orders_json = ? WHERE reservation_id = ?",
-                            (rdp_j, orders_j, r_res_id),
+                            "UPDATE privacy_reservations SET rdp_cost_json = ?, rdp_orders_json = ? WHERE release_key = ?",
+                            (rdp_j, orders_j, r_key),
                         )
                     else:
                         raise ValueError(
-                            f"Legacy release '{r_key}' missing valid sensitivity/sigma for RDP migration "
-                            f"(sensitivity={sens}, noise_scale={sig}). Failing closed."
+                            f"Fail-closed: Legacy Gaussian release '{r_key}' missing valid sensitivity/sigma for RDP migration "
+                            f"(sensitivity={sens}, noise_scale={sig})."
                         )
+                # Migrate Laplace
+                elif "laplace" in mech_str or (not mech_str and del_float == 0):
+                    eps_dec = _to_decimal(r_eps) if r_eps is not None else Decimal("0")
+                    if eps_dec > Decimal("0"):
+                        rdp_v = compute_laplace_rdp_bound(epsilon=float(eps_dec), orders=DEFAULT_RDP_ORDERS)
+                        rdp_j = rdp_vector_to_json(rdp_v)
+                        orders_j = json.dumps([float(o) for o in DEFAULT_RDP_ORDERS])
+                        cursor.execute(
+                            "UPDATE release_store SET rdp_cost_json = ?, rdp_orders_json = ? WHERE release_key = ?",
+                            (rdp_j, orders_j, r_key),
+                        )
+                        cursor.execute(
+                            "UPDATE privacy_reservations SET rdp_cost_json = ?, rdp_orders_json = ? WHERE release_key = ?",
+                            (rdp_j, orders_j, r_key),
+                        )
+                    else:
+                        raise ValueError(
+                            f"Fail-closed: Legacy Laplace release '{r_key}' has invalid or non-positive epsilon ({r_eps})."
+                        )
+                else:
+                    raise ValueError(
+                        f"Fail-closed: Legacy release '{r_key}' has unknown or unsupported mechanism '{mech}'."
+                    )
+
+            # Synchronize any remaining reservations from matching release_store entries
+            cursor.execute("""
+                UPDATE privacy_reservations
+                SET rdp_cost_json = (
+                    SELECT rdp_cost_json FROM release_store
+                    WHERE release_store.release_key = privacy_reservations.release_key
+                      AND release_store.rdp_cost_json IS NOT NULL
+                    LIMIT 1
+                ),
+                rdp_orders_json = (
+                    SELECT rdp_orders_json FROM release_store
+                    WHERE release_store.release_key = privacy_reservations.release_key
+                      AND release_store.rdp_orders_json IS NOT NULL
+                    LIMIT 1
+                )
+                WHERE rdp_cost_json IS NULL AND EXISTS (
+                    SELECT 1 FROM release_store
+                    WHERE release_store.release_key = privacy_reservations.release_key
+                      AND release_store.rdp_cost_json IS NOT NULL
+                )
+            """)
+
+            # Forbid leaving COMMITTED + rdp_cost_json = NULL for external historical releases (Section D)
+            cursor.execute("""
+                SELECT COUNT(*) FROM release_store
+                WHERE rdp_cost_json IS NULL AND status = 'COMMITTED' AND budget_scope_id != 'internal'
+            """)
+            null_count = cursor.fetchone()[0]
+            if null_count > 0:
+                raise ValueError(f"Fail-closed: Database contains {null_count} external COMMITTED releases with NULL rdp_cost_json.")
 
             conn.commit()
+
+    def has_external_releases(self) -> bool:
+        """Check if there are any committed or pending external releases or reservations in the database."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT 1 FROM release_store
+                WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
+                  AND status = 'COMMITTED'
+                LIMIT 1
+            """)
+            if cursor.fetchone() is not None:
+                return True
+            cursor.execute("""
+                SELECT 1 FROM privacy_reservations
+                WHERE budget_scope_id != 'internal'
+                  AND status IN ('COMMITTED', 'PENDING')
+                LIMIT 1
+            """)
+            return cursor.fetchone() is not None
+
+    def verify_or_bind_policy(
+        self,
+        mode: str,
+        groups: Optional[Dict[str, List[str]]] = None,
+    ) -> None:
+        """Verify current recipient composition policy against persisted metadata, or bind if first release.
+
+        Fail-closed: raises ProductionSafetyConfigurationError if DB has external releases and policy fingerprint mismatches.
+        """
+        cur_fp, cur_mode, cur_groups_str = compute_recipient_policy_fingerprint(mode, groups)
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups FROM privacy_policy_metadata LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if row is not None:
+                persisted_fp, persisted_mode, persisted_groups = row[0], row[1], row[2]
+                if persisted_fp != cur_fp:
+                    if self.has_external_releases():
+                        raise ProductionSafetyConfigurationError(
+                            f"Recipient composition policy mismatch with persisted historical releases! "
+                            f"Persisted mode='{persisted_mode}', fingerprint='{persisted_fp}'; "
+                            f"Current config mode='{cur_mode}', fingerprint='{cur_fp}'. "
+                            "Modifying composition policy on a database with existing releases is strictly forbidden."
+                        )
+                    else:
+                        cursor.execute("DELETE FROM privacy_policy_metadata")
+                        cursor.execute(
+                            "INSERT INTO privacy_policy_metadata VALUES (?, ?, ?, ?)",
+                            (cur_fp, cur_mode, cur_groups_str, now_iso),
+                        )
+                        conn.commit()
+            else:
+                cursor.execute(
+                    "INSERT INTO privacy_policy_metadata VALUES (?, ?, ?, ?)",
+                    (cur_fp, cur_mode, cur_groups_str, now_iso),
+                )
+                conn.commit()
 
     def get_committed_release(self, release_key: str) -> Optional[DPReleaseResult]:
         """Lookup an already committed release by its canonical release key.
@@ -700,9 +851,14 @@ class PrivacyStateManager:
                             eff_orders = [to_decimal(o) for o in (rdp_orders or DEFAULT_RDP_ORDERS)]
                             eff_delta = validate_delta(global_delta)
 
+                            if not rdp_candidate_cost:
+                                raise PrivacyConfigurationError(
+                                    f"Fail-closed: RDP mode authorization in scope '{budget_scope_id}' requires valid non-empty rdp_candidate_cost."
+                                )
+
                             cursor.execute(
                                 """
-                                SELECT epsilon, delta, rdp_cost_json
+                                SELECT reservation_id, epsilon, delta, rdp_cost_json, status
                                 FROM privacy_reservations
                                 WHERE budget_scope_id = ? AND status IN ('COMMITTED', 'PENDING')
                                 """,
@@ -710,14 +866,29 @@ class PrivacyStateManager:
                             )
                             active_rows = cursor.fetchall()
                             vecs = []
-                            basic_sum = Decimal("0.0")
                             for r in active_rows:
-                                basic_sum += _to_decimal(r["epsilon"])
-                                if r["rdp_cost_json"]:
-                                    vecs.append(rdp_vector_from_json(r["rdp_cost_json"]))
-                            basic_sum += needed_eps
-                            if rdp_candidate_cost:
-                                vecs.append({to_decimal(k): to_decimal(v) for k, v in rdp_candidate_cost.items()})
+                                rdp_json = r["rdp_cost_json"]
+                                if not rdp_json:
+                                    raise PrivacyConfigurationError(
+                                        f"Fail-closed: Reservation '{r['reservation_id']}' (status={r['status']}) in scope '{budget_scope_id}' "
+                                        "has missing or NULL rdp_cost_json. Authorization forbidden."
+                                    )
+                                try:
+                                    vecs.append(rdp_vector_from_json(rdp_json))
+                                except Exception as e:
+                                    raise PrivacyConfigurationError(
+                                        f"Fail-closed: Reservation '{r['reservation_id']}' in scope '{budget_scope_id}' "
+                                        f"has corrupt rdp_cost_json: {e}. Authorization forbidden."
+                                    )
+
+                            try:
+                                cand_vec = {to_decimal(k): to_decimal(v) for k, v in rdp_candidate_cost.items()}
+                                for o in eff_orders:
+                                    if o not in cand_vec:
+                                        raise ValueError(f"Missing required order {o} in candidate RDP vector")
+                                vecs.append(cand_vec)
+                            except Exception as e:
+                                raise PrivacyConfigurationError(f"Fail-closed: Invalid rdp_candidate_cost: {e}")
 
                             if vecs:
                                 composed = compose_rdp_vectors(vecs, orders=eff_orders)
@@ -967,6 +1138,27 @@ class PrivacyStateManager:
                     if not rdp_cost_json:
                         rdp_cost_json = res_row["rdp_cost_json"]
 
+                if not rdp_cost_json and release_result is not None:
+                    eff_orders = [to_decimal(o) for o in (orders or DEFAULT_RDP_ORDERS)]
+                    sig = float(getattr(release_result, "noise_scale", 0.0) or 0.0)
+                    sens = float(getattr(release_result, "sensitivity", 0.0) or 0.0)
+                    mech_str = str(getattr(release_result, "mechanism", "") or "").lower()
+                    del_val = float(getattr(release_result, "delta", 0.0) or 0.0)
+                    eps_val = float(getattr(release_result, "epsilon", 0.0) or 0.0)
+
+                    if ("gaussian" in mech_str or del_val > 0) and sig > 0 and sens > 0:
+                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=eff_orders)
+                        rdp_cost_json = rdp_vector_to_json(rdp_v)
+                    elif ("laplace" in mech_str or del_val == 0) and eps_val > 0:
+                        rdp_v = compute_laplace_rdp_bound(epsilon=eps_val, orders=eff_orders)
+                        rdp_cost_json = rdp_vector_to_json(rdp_v)
+
+                if rdp_cost_json:
+                    cursor.execute(
+                        "UPDATE privacy_reservations SET rdp_cost_json = COALESCE(rdp_cost_json, ?) WHERE reservation_id = ?",
+                        (rdp_cost_json, reservation_id),
+                    )
+
                 eff_eps_dec = to_decimal(effective_epsilon) if effective_epsilon is not None else None
                 best_alpha_dec = to_decimal(best_alpha) if best_alpha is not None else None
 
@@ -982,11 +1174,23 @@ class PrivacyStateManager:
                     eff_delta = validate_delta(raw_dg) if raw_dg is not None else Decimal("1.0e-5")
 
                     cursor.execute(
-                        "SELECT epsilon, rdp_cost_json FROM privacy_reservations WHERE budget_scope_id = ? AND status = 'COMMITTED'",
+                        "SELECT reservation_id, epsilon, rdp_cost_json FROM privacy_reservations WHERE budget_scope_id = ? AND status = 'COMMITTED'",
                         (budget_scope_id,),
                     )
                     committed_rdps = cursor.fetchall()
-                    vecs = [rdp_vector_from_json(r["rdp_cost_json"]) for r in committed_rdps if r["rdp_cost_json"]]
+                    vecs = []
+                    for r in committed_rdps:
+                        if not r["rdp_cost_json"]:
+                            raise ValueError(
+                                f"Fail-closed: Committed reservation '{r['reservation_id']}' in scope '{budget_scope_id}' "
+                                "has missing or NULL rdp_cost_json."
+                            )
+                        try:
+                            vecs.append(rdp_vector_from_json(r["rdp_cost_json"]))
+                        except Exception as e:
+                            raise ValueError(
+                                f"Fail-closed: Corrupt rdp_cost_json in committed reservation '{r['reservation_id']}': {e}"
+                            )
                     if vecs:
                         composed = compose_rdp_vectors(vecs, orders=eff_orders)
                         best_alpha_dec, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=eff_delta)
