@@ -19,4 +19,5 @@ class ExecutionPlan:
     canonical_semantics: Dict[str, Any] = field(default_factory=dict)
     public_population_size: Optional[int] = None
     execution_mode: str = "production"
+    privacy_scope_id: Optional[str] = None
 

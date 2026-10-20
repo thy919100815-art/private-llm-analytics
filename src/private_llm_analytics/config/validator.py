@@ -39,6 +39,13 @@ def validate_app_config(config: AppConfig) -> List[str]:
                 if met != "*" and met not in config.metrics.metrics:
                     issues.append(f"Recipient '{name}' references unknown metric '{met}'")
 
+    # Validate collusion groups if configured
+    if config.privacy.recipient_composition.mode == "collusion_group":
+        for grp_name, members in config.privacy.recipient_composition.groups.items():
+            for m in members:
+                if m not in allowed_providers and m not in config.recipients.recipients:
+                    issues.append(f"Collusion group '{grp_name}' references unknown member '{m}'")
+
     if issues:
         raise ConfigValidationError("Configuration cross-validation failed:\n" + "\n".join(issues))
     return issues
@@ -50,6 +57,7 @@ def validate_production_config(config: AppConfig) -> None:
     In production mode:
       1. reuse_existing_release MUST be True (prevents noise-averaging attacks).
       2. allow_budget_overrun MUST be False (strictly enforces global budget invariant).
+      3. history.mode MUST be 'lifetime' (forbids rolling privacy resets).
     """
     if not config.privacy.release.reuse_existing_release:
         raise ProductionSafetyConfigurationError(
@@ -60,4 +68,9 @@ def validate_production_config(config: AppConfig) -> None:
         raise ProductionSafetyConfigurationError(
             "Production configuration requires privacy.release.allow_budget_overrun=False. "
             "Enabling budget overrun in production is strictly forbidden as it violates global privacy guarantees."
+        )
+    if config.privacy.history.mode == "rolling_reset":
+        raise ProductionSafetyConfigurationError(
+            "Production configuration requires privacy.history.mode='lifetime'. "
+            "Rolling privacy reset is strictly forbidden in production because external recipients permanently retain historical releases."
         )

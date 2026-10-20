@@ -1,22 +1,18 @@
-# Private LLM Analytics (v0.1.7 — Final Gate Patch / Freeze Candidate)
+# Private LLM Analytics (v0.2 — Longitudinal Multi-Recipient Privacy Accounting)
 
 A **User-Level Central Differential Privacy Analytics Layer** prototype for enterprise multi-model AI telemetry.
 
 > [!IMPORTANT]
-> **v0.1.7 Final Gate Patch & Freeze Candidate**:
-> Version 0.1.7 completes the final correctness and distribution hardening gates for the v0.1.x series:
-> - **Gate Fix A**: Low-level `ReleaseOrchestrator` unconditionally blocks external recipients in `EXPERIMENT` mode prior to planning, data access, reservation, noise generation, or commit (`RecipientSecurityViolation`), ensuring zero privacy or accounting side-effects.
-> - **Gate Fix B**: `run_all_experiments.py` reproduces the intended $N=50,000$ main epsilon sweep with fail-fast population alignment (`active_users <= public_population`), plus `--smoke` mode for rapid, non-destructive verification.
-> - **Gate Fix C & D**: Duplicate dataset aliases (`interactions_n10k.parquet`, `interactions_n50k.parquet`) removed; standardized on canonical full numeric naming (`interactions_n10000.parquet`, `interactions_n50000.parquet`). $N=100,000$ dataset excluded from distribution archive to maintain compact size.
-> - **Gate Fix E**: Standard machine-parseable `data/checksums.sha256` in `<sha256>  <filename>` format covering included files.
-> - **Gate Fix F**: `verify_zip_distribution.py` dynamically discovers and validates all 15 verification scripts and 159 unit/regression tests in an isolated clean temporary directory.
+> **v0.2 Milestone: Longitudinal Multi-Recipient Privacy Accounting**:
+> Version 0.2 extends the frozen v0.1.7 core with longitudinal differential privacy accounting across long time horizons, multiple external recipients, and recurring reporting cadences:
+> - **Rényi Differential Privacy (RDP) Accountant**: Exact Gaussian RDP calibration ($\text{RDP}(\alpha) = \frac{\alpha \Delta_2^2}{2 \sigma^2}$) and conservative Laplace pure-DP bounds over candidate orders $\alpha \in \{1.25, 1.5, 2, 3, 4, 5, 8, 10, 16, 32, 64, 128\}$.
+> - **Historical Release Composition**: Order-wise additive accumulation $\text{RDP}_{\text{total}}(\alpha) = \sum_t \text{RDP}_t(\alpha)$ before optimal $(\epsilon, \delta)$ conversion, achieving sublinear $O(\sqrt{T})$ scaling over longitudinal horizons.
+> - **Lifetime Privacy Horizon**: External recipients retain historical releases indefinitely. Production strictly enforces `privacy_history_mode = "lifetime"`; rolling resets fail closed (`ProductionSafetyConfigurationError`).
+> - **Multi-Recipient Composition Policies**: Full support for `GLOBAL_EXTERNAL` (unified external scope preventing provider switching evasion), `COLLUSION_GROUP` (shared scopes among colluding recipients), and `PER_RECIPIENT` (isolated accounting per provider).
+> - **Atomic Concurrency & Recovery Hardening**: Integrated SQLite `BEGIN IMMEDIATE` compare-and-reserve transaction, CAS lease fencing, single-flight memoization with 0 duplicate charge, and crash-recovery budget reclamation.
+> - **Longitudinal Experiments (Exp 05–08)**: Systematic evaluations of Basic vs RDP composition, 90-day release frequency planning, multi-recipient collusion impact, and sequential authorization trajectories.
 >
-> **Security Boundaries**:
-> - Experiment mode is restricted to trusted internal evaluation at every API layer, including the low-level `ReleaseOrchestrator`.
-> - No external recipient may receive Experiment-mode releases.
-> - Dataset content binding uses a full 256-bit digest over canonicalized hashed-row representation (`data_sha256_<64 hex chars>`).
->
-> Longitudinal RDP composition, continual observation, dynamic taxonomy, adaptive clipping, Top-K, and Web UI remain strictly deferred to v0.2.
+> Top-K, heavy hitters, continual observation tree mechanisms, web UI, dynamic taxonomy, adaptive clipping planners, and ML training remain deferred to future versions.
 
 ---
 
@@ -178,12 +174,71 @@ $$\boxed{6.\ \text{Dataset identity change} \implies \text{Release key change}}$
 
 ---
 
-## 7. Verification Suite (16 Standalone Scripts)
+## 5. Longitudinal Privacy Accounting (v0.2)
 
-All 16 standalone verification scripts pass from a clean database state:
+### 5.1 The Fundamental Challenge of Longitudinal Releases
+In enterprise production deployments, analytical releases occur repeatedly across months or quarters to multiple external recipients. Under standard differential privacy, independent releases over time compound privacy loss. Simple basic composition ($\sum_{t=1}^T \varepsilon_t$) scales linearly ($O(T)$), which rapidly exhausts available privacy budgets.
+
+To solve this, **Private LLM Analytics v0.2** introduces a mathematically rigorous **Rényi Differential Privacy (RDP) Accountant** combined with persistent historical release state.
+
+### 5.2 Mathematical Formulation of Rényi Differential Privacy
+For Rényi divergence order $\alpha > 1$, Gaussian mechanism noise scale $\sigma$, and $L_2$ query sensitivity $\Delta_2$, the exact RDP cost is:
+$$\text{RDP}(\alpha) = \frac{\alpha \Delta_2^2}{2 \sigma^2}$$
+
+For pure $\varepsilon$-DP Laplace releases, we apply the conservative pure-DP bound:
+$$\text{RDP}(\alpha) \le \varepsilon \quad (\forall \alpha > 1)$$
+
+#### Historical Additive Composition
+Over a sequence of $T$ releases, privacy loss composes by pointwise additive summation at each candidate order $\alpha$:
+$$\text{RDP}_{\text{total}}(\alpha) = \sum_{t=1}^T \text{RDP}_t(\alpha)$$
+
+#### Conversion to Cumulative $(\varepsilon, \delta)$
+Given an enterprise policy parameter $\delta_{\text{global}} \in (0, 1)$, the effective cumulative privacy loss is computed via exact Decimal logarithm without floating-point conversion drift:
+$$\varepsilon_{\text{effective}} = \min_{\alpha > 1} \left[ \text{RDP}_{\text{total}}(\alpha) + \frac{\ln(1 / \delta_{\text{global}})}{\alpha - 1} \right]$$
+
+Authoritative production authorization strictly enforces $\varepsilon_{\text{effective}} \le \varepsilon_{\text{cap}}$ against the target $\delta_{\text{global}}$, avoiding unproved mixed bounds across differing $\delta$ levels.
+
+### 5.3 Multi-Recipient Composition Policies
+External model providers (`provider_a`, `provider_b`, `provider_c`) interact under configurable collusion policies:
+- **`GLOBAL_EXTERNAL` (Default & Production Recommendation)**:
+  All external releases share a unified scope (`global_external`). An enterprise release to Provider A consumes global budget, preventing external recipients from evading privacy caps by rotating provider identities.
+- **`COLLUSION_GROUP`**:
+  Recipients configured within a known collusion group (e.g., `group_ab = [provider_a, provider_b]`) share a collective accounting scope (`collusion:group_ab`), while independent groups (`collusion:group_c`) maintain separate accounting.
+- **`PER_RECIPIENT`**:
+  Each external recipient possesses an independent accounting scope (`recipient:<name>`), formally valid only under the strict assumption of zero information sharing between providers.
+- **`internal`**:
+  Internal analytics remain completely excluded from external differential privacy accounting.
+
+### 5.4 Absolute Prohibition of Rolling Privacy Reset
+> [!CAUTION]
+> **No Rolling Resets in Production (`privacy_history_mode = "lifetime"`)**:
+> External recipients permanently store and analyze historical releases. Deleting historical rows from the database after 30, 60, or 90 days does not erase the information already disclosed. Consequently, production configuration strictly enforces `privacy_history_mode = "lifetime"`. Configuring `"rolling_reset"` fails closed with `ProductionSafetyConfigurationError`.
+
+### 5.5 Replay Memoization with Zero Incremental Spend
+Repeated queries with identical semantic parameters return memoized outputs with `cache_hit=True` and strictly `0.0` incremental budget charge. This eliminates noise averaging attacks while enabling arbitrary repeated reporting at zero marginal privacy cost.
+
+### 5.6 Empirical Longitudinal Findings (Exp 05–08)
+Empirical evaluations demonstrate:
+1. **Exp 05 (Basic vs RDP Composition)**: Evaluates distinct guarantees honestly without artificial min: Basic $(\sum \varepsilon_i, \sum \delta_i)$ vs RDP $(\varepsilon_{\text{RDP}}, \delta_{\text{global}})$. At $T=100$, basic composition accumulates to $(100.0, 10^{-4})$, whereas RDP limits cumulative privacy loss to $(15.31, 10^{-6})$.
+2. **Exp 06 (Release Frequency Planning)**: Under an $\varepsilon_{\text{cap}}=10.0$ ceiling over 90 days, daily releases exhaust the cap at release 48 (42 rejected), weekly releases execute all 13 releases with 48.9% budget utilization ($\varepsilon=4.89$), and monthly releases consume $\varepsilon=2.27$.
+3. **Exp 07 (Collusion Overhead)**: Under `GLOBAL_EXTERNAL`, the budget cap is reached at week 8; under `COLLUSION_GROUP`, group A+B exhausts at week 10 while isolated group C executes unhindered.
+4. **Exp 08 (Longitudinal Authorization Trajectory)**: Verifies step-by-step transaction safety and cap enforcement until exhaustion across 15 sequential queries.
+
+---
+
+## 6. Verification Suite (23 Standalone Scripts)
+
+All 23 standalone verification scripts pass from a clean database state:
 
 | Script | Description | Status |
 |---|---|---|
+| `experiments/verify_rdp_math.py` | RDP formulas, order linearity, monotonic scaling, and Laplace bounds | **PASS** |
+| `experiments/verify_rdp_100_composition.py` | 100-step RDP historical composition scaling benefit ($O(\sqrt{T})$ vs $O(T)$) | **PASS** |
+| `experiments/verify_recipient_collusion.py` | Multi-recipient collusion policies (`GLOBAL_EXTERNAL`, `COLLUSION_GROUP`, `PER_RECIPIENT`) | **PASS** |
+| `experiments/verify_same_release_zero_cost.py` | Same-query replay memoization with 0 incremental privacy budget spend | **PASS** |
+| `experiments/verify_no_privacy_reset.py` | Production fail-closed rejection of rolling reset & lifetime accumulation | **PASS** |
+| `experiments/verify_rdp_multiworker_budget.py` | 8 concurrent worker processes competing under RDP cap; 3 commit, 5 rejected | **PASS** |
+| `experiments/verify_rdp_history_restart.py` | RDP historical view reconstruction across process restarts & stale lease recovery | **PASS** |
 | `experiments/verify_smoke_non_destructive.py` | Smoke execution runs non-destructively; verifies official research artifacts unchanged | **PASS** |
 | `experiments/verify_experiment_external_block.py` | Low-level ReleaseOrchestrator blocks external recipients in EXPERIMENT mode (zero side-effects) | **PASS** |
 | `experiments/verify_exp02_population.py` | Validates N=50,000 public population consistency, fail-fast checks, and non-destructive reproduction | **PASS** |
@@ -203,7 +258,7 @@ All 16 standalone verification scripts pass from a clean database state:
 
 ---
 
-## 8. Quick Start
+## 7. Quick Start
 
 ### Installation
 
@@ -215,10 +270,10 @@ pip install -e .
 
 ```bash
 pytest tests -q
-# 161 passed in tests/
+# 186 passed in tests/
 ```
 
-### Run All 16 Standalone Verifications
+### Run All 23 Standalone Verifications
 
 ```bash
 python -c "import subprocess, sys; from pathlib import Path; [subprocess.run([sys.executable, str(s)], check=True) for s in sorted(Path('experiments').glob('verify_*.py'))]"
@@ -240,24 +295,26 @@ release = service.compute(
     epsilon=1.0,
     delta=1e-6,
 )
-print(release["results"])
+print("Results:", release["results"])
+print("Privacy Accounting:", release["privacy_accounting"])
+
+# Retrieve authoritative longitudinal PrivacyView
+view = service.get_privacy_view(recipient="provider_a")
+print(f"Cumulative Releases: {view.release_count}")
+print(f"Effective Epsilon:  {view.effective_epsilon:.4f}")
+print(f"Remaining Budget:   {view.remaining_epsilon:.4f}")
 ```
 
 ### Run Research Experiment Suite
 
 ```bash
-# Full research suite (500 trials per configuration, output root: results/):
-python run_all_experiments.py
+# Full research suite (Exp 01-04 + Exp 05-08 longitudinal, output root: results/):
+python run_all_experiments.py --include-longitudinal
 
 # Rapid non-destructive smoke verification:
-python run_all_experiments.py --smoke
+python run_all_experiments.py --smoke --include-longitudinal
 ```
 
 > **Smoke Mode Isolation**:
 > - Smoke outputs are written exclusively to `results/verification/` (`results/verification/tables/`, `results/verification/raw/`, `results/verification/figures/`).
 > - Official research artifacts (`results/tables/*`, `results/raw/*`, `results/figures/*`) remain 100% byte-identical and unmodified.
-
-> **Main Epsilon Sweep Configuration**:
-> - $N = 50,000$ (dataset: `data/interactions_n50000.parquet`)
-> - $\delta = 10^{-6}$
-> - $\varepsilon \in \{0.25, 0.5, 1.0, 2.0, 4.0, 8.0\}$

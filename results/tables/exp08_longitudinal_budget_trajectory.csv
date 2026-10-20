@@ -1,0 +1,16 @@
+step,metric,query_epsilon,epsilon_before,epsilon_after,best_alpha,decision,remaining_epsilon,budget_cap
+1,user_prevalence,1.0,0.0,1.3421,32.0,ALLOWED,3.6579,5.0
+2,user_normalized_share,1.0,1.3421,1.8175,16.0,ALLOWED,3.1825,5.0
+3,interaction_volume,1.0,1.8175,2.2657,16.0,ALLOWED,2.7343,5.0
+4,user_prevalence,1.0,2.2657,2.6556,10.0,ALLOWED,2.3444,5.0
+5,user_normalized_share,1.0,2.6556,2.9358,10.0,ALLOWED,2.0642,5.0
+6,interaction_volume,1.0,2.9358,3.2159,10.0,ALLOWED,1.7841,5.0
+7,user_prevalence,1.0,3.2159,3.4961,10.0,ALLOWED,1.5039,5.0
+8,user_normalized_share,1.0,3.4961,3.7666,8.0,ALLOWED,1.2334,5.0
+9,interaction_volume,1.0,3.7666,3.9907,8.0,ALLOWED,1.0093,5.0
+10,user_prevalence,1.0,3.9907,4.2148,8.0,ALLOWED,0.7852,5.0
+11,user_normalized_share,1.0,4.2148,4.4389,8.0,ALLOWED,0.5611,5.0
+12,interaction_volume,1.0,4.4389,4.663,8.0,ALLOWED,0.337,5.0
+13,user_prevalence,1.0,4.663,4.8872,8.0,ALLOWED,0.1128,5.0
+14,user_normalized_share,1.0,4.8872,4.8872,8.0,REJECTED,0.1128,5.0
+15,interaction_volume,1.0,4.8872,4.8872,8.0,REJECTED,0.1128,5.0

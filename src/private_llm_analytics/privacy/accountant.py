@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, List, Optional
-from private_llm_analytics.privacy.budget import PrivacyBudget
+from private_llm_analytics.privacy.budget import PrivacyBudget, PrivacySpent
 from private_llm_analytics.privacy.exceptions import PrivacyBudgetExceededError
 from private_llm_analytics.privacy.ledger import PrivacyLedger
 from private_llm_analytics.privacy.state import PrivacyStateManager
@@ -113,5 +113,7 @@ class BasicAccountant(PrivacyAccountant):
         }
         self.history.append(entry)
 
-    def get_total_spent(self) -> PrivacyBudget:
+    def get_total_spent(self) -> Union[PrivacyBudget, PrivacySpent]:
+        if self.spent_epsilon == 0:
+            return PrivacySpent(epsilon=Decimal("0.0"), delta=Decimal(str(self.spent_delta)))
         return PrivacyBudget(epsilon=self.spent_epsilon, delta=self.spent_delta)

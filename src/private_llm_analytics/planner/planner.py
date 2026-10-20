@@ -11,6 +11,7 @@ from private_llm_analytics.config.validator import ExecutionMode
 from private_llm_analytics.contribution.sensitivity import get_metric_sensitivities
 from private_llm_analytics.planner.plan import ExecutionPlan
 from private_llm_analytics.planner.query import AnalyticsQuery
+from private_llm_analytics.privacy.composition import resolve_budget_scope_id
 from private_llm_analytics.privacy.exceptions import (
     MetricDisabledError,
     PrivacyConfigurationError,
@@ -33,6 +34,7 @@ class AnalyticsPlanner:
         execution_mode: Union[str, ExecutionMode] = ExecutionMode.PRODUCTION,
         noise_seed: Optional[int] = None,
         trial_id: Optional[str] = None,
+        privacy_scope_id: Optional[str] = None,
     ) -> ExecutionPlan:
         """Create an ExecutionPlan for an analytics query with full pre-validation."""
         # 1. Metric existence and enablement check
@@ -130,6 +132,20 @@ class AnalyticsPlanner:
         else:
             noise_identity = "production_unseeded"
 
+        if privacy_scope_id is None:
+            rec_role = rec_policy.role if rec_policy else "external"
+            rc_config = getattr(self.config.privacy, "recipient_composition", None)
+            rc_mode = rc_config.mode if rc_config else "global_external"
+            rc_groups = rc_config.groups if rc_config else None
+            resolved_scope_id = resolve_budget_scope_id(
+                recipient=query.recipient,
+                recipient_role=rec_role,
+                mode=rc_mode,
+                groups=rc_groups,
+            )
+        else:
+            resolved_scope_id = str(privacy_scope_id)
+
         canonical_semantics = {
             "calibration_version": "analytic_gaussian_v1" if "gaussian" in mech_type else "laplace_v1",
             "clip_norm": float(clip_c),
@@ -146,6 +162,7 @@ class AnalyticsPlanner:
             "noise_seed_identity": noise_identity,
             "norm_bound": float(norm_b),
             "population_mode": str(self.config.scenario.population.mode),
+            "privacy_scope_id": str(resolved_scope_id),
             "providers": sorted(list(self.config.scenario.providers)),
             "public_population_size": int(resolved_pop_size) if resolved_pop_size is not None else -1,
             "tasks": sorted(list(self.config.scenario.tasks)),
@@ -169,5 +186,6 @@ class AnalyticsPlanner:
             canonical_semantics=canonical_semantics,
             public_population_size=resolved_pop_size,
             execution_mode=exec_mode_str,
+            privacy_scope_id=str(resolved_scope_id),
         )
 

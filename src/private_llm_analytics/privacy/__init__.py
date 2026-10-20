@@ -1,4 +1,4 @@
-"""Privacy module in v0.1.4."""
+"""Privacy module in v0.2."""
 
 from private_llm_analytics.privacy.exceptions import (
     CommitIrreversibleError,
@@ -14,7 +14,19 @@ from private_llm_analytics.privacy.exceptions import (
     UnsupportedMechanismError,
 )
 from private_llm_analytics.privacy.budget import PrivacyBudget
+from private_llm_analytics.privacy.composition import PrivacyView, RDPReleaseCost
 from private_llm_analytics.privacy.policy import PrivacyPolicy
+from private_llm_analytics.privacy.rdp import (
+    DEFAULT_RDP_ORDERS,
+    compute_gaussian_rdp,
+    compute_laplace_rdp_bound,
+    compose_rdp_vectors,
+    rdp_to_epsilon_delta,
+    rdp_vector_from_json,
+    rdp_vector_to_json,
+    validate_delta,
+    validate_orders,
+)
 
 
 def __getattr__(name: str):
@@ -22,6 +34,10 @@ def __getattr__(name: str):
         from private_llm_analytics.privacy.accountant import BasicAccountant, PrivacyAccountant
         globals()["BasicAccountant"] = BasicAccountant
         globals()["PrivacyAccountant"] = PrivacyAccountant
+        return globals()[name]
+    if name == "RDPAccountant":
+        from private_llm_analytics.privacy.rdp_accountant import RDPAccountant
+        globals()["RDPAccountant"] = RDPAccountant
         return globals()[name]
     if name in ("PrivacyLedger", "LedgerEntry"):
         from private_llm_analytics.privacy.ledger import LedgerEntry, PrivacyLedger
@@ -36,6 +52,7 @@ def __getattr__(name: str):
 
 
 __all__ = [
+    "DEFAULT_RDP_ORDERS",
     "BasicAccountant",
     "CommitIrreversibleError",
     "DatasetConfigurationMismatchError",
@@ -48,10 +65,21 @@ __all__ = [
     "PrivacyLedger",
     "PrivacyPolicy",
     "PrivacyStateManager",
+    "PrivacyView",
     "ProductionRNGControlError",
     "ProductionSafetyConfigurationError",
+    "RDPAccountant",
+    "RDPReleaseCost",
     "RecipientSecurityViolation",
     "ReleaseInProgressError",
     "ReservationLostError",
     "UnsupportedMechanismError",
+    "compute_gaussian_rdp",
+    "compute_laplace_rdp_bound",
+    "compose_rdp_vectors",
+    "rdp_to_epsilon_delta",
+    "rdp_vector_from_json",
+    "rdp_vector_to_json",
+    "validate_delta",
+    "validate_orders",
 ]
