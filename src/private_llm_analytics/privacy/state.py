@@ -68,21 +68,30 @@ def _json_serializable(obj: Any) -> Any:
 def compute_recipient_policy_fingerprint(
     mode: str,
     groups: Optional[Dict[str, List[str]]] = None,
-) -> Tuple[str, str, str]:
-    """Compute canonical policy fingerprint covering recipient composition mode and groups."""
+    recipient_roles: Optional[Dict[str, str]] = None,
+) -> Tuple[str, str, str, str]:
+    """Compute canonical policy fingerprint covering recipient composition mode, groups, and recipient roles."""
     mode_norm = str(mode).lower().strip()
     if groups and mode_norm == "collusion_group":
         canon_groups = {str(k): sorted([str(m) for m in v]) for k, v in sorted(groups.items())}
     else:
         canon_groups = {}
     canon_groups_str = json.dumps(canon_groups, sort_keys=True, separators=(",", ":"))
+
+    if recipient_roles:
+        canon_roles = {str(k): str(v).lower().strip() for k, v in sorted(recipient_roles.items())}
+    else:
+        canon_roles = {}
+    canon_roles_str = json.dumps(canon_roles, sort_keys=True, separators=(",", ":"))
+
     payload = {
         "mode": mode_norm,
         "groups": json.loads(canon_groups_str),
+        "roles": json.loads(canon_roles_str),
     }
     raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     fp = hashlib.sha256(raw).hexdigest()
-    return fp, mode_norm, canon_groups_str
+    return fp, mode_norm, canon_groups_str, canon_roles_str
 
 
 class ReservationTuple(tuple):
@@ -209,12 +218,35 @@ class PrivacyStateManager:
             """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS privacy_policy_metadata (
-                    policy_fingerprint TEXT PRIMARY KEY,
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    policy_fingerprint TEXT NOT NULL,
                     recipient_composition_mode TEXT NOT NULL,
                     canonicalized_collusion_groups TEXT NOT NULL,
+                    canonicalized_recipient_roles TEXT NOT NULL,
                     created_at TEXT NOT NULL
                 )
             """)
+            # Upgrade privacy_policy_metadata schema if missing id or canonicalized_recipient_roles
+            cursor.execute("PRAGMA table_info(privacy_policy_metadata)")
+            ppm_cols = {row[1] for row in cursor.fetchall()}
+            if ppm_cols and "id" not in ppm_cols:
+                cursor.execute("ALTER TABLE privacy_policy_metadata RENAME TO _ppm_old")
+                cursor.execute("""
+                    CREATE TABLE privacy_policy_metadata (
+                        id INTEGER PRIMARY KEY CHECK (id = 1),
+                        policy_fingerprint TEXT NOT NULL,
+                        recipient_composition_mode TEXT NOT NULL,
+                        canonicalized_collusion_groups TEXT NOT NULL,
+                        canonicalized_recipient_roles TEXT NOT NULL,
+                        created_at TEXT NOT NULL
+                    )
+                """)
+                cursor.execute("""
+                    INSERT OR IGNORE INTO privacy_policy_metadata (id, policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups, canonicalized_recipient_roles, created_at)
+                    SELECT 1, policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups, '{}', created_at
+                    FROM _ppm_old LIMIT 1
+                """)
+                cursor.execute("DROP TABLE _ppm_old")
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS privacy_ledger (
                     release_id TEXT PRIMARY KEY,
@@ -463,8 +495,8 @@ class PrivacyStateManager:
                 mech_str = str(mech).lower() if mech else ""
                 del_float = float(r_del) if r_del is not None else 0.0
 
-                # Migrate Gaussian
-                if "gaussian" in mech_str or (not mech_str and del_float > 0):
+                # Strict fail-closed mechanism validation: blank or unknown mechanisms rejected without guessing (Item 6)
+                if "gaussian" in mech_str:
                     if sens is not None and sens > 0 and sig is not None and sig > 0:
                         rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=DEFAULT_RDP_ORDERS)
                         rdp_j = rdp_vector_to_json(rdp_v)
@@ -482,8 +514,7 @@ class PrivacyStateManager:
                             f"Fail-closed: Legacy Gaussian release '{r_key}' missing valid sensitivity/sigma for RDP migration "
                             f"(sensitivity={sens}, noise_scale={sig})."
                         )
-                # Migrate Laplace
-                elif "laplace" in mech_str or (not mech_str and del_float == 0):
+                elif "laplace" in mech_str:
                     eps_dec = _to_decimal(r_eps) if r_eps is not None else Decimal("0")
                     if eps_dec > Decimal("0"):
                         rdp_v = compute_laplace_rdp_bound(epsilon=float(eps_dec), orders=DEFAULT_RDP_ORDERS)
@@ -503,7 +534,7 @@ class PrivacyStateManager:
                         )
                 else:
                     raise ValueError(
-                        f"Fail-closed: Legacy release '{r_key}' has unknown or unsupported mechanism '{mech}'."
+                        f"Fail-closed: Legacy release '{r_key}' has missing, blank, or unsupported mechanism '{mech}'."
                     )
 
             # Synchronize any remaining reservations from matching release_store entries
@@ -559,46 +590,147 @@ class PrivacyStateManager:
             """)
             return cursor.fetchone() is not None
 
+    def has_policy_bound(self) -> bool:
+        """Check if privacy policy metadata is already persisted."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM privacy_policy_metadata WHERE id = 1")
+            return cursor.fetchone() is not None
+
+    def get_active_budget_scopes(self, exclude_internal: bool = True) -> List[str]:
+        """Return distinct active budget scope IDs from release_store and privacy_reservations."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT DISTINCT budget_scope_id FROM release_store WHERE status = 'COMMITTED'")
+            scopes = {row[0] for row in cursor.fetchall()}
+            cursor.execute("SELECT DISTINCT budget_scope_id FROM privacy_reservations WHERE status IN ('COMMITTED', 'PENDING')")
+            scopes.update({row[0] for row in cursor.fetchall()})
+        if exclude_internal:
+            scopes.discard("internal")
+        return sorted(list(scopes))
+
+    def _verify_or_bind_policy_tx(
+        self,
+        cursor: sqlite3.Cursor,
+        mode: str,
+        groups: Optional[Dict[str, List[str]]] = None,
+        recipient_roles: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """Internal helper to verify or bind policy inside an active transaction.
+
+        Enforces:
+          1. Singleton row in privacy_policy_metadata (id = 1).
+          2. Policy fingerprint covers mode, groups, and recipient roles.
+          3. If DB has external releases and fingerprint mismatches -> ProductionSafetyConfigurationError.
+          4. If legacy DB has external releases but no policy metadata -> only 'global_external' is permitted (Item 3).
+        """
+        cur_fp, cur_mode, cur_groups_str, cur_roles_str = compute_recipient_policy_fingerprint(
+            mode, groups, recipient_roles
+        )
+        now_iso = datetime.now(timezone.utc).isoformat()
+        cursor.execute(
+            "SELECT policy_fingerprint, recipient_composition_mode FROM privacy_policy_metadata WHERE id = 1"
+        )
+        row = cursor.fetchone()
+        if row is not None:
+            persisted_fp, persisted_mode = row[0], row[1]
+            if persisted_fp != cur_fp:
+                cursor.execute("""
+                    SELECT 1 FROM release_store
+                    WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
+                      AND status = 'COMMITTED'
+                    LIMIT 1
+                """)
+                has_rel = cursor.fetchone() is not None
+                if not has_rel:
+                    cursor.execute("""
+                        SELECT 1 FROM privacy_reservations
+                        WHERE budget_scope_id != 'internal'
+                          AND status IN ('COMMITTED', 'PENDING')
+                        LIMIT 1
+                    """)
+                    has_rel = cursor.fetchone() is not None
+
+                if has_rel:
+                    raise ProductionSafetyConfigurationError(
+                        f"Recipient composition policy mismatch with persisted historical releases! "
+                        f"Persisted mode='{persisted_mode}', fingerprint='{persisted_fp}'; "
+                        f"Current config mode='{cur_mode}', fingerprint='{cur_fp}'. "
+                        "Modifying composition policy on a database with existing releases is strictly forbidden."
+                    )
+                else:
+                    cursor.execute("DELETE FROM privacy_policy_metadata WHERE id = 1")
+                    cursor.execute(
+                        """
+                        INSERT INTO privacy_policy_metadata (
+                            id, policy_fingerprint, recipient_composition_mode,
+                            canonicalized_collusion_groups, canonicalized_recipient_roles, created_at
+                        ) VALUES (1, ?, ?, ?, ?, ?)
+                        """,
+                        (cur_fp, cur_mode, cur_groups_str, cur_roles_str, now_iso),
+                    )
+        else:
+            # First policy binding: check if legacy DB with external releases exists
+            cursor.execute("""
+                SELECT 1 FROM release_store
+                WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
+                  AND status = 'COMMITTED'
+                LIMIT 1
+            """)
+            has_rel = cursor.fetchone() is not None
+            if not has_rel:
+                cursor.execute("""
+                    SELECT 1 FROM privacy_reservations
+                    WHERE budget_scope_id != 'internal'
+                      AND status IN ('COMMITTED', 'PENDING')
+                    LIMIT 1
+                """)
+                has_rel = cursor.fetchone() is not None
+
+            if has_rel:
+                # Legacy DB with existing external releases: only GLOBAL_EXTERNAL permitted (Item 3)
+                if cur_mode != "global_external":
+                    raise ProductionSafetyConfigurationError(
+                        f"Legacy database with existing external releases can only be migrated to 'global_external' composition policy; "
+                        f"attempted mode '{cur_mode}'."
+                    )
+
+            # Insert singleton row (id = 1)
+            cursor.execute(
+                """
+                INSERT INTO privacy_policy_metadata (
+                    id, policy_fingerprint, recipient_composition_mode,
+                    canonicalized_collusion_groups, canonicalized_recipient_roles, created_at
+                ) VALUES (1, ?, ?, ?, ?, ?)
+                """,
+                (cur_fp, cur_mode, cur_groups_str, cur_roles_str, now_iso),
+            )
+
     def verify_or_bind_policy(
         self,
         mode: str,
         groups: Optional[Dict[str, List[str]]] = None,
+        recipient_roles: Optional[Dict[str, str]] = None,
     ) -> None:
-        """Verify current recipient composition policy against persisted metadata, or bind if first release.
-
-        Fail-closed: raises ProductionSafetyConfigurationError if DB has external releases and policy fingerprint mismatches.
-        """
-        cur_fp, cur_mode, cur_groups_str = compute_recipient_policy_fingerprint(mode, groups)
-        now_iso = datetime.now(timezone.utc).isoformat()
+        """Verify current recipient composition policy against persisted metadata, or bind if first release."""
         with self._connection() as conn:
+            conn.isolation_level = None
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT policy_fingerprint, recipient_composition_mode, canonicalized_collusion_groups FROM privacy_policy_metadata LIMIT 1"
-            )
-            row = cursor.fetchone()
-            if row is not None:
-                persisted_fp, persisted_mode, persisted_groups = row[0], row[1], row[2]
-                if persisted_fp != cur_fp:
-                    if self.has_external_releases():
-                        raise ProductionSafetyConfigurationError(
-                            f"Recipient composition policy mismatch with persisted historical releases! "
-                            f"Persisted mode='{persisted_mode}', fingerprint='{persisted_fp}'; "
-                            f"Current config mode='{cur_mode}', fingerprint='{cur_fp}'. "
-                            "Modifying composition policy on a database with existing releases is strictly forbidden."
-                        )
-                    else:
-                        cursor.execute("DELETE FROM privacy_policy_metadata")
-                        cursor.execute(
-                            "INSERT INTO privacy_policy_metadata VALUES (?, ?, ?, ?)",
-                            (cur_fp, cur_mode, cur_groups_str, now_iso),
-                        )
-                        conn.commit()
-            else:
-                cursor.execute(
-                    "INSERT INTO privacy_policy_metadata VALUES (?, ?, ?, ?)",
-                    (cur_fp, cur_mode, cur_groups_str, now_iso),
+            cursor.execute("BEGIN IMMEDIATE")
+            try:
+                self._verify_or_bind_policy_tx(
+                    cursor=cursor,
+                    mode=mode,
+                    groups=groups,
+                    recipient_roles=recipient_roles,
                 )
-                conn.commit()
+                cursor.execute("COMMIT")
+            except Exception:
+                try:
+                    cursor.execute("ROLLBACK")
+                except Exception:
+                    pass
+                raise
 
     def get_committed_release(self, release_key: str) -> Optional[DPReleaseResult]:
         """Lookup an already committed release by its canonical release key.
@@ -672,6 +804,9 @@ class PrivacyStateManager:
         rdp_candidate_cost: Optional[Dict[Any, Any]] = None,
         epsilon_cap: Optional[Any] = None,
         delta_global: Optional[Any] = None,
+        policy_mode: Optional[str] = None,
+        policy_groups: Optional[Dict[str, List[str]]] = None,
+        recipient_roles: Optional[Dict[str, str]] = None,
     ) -> ReservationTuple:
         """Atomic compare-and-reserve transaction with single-flight memoization and lease fencing.
 
@@ -689,6 +824,15 @@ class PrivacyStateManager:
                 cursor = conn.cursor()
                 cursor.execute("BEGIN IMMEDIATE")
                 try:
+                    # 0. Atomic policy binding & verification inside reservation transaction (Item 1 & 2 & 3)
+                    if policy_mode is not None and (recipient_role == "external" or budget_scope_id != "internal"):
+                        self._verify_or_bind_policy_tx(
+                            cursor=cursor,
+                            mode=policy_mode,
+                            groups=policy_groups,
+                            recipient_roles=recipient_roles,
+                        )
+
                     # 1. Check if release already exists in release_store
                     cursor.execute(
                         "SELECT * FROM release_store WHERE release_key = ?",
@@ -1146,12 +1290,26 @@ class PrivacyStateManager:
                     del_val = float(getattr(release_result, "delta", 0.0) or 0.0)
                     eps_val = float(getattr(release_result, "epsilon", 0.0) or 0.0)
 
-                    if ("gaussian" in mech_str or del_val > 0) and sig > 0 and sens > 0:
-                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=eff_orders)
-                        rdp_cost_json = rdp_vector_to_json(rdp_v)
-                    elif ("laplace" in mech_str or del_val == 0) and eps_val > 0:
-                        rdp_v = compute_laplace_rdp_bound(epsilon=eps_val, orders=eff_orders)
-                        rdp_cost_json = rdp_vector_to_json(rdp_v)
+                    if "gaussian" in mech_str:
+                        if sig > 0 and sens > 0:
+                            rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=eff_orders)
+                            rdp_cost_json = rdp_vector_to_json(rdp_v)
+                        else:
+                            raise ValueError(
+                                f"Fail-closed: Gaussian mechanism missing valid sensitivity/sigma (sensitivity={sens}, noise_scale={sig})."
+                            )
+                    elif "laplace" in mech_str:
+                        if eps_val > 0:
+                            rdp_v = compute_laplace_rdp_bound(epsilon=eps_val, orders=eff_orders)
+                            rdp_cost_json = rdp_vector_to_json(rdp_v)
+                        else:
+                            raise ValueError(
+                                f"Fail-closed: Laplace mechanism missing positive epsilon ({eps_val})."
+                            )
+                    elif mech_str:
+                        raise ValueError(
+                            f"Fail-closed: Unknown or unsupported mechanism '{mech_str}'."
+                        )
 
                 if rdp_cost_json:
                     cursor.execute(

@@ -663,3 +663,312 @@ def test_rdp_accountant_public_interface_fail_closed(tmp_path):
     assert float(prev["epsilon_before"]) == 0.0
     assert float(prev["epsilon_after"]) > 0.0
 
+
+
+def _concurrent_policy_worker(db_path_str: str, mode: str, groups=None, roles=None):
+    from decimal import Decimal
+    from private_llm_analytics.privacy.state import PrivacyStateManager
+    from private_llm_analytics.privacy.budget import PrivacyBudget
+    state_mgr = PrivacyStateManager(db_path_str)
+    gb = PrivacyBudget(epsilon=10.0, delta=1e-5)
+    bn = PrivacyBudget(epsilon=1.0, delta=1e-6)
+    try:
+        res = state_mgr.reserve_or_get_release(
+            release_key=f"k_{mode}",
+            canonical_semantics={"mode": mode},
+            global_budget=gb,
+            budget_needed=bn,
+            plan_metadata={"mechanism": "gaussian", "sensitivity": 1.0, "noise_scale": 1.0},
+            recipient="provider_a",
+            recipient_role="external",
+            budget_scope_id=f"scope_{mode}",
+            accountant_mode="rdp",
+            rdp_candidate_cost={Decimal("2.0"): Decimal("0.1"), Decimal("3.0"): Decimal("0.2")},
+            rdp_orders=[Decimal("2.0"), Decimal("3.0")],
+            epsilon_cap=Decimal("10.0"),
+            delta_global=Decimal("1e-5"),
+            policy_mode=mode,
+            policy_groups=groups,
+            recipient_roles=roles,
+        )
+        return {"success": True, "error": None, "mode": mode}
+    except Exception as e:
+        return {"success": False, "error": type(e).__name__, "msg": str(e), "mode": mode}
+
+
+def test_concurrent_conflicting_policy_processes_fail_closed(tmp_path):
+    """Two concurrent processes attempting conflicting policy binding fail closed atomically (Item 7)."""
+    import concurrent.futures
+
+    db_path = tmp_path / "concurrent_policy.db"
+    # Ensure tables exist
+    PrivacyStateManager(db_path)
+
+    roles = {"provider_a": "external", "analyst_internal": "internal"}
+    tasks = [
+        (str(db_path), "global_external", None, roles),
+        (str(db_path), "per_recipient", None, roles),
+    ]
+
+    with concurrent.futures.ProcessPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(_concurrent_policy_worker, *t) for t in tasks]
+        results = [f.result() for f in futures]
+
+    successes = [r for r in results if r["success"]]
+    failures = [r for r in results if not r["success"]]
+
+    assert len(successes) == 1, f"Expected exactly 1 success, got: {results}"
+    assert len(failures) == 1, f"Expected exactly 1 failure, got: {results}"
+    assert failures[0]["error"] in ("ProductionSafetyConfigurationError", "IntegrityError")
+
+    # Singleton row verification
+    conn = sqlite3.connect(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM privacy_policy_metadata").fetchone()[0]
+    row = conn.execute("SELECT id, recipient_composition_mode FROM privacy_policy_metadata").fetchone()
+    conn.close()
+
+    assert count == 1
+    assert row[0] == 1
+    assert row[1] == successes[0]["mode"]
+
+
+def test_legacy_v01_only_migrates_to_global_external(tmp_path):
+    """Legacy v0.1 DB with external history and no policy metadata can ONLY migrate to global_external (Item 3)."""
+    db_path = tmp_path / "legacy_v01.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE release_store (
+            release_key TEXT PRIMARY KEY, reservation_id TEXT NOT NULL, owner_id TEXT NOT NULL DEFAULT '',
+            generation INTEGER NOT NULL DEFAULT 1, release_id TEXT NOT NULL, created_at TEXT NOT NULL,
+            status TEXT NOT NULL, canonical_semantics_json TEXT NOT NULL, metric TEXT NOT NULL,
+            window_start TEXT, window_end TEXT, dataset_version TEXT NOT NULL, mechanism TEXT NOT NULL,
+            epsilon TEXT NOT NULL, delta TEXT NOT NULL, sensitivity REAL NOT NULL, noise_scale REAL NOT NULL,
+            cell_names_json TEXT NOT NULL, n_users INTEGER NOT NULL, public_population_size INTEGER,
+            dp_vector_json TEXT, post_processed_json TEXT, committed_at TEXT,
+            recipient TEXT NOT NULL DEFAULT 'provider_a', recipient_role TEXT NOT NULL DEFAULT 'external',
+            budget_scope_id TEXT NOT NULL DEFAULT 'global_external', accountant_mode TEXT NOT NULL DEFAULT 'rdp',
+            rdp_cost_json TEXT NOT NULL, rdp_orders_json TEXT NOT NULL,
+            delta_global TEXT NOT NULL DEFAULT '1e-6', effective_epsilon TEXT, best_alpha TEXT
+        )
+    """)
+    rdp_dummy = json.dumps({"2.0": "0.1", "3.0": "0.2"})
+    orders_dummy = json.dumps([2.0, 3.0])
+    conn.execute("""
+        INSERT INTO release_store VALUES (
+            'k_legacy', 'r_legacy', '', 1, 'rel_leg', '2026-01-01', 'COMMITTED', '{}',
+            'user_prevalence', NULL, NULL, 'v1.0', 'gaussian', '1.0', '1e-6', 1.0, 1.0, '[]', 50, 50, '[]', '[]', '2026-01-01',
+            'provider_a', 'external', 'global_external', 'rdp', ?, ?, '1e-6', '1.0', '2.0'
+        )
+    """, (rdp_dummy, orders_dummy))
+    conn.commit()
+    conn.close()
+
+    state_mgr = PrivacyStateManager(db_path)
+    assert state_mgr.has_external_releases()
+
+    # Attempting PER_RECIPIENT on legacy DB fails closed
+    with pytest.raises(ProductionSafetyConfigurationError, match="can only be migrated to 'global_external'"):
+        state_mgr.verify_or_bind_policy(mode="per_recipient")
+
+    # Attempting COLLUSION_GROUP on legacy DB fails closed
+    with pytest.raises(ProductionSafetyConfigurationError, match="can only be migrated to 'global_external'"):
+        state_mgr.verify_or_bind_policy(mode="collusion_group", groups={"grp1": ["provider_a"]})
+
+    # Migrating to GLOBAL_EXTERNAL succeeds
+    state_mgr.verify_or_bind_policy(mode="global_external")
+
+    # Verify bound singleton metadata
+    with state_mgr._connection() as conn:
+        row = conn.execute("SELECT id, recipient_composition_mode FROM privacy_policy_metadata").fetchone()
+        assert row[0] == 1
+        assert row[1] == "global_external"
+
+
+def test_recipient_role_change_fails_closed(tmp_path, test_umatrix):
+    """Changing recipient role mapping on a DB with external history fails closed (Item 4)."""
+    config = load_app_config("configs")
+    db_path = tmp_path / "role_change.db"
+    config.privacy.recipient_composition.mode = "global_external"
+
+    state_mgr = PrivacyStateManager(db_path)
+    orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
+
+    q = AnalyticsQuery(
+        metric="user_prevalence",
+        recipient="provider_a",
+        epsilon=1.0,
+        delta=1e-6,
+        window_start="2026-01-01",
+        window_end="2026-01-31",
+    )
+    res = orch.execute_release(q, test_umatrix)
+    assert not res["cache_hit"]
+
+    # Now alter provider_a's role in config from external to internal
+    config.recipients.recipients["provider_a"].role = "internal"
+
+    # Creating a new orchestrator with modified recipient roles must fail closed
+    with pytest.raises(ProductionSafetyConfigurationError, match="policy mismatch"):
+        ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
+
+
+def test_singleflight_wait_cache_hit_returns_fresh_privacy_view(tmp_path, test_umatrix):
+    """Single-flight wait cache hit returns fresh PrivacyView metadata (Item 8)."""
+    import threading
+
+    config = load_app_config("configs")
+    db_path = tmp_path / "singleflight_fresh.db"
+    config.privacy.recipient_composition.mode = "global_external"
+
+    state_mgr = PrivacyStateManager(db_path)
+
+    worker1_reserved = threading.Event()
+    worker1_continue = threading.Event()
+
+    def pause_after_reserve():
+        worker1_reserved.set()
+        worker1_continue.wait(timeout=10.0)
+
+    hooks_w1 = {"after_budget_reserve": pause_after_reserve}
+    orch_w1 = ReleaseOrchestrator(app_config=config, state_manager=state_mgr, test_hooks=hooks_w1)
+    orch_w2 = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
+
+    q = AnalyticsQuery(
+        metric="user_prevalence",
+        recipient="provider_a",
+        epsilon=1.0,
+        delta=1e-6,
+        window_start="2026-01-01",
+        window_end="2026-01-31",
+    )
+
+    results = {}
+    errors = {}
+
+    def run_worker1():
+        try:
+            results["w1"] = orch_w1.execute_release(q, test_umatrix)
+        except Exception as e:
+            errors["w1"] = e
+
+    def run_worker2():
+        try:
+            results["w2"] = orch_w2.execute_release(q, test_umatrix)
+        except Exception as e:
+            errors["w2"] = e
+
+    t1 = threading.Thread(target=run_worker1)
+    t2 = threading.Thread(target=run_worker2)
+
+    t1.start()
+    assert worker1_reserved.wait(timeout=5.0), "Worker 1 did not reach after_budget_reserve"
+
+    # Worker 2 starts while Worker 1 is paused with PENDING reservation
+    t2.start()
+
+    # Let Worker 2 enter reservation wait loop
+    import time
+    time.sleep(0.3)
+
+    # Let Worker 1 finish commit
+    worker1_continue.set()
+
+    t1.join(timeout=10.0)
+    t2.join(timeout=10.0)
+
+    assert "w1" not in errors, f"Worker 1 error: {errors.get('w1')}"
+    assert "w2" not in errors, f"Worker 2 error: {errors.get('w2')}"
+
+    res1 = results["w1"]
+    res2 = results["w2"]
+
+    assert not res1["cache_hit"]
+    assert res2["cache_hit"]
+
+    # Verify Worker 2 received FRESH PrivacyView metadata (Item 8)
+    acct2 = res2["privacy_accounting"]
+    assert acct2["history_release_count"] == 1, f"Expected history_release_count=1, got {acct2['history_release_count']}"
+    assert float(acct2["effective_epsilon"]) > 0.0, f"Expected effective_epsilon > 0, got {acct2['effective_epsilon']}"
+    assert float(acct2["effective_epsilon"]) == float(res1["privacy_accounting"]["effective_epsilon"])
+
+
+def test_rdp_accountant_spent_api_per_recipient_collusion_group(tmp_path, test_umatrix):
+    """RDPAccountant scalar spent API correctly handles PER_RECIPIENT / COLLUSION_GROUP (Item 5)."""
+    config = load_app_config("configs")
+    db_path = tmp_path / "rdp_multi_scope_spent.db"
+    config.privacy.recipient_composition.mode = "per_recipient"
+
+    state_mgr = PrivacyStateManager(db_path)
+    orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
+
+    # Initially spent_epsilon is 0
+    assert orch.rdp_accountant.spent_epsilon == 0.0
+
+    # Query for provider_a
+    q1 = AnalyticsQuery(
+        metric="user_prevalence",
+        recipient="provider_a",
+        epsilon=1.0,
+        delta=1e-6,
+        window_start="2026-01-01",
+        window_end="2026-01-31",
+    )
+    orch.execute_release(q1, test_umatrix)
+
+    spent_a = orch.rdp_accountant.spent_epsilon
+    assert spent_a > 0.0
+
+    # Query for provider_b with larger epsilon
+    q2 = AnalyticsQuery(
+        metric="user_prevalence",
+        recipient="provider_b",
+        epsilon=2.0,
+        delta=1e-6,
+        window_start="2026-01-01",
+        window_end="2026-01-31",
+    )
+    orch.execute_release(q2, test_umatrix)
+
+    # spent_epsilon must reflect max across external scopes
+    spent_max = orch.rdp_accountant.spent_epsilon
+    assert spent_max > spent_a
+
+    # Specific scope queries via get_total_spent
+    spent_a_budget = orch.rdp_accountant.get_total_spent(budget_scope_id="recipient:provider_a")
+    spent_b_budget = orch.rdp_accountant.get_total_spent(budget_scope_id="recipient:provider_b")
+    assert spent_a_budget.epsilon == spent_a
+    assert spent_b_budget.epsilon == spent_max
+
+    # Global total spent matches spent_max
+    spent_global_budget = orch.rdp_accountant.get_total_spent()
+    assert spent_global_budget.epsilon == spent_max
+    assert spent_global_budget.delta == 1e-6
+
+
+def test_blank_mechanism_fails_closed_without_guessing(tmp_path):
+    """Blank or unknown mechanism strictly fails closed without guessing from delta (Item 6)."""
+    db_path = tmp_path / "blank_mech.db"
+    conn = sqlite3.connect(db_path)
+    conn.execute("""
+        CREATE TABLE release_store (
+            release_key TEXT PRIMARY KEY, reservation_id TEXT NOT NULL, owner_id TEXT NOT NULL DEFAULT '',
+            generation INTEGER NOT NULL DEFAULT 1, release_id TEXT NOT NULL, created_at TEXT NOT NULL,
+            status TEXT NOT NULL, canonical_semantics_json TEXT NOT NULL, metric TEXT NOT NULL,
+            window_start TEXT, window_end TEXT, dataset_version TEXT NOT NULL, mechanism TEXT NOT NULL,
+            epsilon TEXT NOT NULL, delta TEXT NOT NULL, sensitivity REAL NOT NULL, noise_scale REAL NOT NULL,
+            cell_names_json TEXT NOT NULL, n_users INTEGER NOT NULL, public_population_size INTEGER,
+            dp_vector_json TEXT, post_processed_json TEXT, committed_at TEXT
+        )
+    """)
+    # Insert with empty mechanism and delta > 0 (must NOT be guessed as Gaussian)
+    conn.execute("""
+        INSERT INTO release_store VALUES (
+            'k_blank', 'r_blank', '', 1, 'rel_b', '2026-01-01', 'COMMITTED', '{}',
+            'user_prevalence', NULL, NULL, 'v1.0', '', '1.0', '1e-6', 1.0, 1.0, '[]', 50, 50, '[]', '[]', '2026-01-01'
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+    with pytest.raises(ValueError, match="missing, blank, or unsupported mechanism"):
+        PrivacyStateManager(db_path)

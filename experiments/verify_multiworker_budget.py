@@ -36,7 +36,12 @@ def worker_spend_task(db_path_str: str, worker_id: int, request_eps: float, requ
             canonical_semantics=semantics,
             global_budget=global_budget,
             budget_needed=budget_needed,
-            plan_metadata={"worker_id": worker_id},
+            plan_metadata={
+                "worker_id": worker_id,
+                "mechanism": "gaussian",
+                "sensitivity": 1.0,
+                "noise_scale": 1.0,
+            },
             allow_overrun=False,
         )
 

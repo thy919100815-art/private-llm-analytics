@@ -119,33 +119,46 @@ class RDPAccountant(PrivacyAccountant):
     def spent_epsilon(self) -> float:
         """Cumulative committed effective epsilon from authoritative state.
 
-        If external releases exist, returns the global_external RDP effective epsilon.
-        Otherwise falls back to total committed releases from state manager for backward compatibility.
+        If external releases exist under any active budget scope, computes the maximum
+        effective epsilon across all external budget scopes under RDP composition.
+        If no RDP releases exist, falls back to legacy state manager scalar spent.
         """
-        view = self.state_manager.get_privacy_view(
-            budget_scope_id="global_external",
-            delta_global=self.delta_global,
-            orders=self.orders,
-            epsilon_cap=self.epsilon_cap,
-            accountant_mode="rdp",
-        )
-        if view.release_count > 0:
-            return float(view.effective_epsilon)
+        active_scopes = self.state_manager.get_active_budget_scopes(exclude_internal=True)
+        if not active_scopes:
+            active_scopes = ["global_external"]
+
+        max_eps = 0.0
+        for scope in active_scopes:
+            view = self.state_manager.get_privacy_view(
+                budget_scope_id=scope,
+                delta_global=self.delta_global,
+                orders=self.orders,
+                epsilon_cap=self.epsilon_cap,
+                accountant_mode="rdp",
+            )
+            if view.release_count > 0:
+                max_eps = max(max_eps, float(view.effective_epsilon))
+        if max_eps > 0.0:
+            return max_eps
         total_eps, _ = self.state_manager.get_total_spent()
         return float(total_eps)
 
     @property
     def spent_delta(self) -> float:
         """Global delta policy parameter."""
-        view = self.state_manager.get_privacy_view(
-            budget_scope_id="global_external",
-            delta_global=self.delta_global,
-            orders=self.orders,
-            epsilon_cap=self.epsilon_cap,
-            accountant_mode="rdp",
-        )
-        if view.release_count > 0:
-            return float(self.delta_global)
+        active_scopes = self.state_manager.get_active_budget_scopes(exclude_internal=True)
+        if not active_scopes:
+            active_scopes = ["global_external"]
+        for scope in active_scopes:
+            view = self.state_manager.get_privacy_view(
+                budget_scope_id=scope,
+                delta_global=self.delta_global,
+                orders=self.orders,
+                epsilon_cap=self.epsilon_cap,
+                accountant_mode="rdp",
+            )
+            if view.release_count > 0:
+                return float(self.delta_global)
         _, total_delta = self.state_manager.get_total_spent()
         return float(total_delta)
 
@@ -164,24 +177,45 @@ class RDPAccountant(PrivacyAccountant):
             "All privacy accounting must be performed atomically via PrivacyStateManager."
         )
 
-    def get_total_spent(self) -> PrivacyBudget:
+    def get_total_spent(self, budget_scope_id: Optional[str] = None) -> PrivacyBudget:
         """Return effective epsilon and delta_global from current persistent state.
 
-        Strictly fail-closed: raises if persistent state cannot be read or parsed.
-        Only returns zero spend if explicitly confirmed that no releases exist.
+        If budget_scope_id is specified, queries that specific scope.
+        Otherwise, evaluates across active external budget scopes (maximum effective epsilon).
         """
-        view = self.state_manager.get_privacy_view(
-            budget_scope_id="global_external",
-            delta_global=self.delta_global,
-            orders=self.orders,
-            epsilon_cap=self.epsilon_cap,
-            accountant_mode="rdp",
-        )
-        eps_f = float(view.effective_epsilon)
-        if eps_f <= 0.0:
+        if budget_scope_id is not None:
+            view = self.state_manager.get_privacy_view(
+                budget_scope_id=budget_scope_id,
+                delta_global=self.delta_global,
+                orders=self.orders,
+                epsilon_cap=self.epsilon_cap,
+                accountant_mode="rdp",
+            )
+            return PrivacyBudget(
+                epsilon=float(view.effective_epsilon),
+                delta=float(self.delta_global),
+            )
+
+        active_scopes = self.state_manager.get_active_budget_scopes(exclude_internal=True)
+        if not active_scopes:
+            active_scopes = ["global_external"]
+
+        max_eps = 0.0
+        for scope in active_scopes:
+            view = self.state_manager.get_privacy_view(
+                budget_scope_id=scope,
+                delta_global=self.delta_global,
+                orders=self.orders,
+                epsilon_cap=self.epsilon_cap,
+                accountant_mode="rdp",
+            )
+            max_eps = max(max_eps, float(view.effective_epsilon))
+
+        if max_eps <= 0.0:
             total_eps, _ = self.state_manager.get_total_spent()
-            eps_f = max(float(total_eps), 1e-12)
+            max_eps = max(float(total_eps), 1e-12)
+
         return PrivacyBudget(
-            epsilon=eps_f,
+            epsilon=max_eps,
             delta=float(self.delta_global),
         )

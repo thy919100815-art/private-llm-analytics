@@ -181,8 +181,16 @@ class ReleaseOrchestrator:
             rc_config = getattr(app_config.privacy, "recipient_composition", None)
             rc_mode = rc_config.mode if rc_config else "global_external"
             rc_groups = rc_config.groups if rc_config else None
-            if self.state_manager.has_external_releases():
-                self.state_manager.verify_or_bind_policy(rc_mode, rc_groups)
+            rec_roles = {
+                name: r_cfg.role
+                for name, r_cfg in getattr(app_config.recipients, "recipients", {}).items()
+            } if hasattr(app_config, "recipients") else None
+            if self.state_manager.has_external_releases() or self.state_manager.has_policy_bound():
+                self.state_manager.verify_or_bind_policy(
+                    mode=rc_mode,
+                    groups=rc_groups,
+                    recipient_roles=rec_roles,
+                )
 
     def _get_rdp_policy(self):
         acct_cfg = getattr(self.config.privacy, "accountant", None)
@@ -281,6 +289,10 @@ class ReleaseOrchestrator:
         rc_config = getattr(self.config.privacy, "recipient_composition", None)
         rc_mode = rc_config.mode if rc_config else "global_external"
         rc_groups = rc_config.groups if rc_config else None
+        rec_roles = {
+            name: r_cfg.role
+            for name, r_cfg in getattr(self.config.recipients, "recipients", {}).items()
+        } if hasattr(self.config, "recipients") else None
         budget_scope_id = resolve_budget_scope_id(
             recipient=query.recipient,
             recipient_role=recipient_role,
@@ -291,7 +303,12 @@ class ReleaseOrchestrator:
         # Policy immutability check in Production (Section B)
         # MUST occur BEFORE cache lookup, raw data access, noise generation, budget reservation!
         if recipient_role == "external" and self.execution_mode == ExecutionMode.PRODUCTION:
-            self.state_manager.verify_or_bind_policy(rc_mode, rc_groups)
+            if self.state_manager.has_external_releases() or self.state_manager.has_policy_bound():
+                self.state_manager.verify_or_bind_policy(
+                    mode=rc_mode,
+                    groups=rc_groups,
+                    recipient_roles=rec_roles,
+                )
 
         effective_accountant_mode = "basic" if budget_scope_id == "internal" else self.accountant_mode
         if effective_accountant_mode == "rdp":
@@ -337,6 +354,10 @@ class ReleaseOrchestrator:
                     budget_scope_id=budget_scope_id,
                     accountant_mode=effective_accountant_mode,
                 )
+                view_fresh = self.get_privacy_view(query.recipient)
+                eps_fresh = float(view_fresh.effective_epsilon)
+                count_fresh = view_fresh.release_count
+                alpha_fresh = float(view_fresh.best_alpha) if view_fresh.best_alpha is not None else None
                 return self._finalize_output(
                     release_result=committed,
                     query=query,
@@ -347,10 +368,10 @@ class ReleaseOrchestrator:
                     release_key=plan.release_key,
                     budget_scope_id=budget_scope_id,
                     accountant_mode=effective_accountant_mode,
-                    effective_epsilon_before=eps_before,
-                    effective_epsilon_after=eps_before,
-                    best_alpha=float(view_before.best_alpha) if view_before.best_alpha is not None else None,
-                    release_count=count_before,
+                    effective_epsilon_before=eps_fresh,
+                    effective_epsilon_after=eps_fresh,
+                    best_alpha=alpha_fresh,
+                    release_count=count_fresh,
                     candidate_rdp=None,
                 )
 
@@ -432,6 +453,9 @@ class ReleaseOrchestrator:
             rdp_candidate_cost=candidate_rdp,
             epsilon_cap=effective_epsilon_cap,
             delta_global=effective_delta_global,
+            policy_mode=rc_mode if self.execution_mode == ExecutionMode.PRODUCTION else None,
+            policy_groups=rc_groups if self.execution_mode == ExecutionMode.PRODUCTION else None,
+            recipient_roles=rec_roles if self.execution_mode == ExecutionMode.PRODUCTION else None,
         )
 
         status, cached_res, reservation_id, release_id = res_tuple
@@ -443,6 +467,10 @@ class ReleaseOrchestrator:
                 budget_scope_id=budget_scope_id,
                 accountant_mode=effective_accountant_mode,
             )
+            view_fresh = self.get_privacy_view(query.recipient)
+            eps_fresh = float(view_fresh.effective_epsilon)
+            count_fresh = view_fresh.release_count
+            alpha_fresh = float(view_fresh.best_alpha) if view_fresh.best_alpha is not None else None
             return self._finalize_output(
                 release_result=cached_res,
                 query=query,
@@ -453,10 +481,10 @@ class ReleaseOrchestrator:
                 release_key=plan.release_key,
                 budget_scope_id=budget_scope_id,
                 accountant_mode=effective_accountant_mode,
-                effective_epsilon_before=eps_before,
-                effective_epsilon_after=eps_before,
-                best_alpha=float(view_before.best_alpha) if view_before.best_alpha is not None else None,
-                release_count=count_before,
+                effective_epsilon_before=eps_fresh,
+                effective_epsilon_after=eps_fresh,
+                best_alpha=alpha_fresh,
+                release_count=count_fresh,
                 candidate_rdp=None,
             )
 
