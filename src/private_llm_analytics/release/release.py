@@ -155,15 +155,33 @@ class ReleaseOrchestrator:
 
         acct_cfg = getattr(app_config.privacy, "accountant", None)
         self.accountant_mode = getattr(acct_cfg, "mode", "rdp") if acct_cfg else "rdp"
-        orders = getattr(acct_cfg, "rdp_orders", DEFAULT_RDP_ORDERS)
-        delta_global = getattr(acct_cfg, "delta", app_config.privacy.global_budget.delta)
-        epsilon_cap = getattr(acct_cfg, "epsilon_cap", app_config.privacy.global_budget.epsilon)
+        if self.accountant_mode == "rdp" and acct_cfg:
+            self.epsilon_cap = getattr(acct_cfg, "epsilon_cap", 4.0)
+            self.delta_global = getattr(acct_cfg, "delta_global", 1e-6)
+            self.orders = getattr(acct_cfg, "orders", DEFAULT_RDP_ORDERS)
+        else:
+            self.epsilon_cap = app_config.privacy.global_budget.epsilon
+            self.delta_global = app_config.privacy.global_budget.delta
+            self.orders = DEFAULT_RDP_ORDERS
+
         self.rdp_accountant = RDPAccountant(
-            epsilon_cap=epsilon_cap,
-            delta_global=delta_global,
-            orders=orders,
+            epsilon_cap=self.epsilon_cap,
+            delta_global=self.delta_global,
+            orders=self.orders,
             state_manager=self.state_manager,
         )
+
+    def _get_rdp_policy(self):
+        acct_cfg = getattr(self.config.privacy, "accountant", None)
+        if acct_cfg and getattr(acct_cfg, "mode", "rdp") == "rdp":
+            eps_cap = _to_decimal(getattr(acct_cfg, "epsilon_cap", 4.0))
+            delta_g = _to_decimal(getattr(acct_cfg, "delta_global", 1e-6))
+            orders = getattr(acct_cfg, "orders", DEFAULT_RDP_ORDERS)
+        else:
+            eps_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
+            delta_g = _to_decimal(self.config.privacy.global_budget.delta)
+            orders = DEFAULT_RDP_ORDERS
+        return eps_cap, delta_g, orders
 
 
     def _trigger_hook(self, hook_name: str) -> None:
@@ -278,6 +296,12 @@ class ReleaseOrchestrator:
             groups=rc_groups,
         )
         effective_accountant_mode = "basic" if budget_scope_id == "internal" else self.accountant_mode
+        if effective_accountant_mode == "rdp":
+            effective_epsilon_cap, effective_delta_global, effective_orders = self._get_rdp_policy()
+        else:
+            effective_epsilon_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
+            effective_delta_global = _to_decimal(self.config.privacy.global_budget.delta)
+            effective_orders = DEFAULT_RDP_ORDERS
 
         # 8. Check persistent state (single source of truth: no legacy cache fallback)
         if reuse_cache:
@@ -299,6 +323,8 @@ class ReleaseOrchestrator:
                     release_key=plan.release_key,
                     budget_scope_id=budget_scope_id,
                     accountant_mode=effective_accountant_mode,
+                    effective_epsilon=getattr(committed, "effective_epsilon", None),
+                    best_alpha=getattr(committed, "best_alpha", None),
                 )
 
         # 9. Fault hook: before_budget_reserve
@@ -323,7 +349,7 @@ class ReleaseOrchestrator:
             candidate_rdp = compute_gaussian_rdp(
                 sigma=candidate_sigma,
                 sensitivity=plan.sensitivity,
-                orders=self.rdp_accountant.orders,
+                orders=effective_orders,
             )
         elif "laplace" in plan.mechanism:
             mech_for_scale = LaplaceMechanism(
@@ -334,7 +360,7 @@ class ReleaseOrchestrator:
             candidate_sigma = mech_for_scale.noise_scale
             candidate_rdp = compute_laplace_rdp_bound(
                 epsilon=plan.epsilon,
-                orders=self.rdp_accountant.orders,
+                orders=effective_orders,
             )
         else:
             raise UnsupportedMechanismError(f"Unsupported mechanism: {plan.mechanism}")
@@ -361,9 +387,6 @@ class ReleaseOrchestrator:
         else:
             allow_overrun = self.config.privacy.release.allow_budget_overrun
 
-        effective_epsilon_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
-        effective_delta_global = _to_decimal(self.config.privacy.global_budget.delta)
-
         res_tuple = self.state_manager.reserve_or_get_release(
             release_key=plan.release_key,
             canonical_semantics=plan.canonical_semantics,
@@ -378,7 +401,7 @@ class ReleaseOrchestrator:
             budget_scope_id=budget_scope_id,
             recipient=query.recipient,
             recipient_role=recipient_role,
-            rdp_orders=self.rdp_accountant.orders,
+            rdp_orders=effective_orders,
             rdp_candidate_cost=candidate_rdp,
             epsilon_cap=effective_epsilon_cap,
             delta_global=effective_delta_global,
@@ -459,6 +482,7 @@ class ReleaseOrchestrator:
                 accountant_mode=effective_accountant_mode,
                 rdp_cost_json=rdp_vector_to_json(candidate_rdp) if candidate_rdp else None,
                 delta_global=effective_delta_global,
+                orders=effective_orders,
             )
             committed = True
 
@@ -588,14 +612,20 @@ class ReleaseOrchestrator:
         eff_eps_str = str(effective_epsilon) if effective_epsilon is not None else None
         best_alpha_float = float(best_alpha) if best_alpha is not None else None
 
+        if accountant_mode == "rdp":
+            eff_cap, eff_delta_g, _ = self._get_rdp_policy()
+        else:
+            eff_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
+            eff_delta_g = _to_decimal(self.config.privacy.global_budget.delta)
+
         output["privacy_accounting"] = {
             "accountant_mode": accountant_mode,
             "budget_scope_id": budget_scope_id,
             "effective_epsilon": eff_eps_float,
             "effective_epsilon_decimal": eff_eps_str,
             "best_alpha": best_alpha_float,
-            "epsilon_cap": float(self.config.privacy.global_budget.epsilon),
-            "delta_global": float(self.config.privacy.global_budget.delta),
+            "epsilon_cap": float(eff_cap),
+            "delta_global": float(eff_delta_g),
         }
         return output
 
@@ -613,12 +643,21 @@ class ReleaseOrchestrator:
             mode=rc_mode,
             groups=rc_groups,
         )
+
+        eff_mode = "basic" if scope_id == "internal" else self.accountant_mode
+        if eff_mode == "rdp":
+            eff_cap, eff_delta_g, eff_orders = self._get_rdp_policy()
+        else:
+            eff_cap = _to_decimal(self.config.privacy.global_budget.epsilon)
+            eff_delta_g = _to_decimal(self.config.privacy.global_budget.delta)
+            eff_orders = DEFAULT_RDP_ORDERS
+
         return self.state_manager.get_privacy_view(
             budget_scope_id=scope_id,
-            delta_global=self.config.privacy.global_budget.delta,
-            orders=self.rdp_accountant.orders,
-            epsilon_cap=self.config.privacy.global_budget.epsilon,
-            accountant_mode=self.accountant_mode,
+            delta_global=eff_delta_g,
+            orders=eff_orders,
+            epsilon_cap=eff_cap,
+            accountant_mode=eff_mode,
         )
 
 

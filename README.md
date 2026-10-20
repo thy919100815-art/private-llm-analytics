@@ -186,18 +186,17 @@ For Rényi divergence order $\alpha > 1$, Gaussian mechanism noise scale $\sigma
 $$\text{RDP}(\alpha) = \frac{\alpha \Delta_2^2}{2 \sigma^2}$$
 
 For pure $\varepsilon$-DP Laplace releases, we apply the conservative pure-DP bound:
-$$\text{RDP}(\alpha) = \varepsilon + \frac{\ln(1 + \alpha(\exp(\varepsilon) - 1))}{\alpha - 1}$$
+$$\text{RDP}(\alpha) \le \varepsilon \quad (\forall \alpha > 1)$$
 
 #### Historical Additive Composition
 Over a sequence of $T$ releases, privacy loss composes by pointwise additive summation at each candidate order $\alpha$:
 $$\text{RDP}_{\text{total}}(\alpha) = \sum_{t=1}^T \text{RDP}_t(\alpha)$$
 
 #### Conversion to Cumulative $(\varepsilon, \delta)$
-Given an enterprise policy parameter $\delta_{\text{global}} \in (0, 1)$, the effective cumulative privacy loss is the minimum across evaluated orders $\alpha \in \{1.25, 1.5, 2, 3, 4, 5, 8, 10, 16, 32, 64, 128\}$:
+Given an enterprise policy parameter $\delta_{\text{global}} \in (0, 1)$, the effective cumulative privacy loss is computed via exact Decimal logarithm without floating-point conversion drift:
 $$\varepsilon_{\text{effective}} = \min_{\alpha > 1} \left[ \text{RDP}_{\text{total}}(\alpha) + \frac{\ln(1 / \delta_{\text{global}})}{\alpha - 1} \right]$$
 
-To ensure mathematical soundness when $T=1$ (where RDP conversion carries a slight tail penalty), the system evaluates the composite bound:
-$$\varepsilon_{\text{authorized}} = \min\left( \sum_{t=1}^T \varepsilon_t^{\text{basic}}, \varepsilon_{\text{effective}}^{\text{RDP}} \right)$$
+Authoritative production authorization strictly enforces $\varepsilon_{\text{effective}} \le \varepsilon_{\text{cap}}$ against the target $\delta_{\text{global}}$, avoiding unproved mixed bounds across differing $\delta$ levels.
 
 ### 5.3 Multi-Recipient Composition Policies
 External model providers (`provider_a`, `provider_b`, `provider_c`) interact under configurable collusion policies:
@@ -220,7 +219,7 @@ Repeated queries with identical semantic parameters return memoized outputs with
 
 ### 5.6 Empirical Longitudinal Findings (Exp 05–08)
 Empirical evaluations demonstrate:
-1. **Exp 05 (Basic vs RDP Composition)**: At $T=1$, basic and RDP composite bounds match at $\varepsilon=1.00$. At $T=100$, basic composition accumulates to $\varepsilon=100.00$, whereas RDP composition limits cumulative privacy loss to $\varepsilon=15.31$ — an **84.7% privacy savings**.
+1. **Exp 05 (Basic vs RDP Composition)**: Evaluates distinct guarantees honestly without artificial min: Basic $(\sum \varepsilon_i, \sum \delta_i)$ vs RDP $(\varepsilon_{\text{RDP}}, \delta_{\text{global}})$. At $T=100$, basic composition accumulates to $(100.0, 10^{-4})$, whereas RDP limits cumulative privacy loss to $(15.31, 10^{-6})$.
 2. **Exp 06 (Release Frequency Planning)**: Under an $\varepsilon_{\text{cap}}=10.0$ ceiling over 90 days, daily releases exhaust the cap at release 48 (42 rejected), weekly releases execute all 13 releases with 48.9% budget utilization ($\varepsilon=4.89$), and monthly releases consume $\varepsilon=2.27$.
 3. **Exp 07 (Collusion Overhead)**: Under `GLOBAL_EXTERNAL`, the budget cap is reached at week 8; under `COLLUSION_GROUP`, group A+B exhausts at week 10 while isolated group C executes unhindered.
 4. **Exp 08 (Longitudinal Authorization Trajectory)**: Verifies step-by-step transaction safety and cap enforcement until exhaustion across 15 sequential queries.

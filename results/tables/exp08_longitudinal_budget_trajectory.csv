@@ -1,6 +1,6 @@
 step,metric,query_epsilon,epsilon_before,epsilon_after,best_alpha,decision,remaining_epsilon,budget_cap
-1,user_prevalence,1.0,0.0,1.0,32.0,ALLOWED,4.0,5.0
-2,user_normalized_share,1.0,1.0,1.8175,16.0,ALLOWED,3.1825,5.0
+1,user_prevalence,1.0,0.0,1.3421,32.0,ALLOWED,3.6579,5.0
+2,user_normalized_share,1.0,1.3421,1.8175,16.0,ALLOWED,3.1825,5.0
 3,interaction_volume,1.0,1.8175,2.2657,16.0,ALLOWED,2.7343,5.0
 4,user_prevalence,1.0,2.2657,2.6556,10.0,ALLOWED,2.3444,5.0
 5,user_normalized_share,1.0,2.6556,2.9358,10.0,ALLOWED,2.0642,5.0

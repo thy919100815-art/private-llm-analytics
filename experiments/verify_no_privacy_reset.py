@@ -68,6 +68,8 @@ def test_lifetime_accumulation():
         config.privacy.history.mode = "lifetime"
         config.privacy.global_budget.epsilon = 10.0
         config.privacy.global_budget.delta = 1e-5
+        config.privacy.accountant.epsilon_cap = 10.0
+        config.privacy.accountant.delta_global = 1e-5
 
         state_mgr = PrivacyStateManager(db_path)
         orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)

@@ -51,6 +51,8 @@ def test_same_release_replay_zero_incremental_cost(tmp_path, test_matrix):
     config = load_app_config("configs")
     config.privacy.global_budget.epsilon = 4.0
     config.privacy.global_budget.delta = 1e-5
+    config.privacy.accountant.epsilon_cap = 4.0
+    config.privacy.accountant.delta_global = 1e-5
     state_mgr = PrivacyStateManager(tmp_path / "privacy_state.db")
     orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
 
@@ -89,6 +91,8 @@ def test_recipient_isolation_per_recipient(tmp_path, test_matrix):
     config.privacy.recipient_composition.mode = "per_recipient"
     config.privacy.global_budget.epsilon = 1.5
     config.privacy.global_budget.delta = 1e-5
+    config.privacy.accountant.epsilon_cap = 1.5
+    config.privacy.accountant.delta_global = 1e-5
     state_mgr = PrivacyStateManager(tmp_path / "privacy_state.db")
     orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
 
@@ -124,6 +128,8 @@ def test_recipient_collusion_group(tmp_path, test_matrix):
     # Cap allows about 1.5 epsilon
     config.privacy.global_budget.epsilon = 1.5
     config.privacy.global_budget.delta = 1e-5
+    config.privacy.accountant.epsilon_cap = 1.5
+    config.privacy.accountant.delta_global = 1e-5
     state_mgr = PrivacyStateManager(tmp_path / "privacy_state.db")
     orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
 
@@ -151,6 +157,8 @@ def test_global_external_blocks_provider_switching_bypass(tmp_path, test_matrix)
     config.privacy.recipient_composition.mode = "global_external"
     config.privacy.global_budget.epsilon = 1.5
     config.privacy.global_budget.delta = 1e-5
+    config.privacy.accountant.epsilon_cap = 1.5
+    config.privacy.accountant.delta_global = 1e-5
     state_mgr = PrivacyStateManager(tmp_path / "privacy_state.db")
     orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
 
@@ -174,6 +182,8 @@ def test_historical_composition_rdp_benefit(tmp_path, test_matrix):
     config = load_app_config("configs")
     config.privacy.global_budget.epsilon = 4.0
     config.privacy.global_budget.delta = 1e-5
+    config.privacy.accountant.epsilon_cap = 4.0
+    config.privacy.accountant.delta_global = 1e-5
     state_mgr = PrivacyStateManager(tmp_path / "privacy_state.db")
     orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
 

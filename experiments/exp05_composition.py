@@ -99,33 +99,29 @@ def run_composition_experiment(
 
     records = []
     for t in t_values:
-        basic_eps = float(epsilon_release * t)
+        basic_eps_sum = float(epsilon_release * t)
+        basic_delta_sum = float(delta_calibration * t)
 
         # RDP composition: scale vector by t
         composed_rdp = compose_rdp_vectors([single_rdp] * t, orders=DEFAULT_RDP_ORDERS)
         best_alpha, rdp_eff = rdp_to_epsilon_delta(composed_rdp, delta_global=delta_global)
-        rdp_eps = float(rdp_eff)
-        effective_eps = min(basic_eps, rdp_eps)
-
-        reduction = max(0.0, (basic_eps - effective_eps) / basic_eps) if basic_eps > 0 else 0.0
+        rdp_eps_at_delta = float(rdp_eff)
 
         records.append({
             "T": t,
             "epsilon_per_release": epsilon_release,
             "delta_calibration": delta_calibration,
             "delta_global": delta_global,
-            "basic_epsilon": round(basic_eps, 4),
-            "rdp_epsilon": round(rdp_eps, 4),
-            "effective_epsilon": round(effective_eps, 4),
-            "best_alpha": float(best_alpha),
-            "relative_reduction": round(reduction, 4),
-            "reduction_percentage": f"{reduction * 100:.1f}%",
+            "basic_epsilon_sum": round(basic_eps_sum, 4),
+            "basic_delta_sum": round(basic_delta_sum, 10),
+            "rdp_epsilon_at_delta_global": round(rdp_eps_at_delta, 4),
+            "rdp_best_alpha": float(best_alpha),
             "utility_mae_mean": round(mae_mean, 6),
             "utility_rmse_mean": round(rmse_mean, 6),
             "utility_tv_mean": round(tv_mean, 6),
             "utility_top1_accuracy": round(top1_acc, 4),
         })
-        print(f"  T={t:3d} | Basic: {basic_eps:7.2f} | RDP: {rdp_eps:7.2f} | Effective: {effective_eps:7.2f} | Best alpha: {float(best_alpha):4.1f} | Reduction: {reduction*100:5.1f}%")
+        print(f"  T={t:3d} | Basic: ({basic_eps_sum:7.2f}, delta={basic_delta_sum:.1e}) | RDP: ({rdp_eps_at_delta:7.2f}, delta={delta_global:.1e}) | Best alpha: {float(best_alpha):4.1f}")
 
     summary_df = pd.DataFrame(records)
 
@@ -143,12 +139,12 @@ def run_composition_experiment(
     plot_single_line_chart(
         x=[str(r["T"]) for r in records],
         y_series={
-            "Basic Composition": [r["basic_epsilon"] for r in records],
-            "RDP Composition": [r["effective_epsilon"] for r in records],
+            "Basic Composition (sum eps at sum delta)": [r["basic_epsilon_sum"] for r in records],
+            "RDP Composition (at delta_global)": [r["rdp_epsilon_at_delta_global"] for r in records],
         },
         x_label="Number of Releases (T)",
         y_label="Cumulative Epsilon",
-        title="Privacy Loss: Basic vs RDP Composition (N=50,000, delta=1e-6)",
+        title="Privacy Loss: Basic vs RDP Composition (N=50,000, delta_global=1e-6)",
         output_path=str(figures_dir / "exp05_composition"),
     )
 

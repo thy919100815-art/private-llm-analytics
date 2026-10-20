@@ -75,7 +75,7 @@ class RDPAccountant(PrivacyAccountant):
     ) -> Dict[str, Any]:
         """Preview resulting effective epsilon and decision without committing state."""
         base_rdp = current_total_rdp or {alpha: Decimal("0.0") for alpha in self.orders}
-        composed = compose_rdp_vectors([base_rdp, candidate_rdp])
+        composed = compose_rdp_vectors([base_rdp, candidate_rdp], orders=self.orders)
 
         best_alpha_before, eps_before = (
             rdp_to_epsilon_delta(base_rdp, self.delta_global)
@@ -110,16 +110,19 @@ class RDPAccountant(PrivacyAccountant):
         pass
 
     def get_total_spent(self) -> PrivacyBudget:
-        """Return effective epsilon and delta_global from current persistent state."""
-        try:
-            view = self.state_manager.get_privacy_view(
-                scope_id="global_external",
-                delta_global=self.delta_global,
-                orders=self.orders,
-            )
-            return PrivacyBudget(
-                epsilon=float(view.effective_epsilon),
-                delta=float(self.delta_global),
-            )
-        except Exception:
-            return PrivacyBudget(epsilon=0.0, delta=float(self.delta_global))
+        """Return effective epsilon and delta_global from current persistent state.
+
+        Strictly fail-closed: raises if persistent state cannot be read or parsed.
+        Only returns zero spend if explicitly confirmed that no releases exist.
+        """
+        view = self.state_manager.get_privacy_view(
+            budget_scope_id="global_external",
+            delta_global=self.delta_global,
+            orders=self.orders,
+            epsilon_cap=self.epsilon_cap,
+            accountant_mode="rdp",
+        )
+        return PrivacyBudget(
+            epsilon=float(view.effective_epsilon),
+            delta=float(self.delta_global),
+        )

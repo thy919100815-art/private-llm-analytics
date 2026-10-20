@@ -62,6 +62,8 @@ def test_same_key_singleflight_rdp_no_duplicate_charge(tmp_path, sample_user_mat
     config = load_app_config("configs")
     config.privacy.global_budget.epsilon = 10.0
     config.privacy.global_budget.delta = 1e-5
+    config.privacy.accountant.epsilon_cap = 10.0
+    config.privacy.accountant.delta_global = 1e-5
 
     state_mgr = PrivacyStateManager(db_path)
 
@@ -113,8 +115,8 @@ def test_crash_recovery_stale_reservation_frees_rdp_budget(tmp_path):
     delta_global = 1e-5
     rdp_candidate = compute_gaussian_rdp(sigma=1.0, sensitivity=1.0, orders=orders)
 
-    # Set cap allowing exactly 1 release (1.0 <= 1.5, but 1.0 + 1.0 = 2.0 > 1.5)
-    cap = 1.5
+    # Set cap allowing exactly 1 release (5.38 <= 6.0, but 5.38 + 5.38 = 8.57 > 6.0)
+    cap = 6.0
     global_budget = PrivacyBudget(epsilon=cap, delta=delta_global)
     needed_budget = PrivacyBudget(epsilon=1.0, delta=1e-6)
 
@@ -374,8 +376,8 @@ def test_multiworker_rdp_budget_cap_enforcement(tmp_path):
     rdp_cand = compute_gaussian_rdp(sigma=2.0, sensitivity=1.0, orders=orders)
     needed_budget = PrivacyBudget(epsilon=1.0, delta=1e-6)
 
-    # Set cap allowing exactly 3 releases (3.0 <= 3.5, 4.0 > 3.5)
-    cap = 3.5
+    # Set cap allowing exactly 3 releases (3 releases = 4.64 <= 5.0, 4 releases = 5.38 > 5.0)
+    cap = 5.0
     global_budget = PrivacyBudget(epsilon=cap, delta=delta_global)
 
     def worker_attempt(worker_id: int) -> str:

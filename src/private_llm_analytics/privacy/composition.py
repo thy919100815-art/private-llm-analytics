@@ -124,9 +124,14 @@ def resolve_budget_scope_id(
         return f"recipient:{recipient}"
     elif norm_mode == "collusion_group":
         if groups:
-            for grp_name, members in groups.items():
-                if recipient in members:
-                    return f"collusion:{grp_name}"
+            matched_groups = [grp_name for grp_name, members in groups.items() if recipient in members]
+            if len(matched_groups) > 1:
+                raise ValueError(
+                    f"Collusion group overlap detected: recipient '{recipient}' belongs to multiple groups: {matched_groups}. "
+                    "Overlapping collusion groups are strictly forbidden."
+                )
+            if matched_groups:
+                return f"collusion:{matched_groups[0]}"
         return f"collusion:{recipient}"
     else:
         raise ValueError(f"Unknown recipient composition mode: '{mode}'")

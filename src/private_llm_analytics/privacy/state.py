@@ -429,28 +429,23 @@ class PrivacyStateManager:
             legacy_releases = cursor.fetchall()
             for r_key, mech, sens, sig, r_res_id, r_metric in legacy_releases:
                 if "gaussian" in str(mech).lower():
-                    resolved_sens = sens
-                    if (resolved_sens is None or resolved_sens <= 0) and r_metric:
-                        if r_metric == "user_prevalence":
-                            resolved_sens = 3.0
-                        elif r_metric == "user_normalized_share":
-                            resolved_sens = 1.0
-                        elif r_metric == "interaction_volume":
-                            resolved_sens = 20.0
-                    if resolved_sens is not None and resolved_sens > 0 and sig is not None and sig > 0:
-                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=resolved_sens, orders=DEFAULT_RDP_ORDERS)
+                    if sens is not None and sens > 0 and sig is not None and sig > 0:
+                        rdp_v = compute_gaussian_rdp(sigma=sig, sensitivity=sens, orders=DEFAULT_RDP_ORDERS)
                         rdp_j = rdp_vector_to_json(rdp_v)
                         orders_j = json.dumps([float(o) for o in DEFAULT_RDP_ORDERS])
                         cursor.execute(
                             "UPDATE release_store SET rdp_cost_json = ?, rdp_orders_json = ?, sensitivity = ? WHERE release_key = ?",
-                            (rdp_j, orders_j, resolved_sens, r_key),
+                            (rdp_j, orders_j, sens, r_key),
                         )
                         cursor.execute(
                             "UPDATE privacy_reservations SET rdp_cost_json = ?, rdp_orders_json = ? WHERE reservation_id = ?",
                             (rdp_j, orders_j, r_res_id),
                         )
                     else:
-                        raise ValueError(f"Legacy release '{r_key}' missing valid sensitivity/sigma for RDP migration.")
+                        raise ValueError(
+                            f"Legacy release '{r_key}' missing valid sensitivity/sigma for RDP migration "
+                            f"(sensitivity={sens}, noise_scale={sig}). Failing closed."
+                        )
 
             conn.commit()
 
@@ -475,7 +470,12 @@ class PrivacyStateManager:
         if row is None or not row["dp_vector_json"]:
             return None
 
-        return self._row_to_release_result(row)
+        res = self._row_to_release_result(row)
+        if "effective_epsilon" in row.keys() and row["effective_epsilon"]:
+            setattr(res, "effective_epsilon", row["effective_epsilon"])
+        if "best_alpha" in row.keys() and row["best_alpha"]:
+            setattr(res, "best_alpha", row["best_alpha"])
+        return res
 
     def _row_to_release_result(self, row: sqlite3.Row) -> DPReleaseResult:
         dp_vec = np.array(json.loads(row["dp_vector_json"]), dtype=np.float64)
@@ -722,7 +722,7 @@ class PrivacyStateManager:
                             if vecs:
                                 composed = compose_rdp_vectors(vecs, orders=eff_orders)
                                 best_a, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=eff_delta)
-                                eff_eps = min(basic_sum, rdp_eff)
+                                eff_eps = rdp_eff
                                 if eff_eps > global_eps:
                                     raise PrivacyBudgetExceededError(
                                         f"Requested release in scope '{budget_scope_id}' exceeds RDP privacy budget cap: "
@@ -909,6 +909,7 @@ class PrivacyStateManager:
         effective_epsilon: Optional[Any] = None,
         best_alpha: Optional[Any] = None,
         delta_global: Optional[Any] = None,
+        orders: Optional[Sequence[Any]] = None,
     ) -> Tuple[Optional[Decimal], Optional[Decimal]]:
         """Atomically mark reservation and release as COMMITTED, and record ledger audit event.
 
@@ -977,6 +978,7 @@ class PrivacyStateManager:
                     )
                     dg_row = cursor.fetchone()
                     raw_dg = dg_row["delta_global"] if dg_row and dg_row["delta_global"] else delta_global
+                    eff_orders = [to_decimal(o) for o in (orders or DEFAULT_RDP_ORDERS)]
                     eff_delta = validate_delta(raw_dg) if raw_dg is not None else Decimal("1.0e-5")
 
                     cursor.execute(
@@ -985,11 +987,10 @@ class PrivacyStateManager:
                     )
                     committed_rdps = cursor.fetchall()
                     vecs = [rdp_vector_from_json(r["rdp_cost_json"]) for r in committed_rdps if r["rdp_cost_json"]]
-                    basic_sum = sum(_to_decimal(r["epsilon"]) for r in committed_rdps)
                     if vecs:
-                        composed = compose_rdp_vectors(vecs)
+                        composed = compose_rdp_vectors(vecs, orders=eff_orders)
                         best_alpha_dec, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=eff_delta)
-                        eff_eps_dec = min(basic_sum, rdp_eff)
+                        eff_eps_dec = rdp_eff
 
                 eff_eps_str = str(eff_eps_dec) if eff_eps_dec is not None else None
                 best_alpha_str = str(best_alpha_dec) if best_alpha_dec is not None else None
@@ -1392,15 +1393,18 @@ class PrivacyStateManager:
         resolved_mode = accountant_mode or (rows[0]["accountant_mode"] if rows else "rdp")
 
         if resolved_mode == "rdp":
-            vecs = []
-            for r in rows:
-                if r["rdp_cost_json"]:
-                    vecs.append(rdp_vector_from_json(r["rdp_cost_json"]))
-            if vecs:
+            if len(rows) > 0:
+                vecs = []
+                for r in rows:
+                    raw_rdp = r["rdp_cost_json"]
+                    if not raw_rdp:
+                        raise ValueError(
+                            f"Corrupted release record in scope '{budget_scope_id}': committed release missing RDP cost data."
+                        )
+                    vecs.append(rdp_vector_from_json(raw_rdp))
                 cum_rdp = compose_rdp_vectors(vecs, orders=eff_orders)
                 best_alpha, rdp_eff = rdp_to_epsilon_delta(cum_rdp, delta_global=eff_delta)
-                basic_sum = sum(_to_decimal(r["epsilon"]) for r in rows)
-                eff_eps = min(basic_sum, rdp_eff)
+                eff_eps = rdp_eff
             else:
                 cum_rdp = {o: Decimal("0.0") for o in eff_orders}
                 best_alpha = None

@@ -6,8 +6,8 @@ composition, and conversion to (epsilon, delta)-DP.
 """
 
 from decimal import Decimal, getcontext
+import decimal
 import json
-import math
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 # Ensure high precision for Decimal calculations (minimum 50 digits)
@@ -113,7 +113,7 @@ def compose_rdp_vectors(
         RDP_total(alpha) = sum_t RDP_t(alpha)
 
     Preconditions:
-        - All vectors must share identical orders.
+        - All vectors must share required target orders.
         - Summation must be performed independently per alpha before conversion.
     """
     if not rdp_vectors:
@@ -123,10 +123,10 @@ def compose_rdp_vectors(
 
     target_orders = [to_decimal(a) for a in orders] if orders is not None else list(rdp_vectors[0].keys())
     for idx, v in enumerate(rdp_vectors):
-        if set(v.keys()) != set(target_orders):
+        missing = [alpha for alpha in target_orders if alpha not in v]
+        if missing:
             raise ValueError(
-                f"Cannot compose RDP vectors with mismatched orders at index {idx}: "
-                f"expected {target_orders}, got {list(v.keys())}"
+                f"Cannot compose RDP vectors: vector at index {idx} missing required orders {missing}"
             )
 
     total: Dict[Decimal, Decimal] = {alpha: Decimal("0.0") for alpha in target_orders}
@@ -157,29 +157,31 @@ def rdp_to_epsilon_delta(
     if not rdp_vector:
         raise ValueError("Cannot convert empty RDP vector.")
 
-    dec_delta = validate_delta(delta_global)
-    # Compute ln(1 / delta) using high precision math
-    # float(dec_delta) is safe for log since delta is typically 1e-15 to 1e-3
-    ln_inv_delta = Decimal(str(math.log(1.0 / float(dec_delta))))
+    with decimal.localcontext() as ctx:
+        ctx.prec = 60
+        dec_delta = validate_delta(delta_global)
+        # Exact Decimal logarithm: ln(1 / delta) = -ln(delta)
+        # Eliminates IEEE-754 binary floating-point drift (precision >= 50 digits)
+        ln_inv_delta = -dec_delta.ln()
 
-    best_alpha: Optional[Decimal] = None
-    min_eps: Optional[Decimal] = None
+        best_alpha: Optional[Decimal] = None
+        min_eps: Optional[Decimal] = None
 
-    for alpha, rdp_cost in rdp_vector.items():
-        dec_alpha = to_decimal(alpha)
-        dec_cost = to_decimal(rdp_cost)
-        if dec_alpha <= Decimal("1.0"):
-            raise ValueError(f"Invalid order alpha={alpha} in conversion")
+        for alpha, rdp_cost in rdp_vector.items():
+            dec_alpha = to_decimal(alpha)
+            dec_cost = to_decimal(rdp_cost)
+            if dec_alpha <= Decimal("1.0"):
+                raise ValueError(f"Invalid order alpha={alpha} in conversion")
 
-        denom = dec_alpha - Decimal("1.0")
-        eps_alpha = dec_cost + (ln_inv_delta / denom)
+            denom = dec_alpha - Decimal("1.0")
+            eps_alpha = dec_cost + (ln_inv_delta / denom)
 
-        if min_eps is None or eps_alpha < min_eps:
-            min_eps = eps_alpha
-            best_alpha = dec_alpha
+            if min_eps is None or eps_alpha < min_eps:
+                min_eps = eps_alpha
+                best_alpha = dec_alpha
 
-    assert min_eps is not None and best_alpha is not None
-    return best_alpha, min_eps
+        assert min_eps is not None and best_alpha is not None
+        return best_alpha, min_eps
 
 
 def rdp_vector_to_json(rdp_vector: Dict[Decimal, Decimal]) -> str:

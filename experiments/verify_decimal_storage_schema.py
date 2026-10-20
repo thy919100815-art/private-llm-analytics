@@ -102,6 +102,7 @@ def main():
                 recipient TEXT NOT NULL,
                 epsilon REAL NOT NULL,
                 delta REAL NOT NULL,
+                sensitivity REAL NOT NULL,
                 mechanism TEXT NOT NULL,
                 noise_scale REAL NOT NULL,
                 result_json TEXT NOT NULL
@@ -135,7 +136,7 @@ def main():
         """)
         conn.execute("""
             INSERT INTO release_store VALUES (
-                'key_old_1', 'res_old_1', 'owner_1', 1, 'rel_old_1', '2026-01-01T00:00:00Z', 'COMMITTED', '{}', 'user_prevalence', 'internal', 0.1, 0.00001, 'gaussian', 1.0, '{}'
+                'key_old_1', 'res_old_1', 'owner_1', 1, 'rel_old_1', '2026-01-01T00:00:00Z', 'COMMITTED', '{}', 'user_prevalence', 'internal', 0.1, 0.00001, 3.0, 'gaussian', 1.0, '{}'
             )
         """)
         conn.execute("""

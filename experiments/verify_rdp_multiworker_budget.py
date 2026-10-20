@@ -106,7 +106,7 @@ def main():
         db_path = Path(tmp_dir) / "privacy_state.db"
         state_mgr = PrivacyStateManager(db_path)
 
-        cap = 3.5
+        cap = 5.0
         delta_global = 1e-5
         n_workers = 8
 

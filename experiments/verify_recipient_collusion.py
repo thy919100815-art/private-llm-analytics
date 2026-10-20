@@ -55,6 +55,8 @@ def test_global_external():
         # Set a cap that allows roughly one 1.0 epsilon release, but not two
         config.privacy.global_budget.epsilon = 1.5
         config.privacy.global_budget.delta = 1e-5
+        config.privacy.accountant.epsilon_cap = 1.5
+        config.privacy.accountant.delta_global = 1e-5
 
         state_mgr = PrivacyStateManager(db_path)
         orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
@@ -94,6 +96,8 @@ def test_collusion_group():
         }
         config.privacy.global_budget.epsilon = 1.5
         config.privacy.global_budget.delta = 1e-5
+        config.privacy.accountant.epsilon_cap = 1.5
+        config.privacy.accountant.delta_global = 1e-5
 
         state_mgr = PrivacyStateManager(db_path)
         orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)
@@ -136,6 +140,8 @@ def test_per_recipient():
         config.privacy.recipient_composition.mode = "per_recipient"
         config.privacy.global_budget.epsilon = 1.5
         config.privacy.global_budget.delta = 1e-5
+        config.privacy.accountant.epsilon_cap = 1.5
+        config.privacy.accountant.delta_global = 1e-5
 
         state_mgr = PrivacyStateManager(db_path)
         orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)

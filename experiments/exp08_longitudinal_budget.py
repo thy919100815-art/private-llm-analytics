@@ -31,6 +31,7 @@ def run_longitudinal_budget_experiment(
     n_users: int = 50000,
     epsilon_per_release: float = 1.0,
     delta_calibration: float = 1e-6,
+    delta_global: float = 1e-6,
     epsilon_cap: float = 5.0,
     max_steps: int = 15,
     seed: int = 42,
@@ -57,6 +58,8 @@ def run_longitudinal_budget_experiment(
         config = load_app_config("configs")
         config.privacy.global_budget.epsilon = epsilon_cap
         config.privacy.global_budget.delta = delta_calibration
+        config.privacy.accountant.epsilon_cap = epsilon_cap
+        config.privacy.accountant.delta_global = delta_global
 
         state_mgr = PrivacyStateManager(db_path)
         orch = ReleaseOrchestrator(app_config=config, state_manager=state_mgr)

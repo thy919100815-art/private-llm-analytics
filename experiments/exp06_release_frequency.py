@@ -106,8 +106,7 @@ def run_release_frequency_experiment(
             cand_vectors = current_rdp_vectors + [single_rdp]
             composed = compose_rdp_vectors(cand_vectors, orders=DEFAULT_RDP_ORDERS)
             best_alpha, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=delta_global)
-            basic_sum = release_idx * epsilon_per_release
-            eff_eps = min(basic_sum, float(rdp_eff))
+            eff_eps = float(rdp_eff)
 
             if eff_eps <= epsilon_cap + 1e-9:
                 accepted += 1

@@ -91,6 +91,19 @@ class RecipientCompositionConfig(BaseModel):
     mode: Literal["per_recipient", "collusion_group", "global_external"] = "global_external"
     groups: Dict[str, List[str]] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def validate_no_overlapping_groups(self) -> "RecipientCompositionConfig":
+        seen_recipients: Dict[str, str] = {}
+        for group_name, members in self.groups.items():
+            for member in members:
+                if member in seen_recipients:
+                    raise ValueError(
+                        f"Collusion group overlap detected: recipient '{member}' appears in both "
+                        f"'{seen_recipients[member]}' and '{group_name}'. Overlapping collusion groups are strictly forbidden."
+                    )
+                seen_recipients[member] = group_name
+        return self
+
 
 class DefaultMechanismConfig(BaseModel):
     type: Literal["gaussian", "laplace"] = "gaussian"
