@@ -228,17 +228,11 @@ class ContinualStateManager:
         epoch_id: str,
     ) -> Set[int]:
         """Return set of level indices already committed for this budget scope."""
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                """
-                SELECT level FROM continual_level_exposures
-                WHERE budget_scope_id = ? AND stream_fingerprint = ? AND epoch_id = ?
-                  AND reservation_state = 'COMMITTED'
-                """,
-                (budget_scope_id, stream_fingerprint, epoch_id),
-            )
-            return {int(row[0]) for row in cursor.fetchall()}
+        return self.state_manager.get_exposed_continual_levels(
+            budget_scope_id=budget_scope_id,
+            stream_fingerprint=stream_fingerprint,
+            epoch_id=epoch_id,
+        )
 
     def reserve_continual_level_exposures(
         self,
@@ -248,160 +242,53 @@ class ContinualStateManager:
         sigma: float,
         delta_global: float = 1e-5,
         epsilon_cap: float = 4.0,
+        authoritative_orders: Optional[Sequence[Any]] = None,
+        policy_mode: Optional[str] = None,
+        policy_groups: Optional[Dict[str, List[str]]] = None,
+        recipient_roles: Optional[Dict[str, str]] = None,
+        owner_id: Optional[str] = None,
+        lease_timeout: float = 300.0,
+        single_flight_timeout: float = 30.0,
     ) -> List[Dict[str, Any]]:
-        """Atomically authorize and reserve missing tree level exposures (Section 31 & 32).
-
-        All-or-nothing: if the candidate total lifetime epsilon exceeds epsilon_cap,
-        the entire query is rejected with PrivacyBudgetExceededError without partial debit.
-        """
+        """Atomically authorize and reserve missing tree level exposures."""
         if not missing_levels:
             return []
 
-        fp = stream_config.stream_fingerprint
-        epoch_id = stream_config.epoch_id
-        sorted_levels = sorted(list(set(missing_levels)))
+        eff_orders = authoritative_orders or stream_config.noise.rdp_orders
         level_rdp = compute_level_rdp_vector(
             epoch_l12_bound=stream_config.epoch_group_l12_bound,
             sigma=sigma,
-            rdp_orders=stream_config.noise.rdp_orders,
+            rdp_orders=eff_orders,
         )
 
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("BEGIN IMMEDIATE")
-            try:
-                # 1. Fetch current lifetime RDP vector from release_store
-                cursor.execute(
-                    """
-                    SELECT rdp_cost_json FROM release_store
-                    WHERE budget_scope_id = ? AND status = 'COMMITTED'
-                    """,
-                    (budget_scope_id,),
-                )
-                rows = cursor.fetchall()
-
-                accumulated_rdp: Dict[Decimal, Decimal] = {}
-                for r in rows:
-                    raw_json = r[0]
-                    if not raw_json:
-                        raise ProductionSafetyConfigurationError(
-                            f"Missing rdp_cost_json in committed release for scope '{budget_scope_id}'."
-                        )
-                    vec = rdp_vector_from_json(raw_json)
-                    accumulated_rdp = compose_rdp_vectors([accumulated_rdp, vec]) if accumulated_rdp else vec
-
-                # Also accumulate any already committed continual level exposures not in release_store
-                cursor.execute(
-                    """
-                    SELECT rdp_cost_json FROM continual_level_exposures
-                    WHERE budget_scope_id = ? AND reservation_state = 'COMMITTED'
-                    """,
-                    (budget_scope_id,),
-                )
-                for r in cursor.fetchall():
-                    raw_json = r[0]
-                    if not raw_json:
-                        raise ProductionSafetyConfigurationError("Corrupt continual level rdp_cost_json.")
-                    vec = rdp_vector_from_json(raw_json)
-                    accumulated_rdp = compose_rdp_vectors([accumulated_rdp, vec]) if accumulated_rdp else vec
-
-                # 2. Add proposed missing levels
-                proposed_rdp = dict(accumulated_rdp)
-                level_rdp_decimal = {to_decimal(k): to_decimal(v) for k, v in level_rdp.items()}
-                for _ in sorted_levels:
-                    proposed_rdp = compose_rdp_vectors([proposed_rdp, level_rdp_decimal]) if proposed_rdp else level_rdp_decimal
-
-                # 3. Evaluate projected lifetime epsilon
-                eff_orders = [to_decimal(o) for o in stream_config.noise.rdp_orders]
-                eff_delta = to_decimal(delta_global)
-                eff_cap = to_decimal(epsilon_cap)
-
-                # Check budget availability
-                projected_eps = evaluate_rdp_epsilon(
-                    {float(k): float(v) for k, v in proposed_rdp.items()},
-                    delta=float(delta_global),
-                )
-                if Decimal(str(projected_eps)) > eff_cap:
-                    raise PrivacyBudgetExceededError(
-                        f"Continual observation multi-level exposure exceeded cap: "
-                        f"projected epsilon={projected_eps:.4f} > cap={eff_cap}"
-                    )
-
-                # 4. Insert reservations for each missing level
-                reservations = []
-                now_iso = datetime.now(timezone.utc).isoformat()
-                rdp_json = json.dumps({str(k): float(v) for k, v in level_rdp.items()}, sort_keys=True)
-
-                for lvl in sorted_levels:
-                    exp_id = f"exp_{uuid.uuid4().hex[:12]}"
-                    fencing_token = f"fence_{uuid.uuid4().hex}"
-                    cursor.execute(
-                        """
-                        INSERT INTO continual_level_exposures (
-                            exposure_id, budget_scope_id, stream_fingerprint,
-                            epoch_id, level, rdp_cost_json, reservation_state,
-                            fencing_token, created_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, 'RESERVED', ?, ?)
-                        """,
-                        (exp_id, budget_scope_id, fp, epoch_id, lvl, rdp_json, fencing_token, now_iso),
-                    )
-                    reservations.append({
-                        "exposure_id": exp_id,
-                        "budget_scope_id": budget_scope_id,
-                        "stream_fingerprint": fp,
-                        "epoch_id": epoch_id,
-                        "level": lvl,
-                        "rdp_cost_json": rdp_json,
-                        "fencing_token": fencing_token,
-                    })
-
-                cursor.execute("COMMIT")
-                return reservations
-            except Exception:
-                cursor.execute("ROLLBACK")
-                raise
+        return self.state_manager.reserve_continual_level_exposures(
+            budget_scope_id=budget_scope_id,
+            stream_fingerprint=stream_config.stream_fingerprint,
+            epoch_id=stream_config.epoch_id,
+            missing_levels=missing_levels,
+            level_rdp_cost=level_rdp,
+            epsilon_cap=epsilon_cap,
+            delta_global=delta_global,
+            authoritative_orders=eff_orders,
+            policy_mode=policy_mode,
+            policy_groups=policy_groups,
+            recipient_roles=recipient_roles,
+            owner_id=owner_id,
+            lease_timeout=lease_timeout,
+            single_flight_timeout=single_flight_timeout,
+        )
 
     def commit_continual_level_exposures(self, reservations: Sequence[Dict[str, Any]]):
-        """Commit reserved level exposures atomically (Section 31 & 55)."""
-        if not reservations:
-            return
+        """Commit reserved level exposures atomically with CAS fencing."""
+        self.state_manager.commit_continual_level_exposures(reservations)
 
-        now_iso = datetime.now(timezone.utc).isoformat()
-        with self._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute("BEGIN IMMEDIATE")
-            try:
-                for res in reservations:
-                    exp_id = res["exposure_id"]
-                    fence = res["fencing_token"]
-                    cursor.execute(
-                        """
-                        SELECT reservation_state, fencing_token FROM continual_level_exposures
-                        WHERE exposure_id = ?
-                        """,
-                        (exp_id,),
-                    )
-                    row = cursor.fetchone()
-                    if row is None:
-                        raise ReservationLostError(f"Level exposure reservation {exp_id} not found.")
-                    state, current_fence = row[0], row[1]
-                    if state == "COMMITTED":
-                        continue
-                    if current_fence != fence or state != "RESERVED":
-                        raise ReservationLostError(f"Level exposure reservation {exp_id} has lost ownership.")
+    def abort_continual_level_exposures(self, reservations: Sequence[Dict[str, Any]]):
+        """Abort reserved level exposures atomically, releasing uncommitted budget."""
+        self.state_manager.abort_continual_level_exposures(reservations)
 
-                    cursor.execute(
-                        """
-                        UPDATE continual_level_exposures
-                        SET reservation_state = 'COMMITTED', committed_at = ?
-                        WHERE exposure_id = ?
-                        """,
-                        (now_iso, exp_id),
-                    )
-                cursor.execute("COMMIT")
-            except Exception:
-                cursor.execute("ROLLBACK")
-                raise
+    def recover_stale_reservations(self, max_age_seconds: float = 300.0) -> int:
+        """Abort lingering RESERVED exposures older than max_age_seconds."""
+        return self.state_manager.recover_stale_continual_reservations(max_age_seconds=max_age_seconds)
 
     def get_or_create_noisy_node(
         self,
@@ -411,6 +298,11 @@ class ContinualStateManager:
         sigma: float,
         materialize_fn: Callable[[], np.ndarray],
         lease_seconds: float = 30.0,
+        finalized_up_to_day: Optional[int] = None,
+        manifest_fingerprint: Optional[str] = None,
+        public_roster_fingerprint: Optional[str] = None,
+        current_wall_clock_day: Optional[int] = None,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
     ) -> np.ndarray:
         """Retrieve canonical noisy node payload or materialize with single-flight fencing (Section 23, 29, 33).
 
@@ -418,23 +310,52 @@ class ContinualStateManager:
         - Exactly one noisy payload per (stream_fingerprint, epoch_id, level, node_index).
         - Bitwise identical vector returned to all callers / recipients.
         - STRICTLY NO exact aggregate persisted.
+        - Enforces immutable epoch manifest and finalized-day policy.
         """
         fp = stream_config.stream_fingerprint
         epoch_id = stream_config.epoch_id
+
+        # 0. Ensure stream definition is registered
+        self.register_stream(stream_config)
+
+        # 1. Verify or seal immutable epoch dataset manifest
+        mf = manifest_fingerprint or stream_config.dataset_fingerprint
+        rf = public_roster_fingerprint or stream_config.public_roster_fingerprint
+        fin_day = finalized_up_to_day if finalized_up_to_day is not None else stream_config.epoch_days
+
+        manifest_record = self.state_manager.register_or_verify_epoch_manifest(
+            stream_fingerprint=fp,
+            epoch_id=epoch_id,
+            manifest_fingerprint=mf or "",
+            public_roster_fingerprint=rf or "",
+            finalized_up_to_day=int(fin_day),
+            partition_fingerprints=partition_fingerprints,
+            lateness_grace_days=stream_config.lateness_grace_days,
+            current_wall_clock_day=current_wall_clock_day,
+        )
+
         node_id = compute_continual_node_id(fp, epoch_id, level, node_index)
         tree = BinaryTimeTree(epoch_days=stream_config.epoch_days)
         start_day, end_day = tree.node_interval(level, node_index)
+
+        # 2. Finalized day guard
+        if end_day > int(manifest_record["finalized_up_to_day"]):
+            raise ProductionSafetyConfigurationError(
+                f"Cannot materialize unfinalized node [{start_day}, {end_day}]: "
+                f"epoch finalized_up_to_day={manifest_record['finalized_up_to_day']}."
+            )
 
         worker_owner_id = f"worker_{uuid.uuid4().hex[:8]}"
 
         while True:
             with self._connection() as conn:
+                conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 cursor.execute("BEGIN IMMEDIATE")
                 try:
                     cursor.execute(
                         """
-                        SELECT status, noisy_value_json, owner_id, lease_expires_at, fencing_token
+                        SELECT status, noisy_value_json, owner_id, lease_expires_at, fencing_token, manifest_fingerprint
                         FROM continual_nodes
                         WHERE node_id = ?
                         """,
@@ -444,9 +365,19 @@ class ContinualStateManager:
                     now_ts = time.time()
 
                     if row is not None:
-                        status, noisy_json, owner, lease_exp, fence = row
+                        status = row["status"]
+                        noisy_json = row["noisy_value_json"]
+                        lease_exp = float(row["lease_expires_at"] or 0.0)
+                        fence = row["fencing_token"]
+                        persisted_mf = row["manifest_fingerprint"]
+
                         if status == "COMMITTED":
                             cursor.execute("COMMIT")
+                            if persisted_mf and persisted_mf != manifest_record["manifest_fingerprint"]:
+                                raise ProductionSafetyConfigurationError(
+                                    f"DATASET_MANIFEST_MISMATCH: node {node_id} was materialized with manifest "
+                                    f"{persisted_mf}, but current request has sealed manifest {manifest_record['manifest_fingerprint']}."
+                                )
                             val_list = json.loads(noisy_json)
                             return np.array(val_list, dtype=np.float64)
 
@@ -462,10 +393,10 @@ class ContinualStateManager:
                             cursor.execute(
                                 """
                                 UPDATE continual_nodes
-                                SET owner_id = ?, lease_expires_at = ?, fencing_token = ?
+                                SET owner_id = ?, lease_expires_at = ?, fencing_token = ?, manifest_fingerprint = ?
                                 WHERE node_id = ? AND fencing_token = ?
                                 """,
-                                (worker_owner_id, now_ts + lease_seconds, new_fence, node_id, fence),
+                                (worker_owner_id, now_ts + lease_seconds, new_fence, manifest_record["manifest_fingerprint"], node_id, fence),
                             )
                             cursor.execute("COMMIT")
                             fencing_token = new_fence
@@ -480,13 +411,14 @@ class ContinualStateManager:
                                 node_id, stream_fingerprint, epoch_id, level, node_index,
                                 interval_start, interval_end, noisy_value_json, sigma,
                                 dimension, status, owner_id, fencing_token, lease_expires_at,
-                                created_at
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, 0, 'RESERVED', ?, ?, ?, ?)
+                                created_at, manifest_fingerprint
+                            ) VALUES (?, ?, ?, ?, ?, ?, ?, '', ?, 0, 'RESERVED', ?, ?, ?, ?, ?)
                             """,
                             (
                                 node_id, fp, epoch_id, level, node_index,
                                 start_day, end_day, float(sigma),
                                 worker_owner_id, new_fence, now_ts + lease_seconds, now_iso,
+                                manifest_record["manifest_fingerprint"],
                             ),
                         )
                         cursor.execute("COMMIT")
@@ -532,10 +464,10 @@ class ContinualStateManager:
                     """
                     UPDATE continual_nodes
                     SET noisy_value_json = ?, dimension = ?, status = 'COMMITTED',
-                        lease_expires_at = 0.0
+                        lease_expires_at = 0.0, manifest_fingerprint = ?
                     WHERE node_id = ?
                     """,
-                    (noisy_json, dim, node_id),
+                    (noisy_json, dim, manifest_record["manifest_fingerprint"], node_id),
                 )
                 cursor.execute("COMMIT")
                 return noisy_vector

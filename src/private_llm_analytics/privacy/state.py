@@ -657,27 +657,154 @@ class PrivacyStateManager:
             if null_count > 0:
                 raise ValueError(f"Fail-closed: Database contains {null_count} external COMMITTED releases with NULL rdp_cost_json.")
 
+            # Continual Observation SQLite Schema Extensions (v0.4)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS continual_streams (
+                    stream_fingerprint TEXT PRIMARY KEY,
+                    stream_id TEXT NOT NULL,
+                    metric TEXT NOT NULL,
+                    granularity TEXT NOT NULL,
+                    epoch_id TEXT NOT NULL,
+                    epoch_start TEXT NOT NULL,
+                    epoch_days INTEGER NOT NULL,
+                    timezone TEXT NOT NULL,
+                    daily_l2_bound REAL NOT NULL,
+                    epoch_group_l12_bound REAL NOT NULL,
+                    lateness_grace_days INTEGER NOT NULL,
+                    tree_topology TEXT NOT NULL,
+                    tree_padding TEXT NOT NULL,
+                    noise_config_json TEXT NOT NULL,
+                    dataset_fingerprint TEXT,
+                    public_roster_fingerprint TEXT,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS continual_nodes (
+                    node_id TEXT PRIMARY KEY,
+                    stream_fingerprint TEXT NOT NULL,
+                    epoch_id TEXT NOT NULL,
+                    level INTEGER NOT NULL,
+                    node_index INTEGER NOT NULL,
+                    interval_start INTEGER NOT NULL,
+                    interval_end INTEGER NOT NULL,
+                    noisy_value_json TEXT NOT NULL,
+                    sigma REAL NOT NULL,
+                    dimension INTEGER NOT NULL,
+                    status TEXT NOT NULL,
+                    owner_id TEXT NOT NULL DEFAULT '',
+                    fencing_token TEXT NOT NULL DEFAULT '',
+                    lease_expires_at REAL NOT NULL DEFAULT 0.0,
+                    created_at TEXT NOT NULL,
+                    manifest_fingerprint TEXT NOT NULL DEFAULT '',
+                    FOREIGN KEY (stream_fingerprint) REFERENCES continual_streams (stream_fingerprint),
+                    UNIQUE (stream_fingerprint, epoch_id, level, node_index)
+                )
+            """)
+            cursor.execute("PRAGMA table_info(continual_nodes)")
+            cn_cols = {row[1] for row in cursor.fetchall()}
+            if "manifest_fingerprint" not in cn_cols:
+                cursor.execute("ALTER TABLE continual_nodes ADD COLUMN manifest_fingerprint TEXT NOT NULL DEFAULT ''")
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS continual_level_exposures (
+                    exposure_id TEXT PRIMARY KEY,
+                    budget_scope_id TEXT NOT NULL,
+                    stream_fingerprint TEXT NOT NULL,
+                    epoch_id TEXT NOT NULL,
+                    level INTEGER NOT NULL,
+                    rdp_cost_json TEXT NOT NULL,
+                    reservation_state TEXT NOT NULL CHECK (reservation_state IN ('PENDING', 'RESERVED', 'COMMITTED', 'ABORTED')),
+                    fencing_token TEXT NOT NULL,
+                    owner_id TEXT NOT NULL DEFAULT '',
+                    generation INTEGER NOT NULL DEFAULT 1,
+                    lease_expires_at REAL NOT NULL DEFAULT 0.0,
+                    created_at TEXT NOT NULL,
+                    committed_at TEXT,
+                    FOREIGN KEY (stream_fingerprint) REFERENCES continual_streams (stream_fingerprint),
+                    UNIQUE (budget_scope_id, stream_fingerprint, epoch_id, level)
+                )
+            """)
+            cursor.execute("PRAGMA table_info(continual_level_exposures)")
+            cle_cols = {row[1] for row in cursor.fetchall()}
+            if "owner_id" not in cle_cols:
+                cursor.execute("ALTER TABLE continual_level_exposures ADD COLUMN owner_id TEXT NOT NULL DEFAULT ''")
+            if "generation" not in cle_cols:
+                cursor.execute("ALTER TABLE continual_level_exposures ADD COLUMN generation INTEGER NOT NULL DEFAULT 1")
+            if "lease_expires_at" not in cle_cols:
+                cursor.execute("ALTER TABLE continual_level_exposures ADD COLUMN lease_expires_at REAL NOT NULL DEFAULT 0.0")
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS continual_epoch_manifests (
+                    manifest_id TEXT PRIMARY KEY,
+                    stream_fingerprint TEXT NOT NULL,
+                    epoch_id TEXT NOT NULL,
+                    manifest_fingerprint TEXT NOT NULL,
+                    public_roster_fingerprint TEXT NOT NULL,
+                    finalized_up_to_day INTEGER NOT NULL,
+                    partition_fingerprints_json TEXT NOT NULL DEFAULT '{}',
+                    status TEXT NOT NULL CHECK (status IN ('SEALED', 'ACTIVE')),
+                    created_at TEXT NOT NULL,
+                    sealed_at TEXT,
+                    FOREIGN KEY (stream_fingerprint) REFERENCES continual_streams (stream_fingerprint),
+                    UNIQUE (stream_fingerprint, epoch_id)
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS continual_query_log (
+                    query_id TEXT PRIMARY KEY,
+                    budget_scope_id TEXT NOT NULL,
+                    stream_fingerprint TEXT NOT NULL,
+                    epoch_id TEXT NOT NULL,
+                    query_type TEXT NOT NULL,
+                    start_day INTEGER NOT NULL,
+                    end_day INTEGER NOT NULL,
+                    nodes_used_json TEXT NOT NULL,
+                    levels_used_json TEXT NOT NULL,
+                    newly_exposed_levels_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cle_scope_state ON continual_level_exposures (budget_scope_id, reservation_state)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cem_stream_epoch ON continual_epoch_manifests (stream_fingerprint, epoch_id)")
+
             conn.commit()
+
+    def _has_external_releases_or_reservations_tx(self, cursor: sqlite3.Cursor) -> bool:
+        """Internal helper to check for external committed/pending releases or continual exposures."""
+        cursor.execute("""
+            SELECT 1 FROM release_store
+            WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
+              AND status = 'COMMITTED'
+            LIMIT 1
+        """)
+        if cursor.fetchone() is not None:
+            return True
+        cursor.execute("""
+            SELECT 1 FROM privacy_reservations
+            WHERE budget_scope_id != 'internal'
+              AND status IN ('COMMITTED', 'PENDING')
+            LIMIT 1
+        """)
+        if cursor.fetchone() is not None:
+            return True
+        cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='continual_level_exposures'")
+        if cursor.fetchone() is not None:
+            cursor.execute("""
+                SELECT 1 FROM continual_level_exposures
+                WHERE budget_scope_id != 'internal'
+                  AND reservation_state IN ('COMMITTED', 'RESERVED', 'PENDING')
+                LIMIT 1
+            """)
+            if cursor.fetchone() is not None:
+                return True
+        return False
 
     def has_external_releases(self) -> bool:
         """Check if there are any committed or pending external releases or reservations in the database."""
         with self._connection() as conn:
             cursor = conn.cursor()
-            cursor.execute("""
-                SELECT 1 FROM release_store
-                WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
-                  AND status = 'COMMITTED'
-                LIMIT 1
-            """)
-            if cursor.fetchone() is not None:
-                return True
-            cursor.execute("""
-                SELECT 1 FROM privacy_reservations
-                WHERE budget_scope_id != 'internal'
-                  AND status IN ('COMMITTED', 'PENDING')
-                LIMIT 1
-            """)
-            return cursor.fetchone() is not None
+            return self._has_external_releases_or_reservations_tx(cursor)
 
     def has_policy_bound(self) -> bool:
         """Check if privacy policy metadata is already persisted."""
@@ -694,6 +821,10 @@ class PrivacyStateManager:
             scopes = {row[0] for row in cursor.fetchall()}
             cursor.execute("SELECT DISTINCT budget_scope_id FROM privacy_reservations WHERE status IN ('COMMITTED', 'PENDING')")
             scopes.update({row[0] for row in cursor.fetchall()})
+            cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='continual_level_exposures'")
+            if cursor.fetchone() is not None:
+                cursor.execute("SELECT DISTINCT budget_scope_id FROM continual_level_exposures WHERE reservation_state IN ('COMMITTED', 'RESERVED', 'PENDING')")
+                scopes.update({row[0] for row in cursor.fetchall()})
         if exclude_internal:
             scopes.discard("internal")
         return sorted(list(scopes))
@@ -724,22 +855,7 @@ class PrivacyStateManager:
         if row is not None:
             persisted_fp, persisted_mode = row[0], row[1]
             if persisted_fp != cur_fp:
-                cursor.execute("""
-                    SELECT 1 FROM release_store
-                    WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
-                      AND status = 'COMMITTED'
-                    LIMIT 1
-                """)
-                has_rel = cursor.fetchone() is not None
-                if not has_rel:
-                    cursor.execute("""
-                        SELECT 1 FROM privacy_reservations
-                        WHERE budget_scope_id != 'internal'
-                          AND status IN ('COMMITTED', 'PENDING')
-                        LIMIT 1
-                    """)
-                    has_rel = cursor.fetchone() is not None
-
+                has_rel = self._has_external_releases_or_reservations_tx(cursor)
                 if has_rel:
                     raise ProductionSafetyConfigurationError(
                         f"Recipient composition policy mismatch with persisted historical releases! "
@@ -760,22 +876,7 @@ class PrivacyStateManager:
                     )
         else:
             # First policy binding: check if legacy DB with external releases exists
-            cursor.execute("""
-                SELECT 1 FROM release_store
-                WHERE (recipient_role = 'external' OR budget_scope_id != 'internal')
-                  AND status = 'COMMITTED'
-                LIMIT 1
-            """)
-            has_rel = cursor.fetchone() is not None
-            if not has_rel:
-                cursor.execute("""
-                    SELECT 1 FROM privacy_reservations
-                    WHERE budget_scope_id != 'internal'
-                      AND status IN ('COMMITTED', 'PENDING')
-                    LIMIT 1
-                """)
-                has_rel = cursor.fetchone() is not None
-
+            has_rel = self._has_external_releases_or_reservations_tx(cursor)
             if has_rel:
                 # Legacy DB with existing external releases: only GLOBAL_EXTERNAL permitted (Item 3)
                 if cur_mode != "global_external":
@@ -872,6 +973,85 @@ class PrivacyStateManager:
             n_users=int(row["n_users"]),
             public_population_size=row["public_population_size"],
         )
+
+    def _get_unified_active_rdp_vectors_tx(
+        self,
+        cursor: sqlite3.Cursor,
+        budget_scope_id: str,
+        authoritative_orders: Sequence[Decimal],
+    ) -> List[Dict[Decimal, Decimal]]:
+        """Retrieve all active RDP vectors in budget scope across standard and continual tables.
+
+        Includes:
+          1. privacy_reservations (status IN ('COMMITTED', 'PENDING'))
+          2. continual_level_exposures (reservation_state IN ('COMMITTED', 'RESERVED', 'PENDING'))
+
+        Fails closed if any vector has an order mismatch or corrupt JSON.
+        """
+        auth_order_set = set(authoritative_orders)
+        vecs: List[Dict[Decimal, Decimal]] = []
+
+        # 1. Standard reservations
+        cursor.execute(
+            """
+            SELECT reservation_id, rdp_cost_json, status, rdp_orders_json
+            FROM privacy_reservations
+            WHERE budget_scope_id = ? AND status IN ('COMMITTED', 'PENDING')
+            """,
+            (budget_scope_id,),
+        )
+        for r in cursor.fetchall():
+            res_id, rdp_json, status = r[0], r[1], r[2]
+            if not rdp_json:
+                raise ProductionSafetyConfigurationError(
+                    f"Fail-closed: Reservation '{res_id}' (status={status}) in scope '{budget_scope_id}' "
+                    "has missing or NULL rdp_cost_json. Authorization forbidden."
+                )
+            try:
+                vec = rdp_vector_from_json(rdp_json)
+            except Exception as e:
+                raise ProductionSafetyConfigurationError(
+                    f"Fail-closed: Reservation '{res_id}' in scope '{budget_scope_id}' has corrupt rdp_cost_json: {e}"
+                )
+            if set(vec.keys()) != auth_order_set:
+                raise PrivacyConfigurationError(
+                    f"Fail-closed: Reservation '{res_id}' in scope '{budget_scope_id}' has RDP orders "
+                    f"{sorted([float(k) for k in vec.keys()])} that mismatch authoritative grid {sorted([float(k) for k in auth_order_set])}."
+                )
+            vecs.append(vec)
+
+        # 2. Continual level exposures
+        cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='continual_level_exposures'")
+        if cursor.fetchone():
+            cursor.execute(
+                """
+                SELECT exposure_id, rdp_cost_json, reservation_state
+                FROM continual_level_exposures
+                WHERE budget_scope_id = ? AND reservation_state IN ('COMMITTED', 'RESERVED', 'PENDING')
+                """,
+                (budget_scope_id,),
+            )
+            for r in cursor.fetchall():
+                exp_id, rdp_json, state = r[0], r[1], r[2]
+                if not rdp_json:
+                    raise ProductionSafetyConfigurationError(
+                        f"Fail-closed: Continual level exposure '{exp_id}' (state={state}) in scope '{budget_scope_id}' "
+                        "has missing or NULL rdp_cost_json."
+                    )
+                try:
+                    vec = rdp_vector_from_json(rdp_json)
+                except Exception as e:
+                    raise ProductionSafetyConfigurationError(
+                        f"Fail-closed: Continual level exposure '{exp_id}' has corrupt rdp_cost_json: {e}"
+                    )
+                if set(vec.keys()) != auth_order_set:
+                    raise PrivacyConfigurationError(
+                        f"Fail-closed: Continual level exposure '{exp_id}' has RDP orders "
+                        f"{sorted([float(k) for k in vec.keys()])} that mismatch authoritative grid {sorted([float(k) for k in auth_order_set])}."
+                    )
+                vecs.append(vec)
+
+        return vecs
 
     def reserve_or_get_release(
         self,
@@ -1089,30 +1269,11 @@ class PrivacyStateManager:
                                     f"Fail-closed: RDP mode authorization in scope '{budget_scope_id}' requires valid non-empty rdp_candidate_cost."
                                 )
 
-                            cursor.execute(
-                                """
-                                SELECT reservation_id, epsilon, delta, rdp_cost_json, status
-                                FROM privacy_reservations
-                                WHERE budget_scope_id = ? AND status IN ('COMMITTED', 'PENDING')
-                                """,
-                                (budget_scope_id,),
+                            vecs = self._get_unified_active_rdp_vectors_tx(
+                                cursor=cursor,
+                                budget_scope_id=budget_scope_id,
+                                authoritative_orders=eff_orders,
                             )
-                            active_rows = cursor.fetchall()
-                            vecs = []
-                            for r in active_rows:
-                                rdp_json = r["rdp_cost_json"]
-                                if not rdp_json:
-                                    raise PrivacyConfigurationError(
-                                        f"Fail-closed: Reservation '{r['reservation_id']}' (status={r['status']}) in scope '{budget_scope_id}' "
-                                        "has missing or NULL rdp_cost_json. Authorization forbidden."
-                                    )
-                                try:
-                                    vecs.append(rdp_vector_from_json(rdp_json))
-                                except Exception as e:
-                                    raise PrivacyConfigurationError(
-                                        f"Fail-closed: Reservation '{r['reservation_id']}' in scope '{budget_scope_id}' "
-                                        f"has corrupt rdp_cost_json: {e}. Authorization forbidden."
-                                    )
 
                             try:
                                 cand_vec = {to_decimal(k): to_decimal(v) for k, v in rdp_candidate_cost.items()}
@@ -1840,12 +2001,26 @@ class PrivacyStateManager:
             )
             rows = cursor.fetchall()
 
+            continual_costs: List[str] = []
+            cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='continual_level_exposures'")
+            if cursor.fetchone():
+                cursor.execute(
+                    """
+                    SELECT rdp_cost_json FROM continual_level_exposures
+                    WHERE budget_scope_id = ? AND reservation_state = 'COMMITTED'
+                    """,
+                    (budget_scope_id,),
+                )
+                for r in cursor.fetchall():
+                    if r[0]:
+                        continual_costs.append(r[0])
+
         total_releases = len(rows)
         resolved_mode = accountant_mode or (rows[0]["accountant_mode"] if rows else "rdp")
 
         if resolved_mode == "rdp":
+            vecs = []
             if len(rows) > 0:
-                vecs = []
                 for r in rows:
                     raw_rdp = r["rdp_cost_json"]
                     if not raw_rdp:
@@ -1853,6 +2028,11 @@ class PrivacyStateManager:
                             f"Corrupted release record in scope '{budget_scope_id}': committed release missing RDP cost data."
                         )
                     vecs.append(rdp_vector_from_json(raw_rdp))
+
+            for cost_j in continual_costs:
+                vecs.append(rdp_vector_from_json(cost_j))
+
+            if vecs:
                 cum_rdp = compose_rdp_vectors(vecs, orders=eff_orders)
                 best_alpha, rdp_eff = rdp_to_epsilon_delta(cum_rdp, delta_global=eff_delta)
                 eff_eps = rdp_eff
@@ -1891,6 +2071,487 @@ class PrivacyStateManager:
                 orders=eff_orders,
             )
 
+    def reserve_continual_level_exposures(
+        self,
+        budget_scope_id: str,
+        stream_fingerprint: str,
+        epoch_id: str,
+        missing_levels: Sequence[int],
+        level_rdp_cost: Dict[Any, Any],
+        epsilon_cap: Union[float, Decimal] = 4.0,
+        delta_global: Union[float, Decimal] = 1e-6,
+        authoritative_orders: Optional[Sequence[Any]] = None,
+        policy_mode: Optional[str] = None,
+        policy_groups: Optional[Dict[str, List[str]]] = None,
+        recipient_roles: Optional[Dict[str, str]] = None,
+        owner_id: Optional[str] = None,
+        lease_timeout: float = 300.0,
+        single_flight_timeout: float = 30.0,
+    ) -> List[Dict[str, Any]]:
+        """Atomically authorize and reserve missing continual tree level exposures."""
+        return self.reserve_cross_epoch_continual_level_exposures(
+            budget_scope_id=budget_scope_id,
+            epoch_requests=[(stream_fingerprint, epoch_id, missing_levels, level_rdp_cost)],
+            epsilon_cap=epsilon_cap,
+            delta_global=delta_global,
+            authoritative_orders=authoritative_orders,
+            policy_mode=policy_mode,
+            policy_groups=policy_groups,
+            recipient_roles=recipient_roles,
+            owner_id=owner_id,
+            lease_timeout=lease_timeout,
+            single_flight_timeout=single_flight_timeout,
+        )
+
+    def reserve_cross_epoch_continual_level_exposures(
+        self,
+        budget_scope_id: str,
+        epoch_requests: Sequence[Tuple[str, str, Sequence[int], Dict[Any, Any]]],
+        epsilon_cap: Union[float, Decimal] = 4.0,
+        delta_global: Union[float, Decimal] = 1e-6,
+        authoritative_orders: Optional[Sequence[Any]] = None,
+        policy_mode: Optional[str] = None,
+        policy_groups: Optional[Dict[str, List[str]]] = None,
+        recipient_roles: Optional[Dict[str, str]] = None,
+        owner_id: Optional[str] = None,
+        lease_timeout: float = 300.0,
+        single_flight_timeout: float = 30.0,
+    ) -> List[Dict[str, Any]]:
+        """Atomically authorize and reserve continual level exposures across one or more epochs (Section 31 & 103)."""
+        caller_owner = owner_id or f"worker_{uuid.uuid4().hex[:8]}"
+        eff_orders = [to_decimal(o) for o in (authoritative_orders or DEFAULT_RDP_ORDERS)]
+        eff_delta = validate_delta(to_decimal(delta_global))
+        eff_cap = to_decimal(epsilon_cap)
+
+        # Validate that all requested epochs have valid matching candidate orders
+        for s_fp, ep_id, lvls, rdp_c in epoch_requests:
+            dec_cost = {to_decimal(k): to_decimal(v) for k, v in rdp_c.items()}
+            if set(dec_cost.keys()) != set(eff_orders):
+                raise PrivacyConfigurationError(
+                    f"Fail-closed: Candidate level RDP orders {sorted([float(k) for k in dec_cost.keys()])} "
+                    f"mismatch authoritative order grid {sorted([float(k) for k in eff_orders])}."
+                )
+
+        start_wait = time.time()
+        while True:
+            with self._connection() as conn:
+                conn.isolation_level = None
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                cursor.execute("BEGIN IMMEDIATE")
+                try:
+                    # 1. Policy verification & binding inside reservation transaction
+                    if policy_mode is not None and budget_scope_id != "internal":
+                        self._verify_or_bind_policy_tx(
+                            cursor=cursor,
+                            mode=policy_mode,
+                            groups=policy_groups,
+                            recipient_roles=recipient_roles,
+                        )
+
+                    now_ts = time.time()
+                    now_iso = datetime.now(timezone.utc).isoformat()
+
+                    wait_for_other_worker = False
+                    planned_new: List[Tuple[str, str, int, Dict[Decimal, Decimal]]] = []
+                    planned_takeover: List[Tuple[sqlite3.Row, Dict[Decimal, Decimal]]] = []
+
+                    for s_fp, ep_id, lvls, rdp_c in epoch_requests:
+                        dec_cost = {to_decimal(k): to_decimal(v) for k, v in rdp_c.items()}
+                        sorted_lvls = sorted(list(set(lvls)))
+                        for lvl in sorted_lvls:
+                            cursor.execute(
+                                """
+                                SELECT exposure_id, reservation_state, owner_id, generation, lease_expires_at, fencing_token, level
+                                FROM continual_level_exposures
+                                WHERE budget_scope_id = ? AND stream_fingerprint = ? AND epoch_id = ? AND level = ?
+                                """,
+                                (budget_scope_id, s_fp, ep_id, lvl),
+                            )
+                            row = cursor.fetchone()
+                            if row is None:
+                                planned_new.append((s_fp, ep_id, lvl, dec_cost))
+                            elif row["reservation_state"] == "COMMITTED":
+                                continue
+                            elif row["reservation_state"] == "ABORTED":
+                                planned_takeover.append((row, dec_cost))
+                            elif row["reservation_state"] in ("RESERVED", "PENDING"):
+                                lease_exp = float(row["lease_expires_at"] or 0.0)
+                                if now_ts > lease_exp:
+                                    planned_takeover.append((row, dec_cost))
+                                elif row["owner_id"] == caller_owner:
+                                    planned_takeover.append((row, dec_cost))
+                                else:
+                                    wait_for_other_worker = True
+                                    break
+                        if wait_for_other_worker:
+                            break
+
+                    if wait_for_other_worker:
+                        cursor.execute("COMMIT")
+                        elapsed = time.time() - start_wait
+                        if elapsed > single_flight_timeout:
+                            raise ReleaseInProgressError(
+                                f"Continual level exposure in scope '{budget_scope_id}' is actively being reserved by another worker "
+                                f"(single-flight timeout {single_flight_timeout}s exceeded)."
+                            )
+                        time.sleep(0.05)
+                        continue
+
+                    if not planned_new and not planned_takeover:
+                        cursor.execute("COMMIT")
+                        return []
+
+                    # 2. Unified active RDP vectors
+                    active_vecs = self._get_unified_active_rdp_vectors_tx(
+                        cursor=cursor,
+                        budget_scope_id=budget_scope_id,
+                        authoritative_orders=eff_orders,
+                    )
+
+                    # 3. Add candidate vectors
+                    candidate_vecs: List[Dict[Decimal, Decimal]] = []
+                    for _, _, _, cost_vec in planned_new:
+                        candidate_vecs.append(cost_vec)
+                    for r, cost_vec in planned_takeover:
+                        if r["reservation_state"] == "ABORTED":
+                            candidate_vecs.append(cost_vec)
+
+                    # 4. Compose and check budget
+                    all_vecs = active_vecs + candidate_vecs
+                    if all_vecs:
+                        composed = compose_rdp_vectors(all_vecs, orders=eff_orders)
+                        best_a, rdp_eff = rdp_to_epsilon_delta(composed, delta_global=eff_delta)
+                        if rdp_eff > eff_cap:
+                            raise PrivacyBudgetExceededError(
+                                f"Continual observation multi-level exposure exceeded cap in scope '{budget_scope_id}': "
+                                f"projected epsilon {float(rdp_eff):.4f} > cap {float(eff_cap):.4f} "
+                                f"(at delta={eff_delta}, best order alpha={best_a})."
+                            )
+
+                    # 5. Apply reservations
+                    reservations: List[Dict[str, Any]] = []
+
+                    for r, cost_vec in planned_takeover:
+                        exp_id = r["exposure_id"]
+                        old_gen = r["generation"]
+                        new_gen = old_gen + 1
+                        fence = f"fence_{uuid.uuid4().hex}"
+                        lease_exp = now_ts + lease_timeout
+                        rdp_j = json.dumps({str(k): str(v) for k, v in cost_vec.items()}, sort_keys=True)
+                        cursor.execute(
+                            """
+                            UPDATE continual_level_exposures
+                            SET reservation_state = 'RESERVED',
+                                owner_id = ?,
+                                generation = ?,
+                                fencing_token = ?,
+                                lease_expires_at = ?,
+                                created_at = ?,
+                                rdp_cost_json = ?
+                            WHERE exposure_id = ? AND generation = ?
+                            """,
+                            (caller_owner, new_gen, fence, lease_exp, now_iso, rdp_j, exp_id, old_gen),
+                        )
+                        if cursor.rowcount != 1:
+                            raise ReservationLostError(f"CAS takeover failed for level exposure {exp_id}.")
+                        reservations.append({
+                            "exposure_id": exp_id,
+                            "budget_scope_id": budget_scope_id,
+                            "level": r["level"],
+                            "fencing_token": fence,
+                            "generation": new_gen,
+                            "owner_id": caller_owner,
+                            "rdp_cost_json": rdp_j,
+                        })
+
+                    for s_fp, ep_id, lvl, cost_vec in planned_new:
+                        cursor.execute("SELECT stream_fingerprint FROM continual_streams WHERE stream_fingerprint = ?", (s_fp,))
+                        if cursor.fetchone() is None:
+                            cursor.execute(
+                                """
+                                INSERT OR IGNORE INTO continual_streams (
+                                    stream_fingerprint, stream_id, metric, granularity,
+                                    epoch_id, epoch_start, epoch_days, timezone,
+                                    daily_l2_bound, epoch_group_l12_bound, lateness_grace_days,
+                                    tree_topology, tree_padding, noise_config_json,
+                                    dataset_fingerprint, public_roster_fingerprint, created_at
+                                ) VALUES (?, ?, 'volume', 'overall_1_cell', ?, '2026-01-01', 90, 'UTC', 1.0, 1.0, 0, 'binary', 'virtual_zeros', '{}', '', '', ?)
+                                """,
+                                (s_fp, s_fp, ep_id, now_iso),
+                            )
+                        exp_id = f"exp_{uuid.uuid4().hex[:12]}"
+                        fence = f"fence_{uuid.uuid4().hex}"
+                        lease_exp = now_ts + lease_timeout
+                        rdp_j = json.dumps({str(k): str(v) for k, v in cost_vec.items()}, sort_keys=True)
+                        cursor.execute(
+                            """
+                            INSERT INTO continual_level_exposures (
+                                exposure_id, budget_scope_id, stream_fingerprint,
+                                epoch_id, level, rdp_cost_json, reservation_state,
+                                fencing_token, owner_id, generation, lease_expires_at,
+                                created_at
+                            ) VALUES (?, ?, ?, ?, ?, ?, 'RESERVED', ?, ?, 1, ?, ?)
+                            """,
+                            (exp_id, budget_scope_id, s_fp, ep_id, lvl, rdp_j, fence, caller_owner, lease_exp, now_iso),
+                        )
+                        reservations.append({
+                            "exposure_id": exp_id,
+                            "budget_scope_id": budget_scope_id,
+                            "stream_fingerprint": s_fp,
+                            "epoch_id": ep_id,
+                            "level": lvl,
+                            "fencing_token": fence,
+                            "generation": 1,
+                            "owner_id": caller_owner,
+                            "rdp_cost_json": rdp_j,
+                        })
+
+                    cursor.execute("COMMIT")
+                    return reservations
+                except Exception:
+                    cursor.execute("ROLLBACK")
+                    raise
+
+    def commit_continual_level_exposures(self, reservations: Sequence[Dict[str, Any]]) -> None:
+        """Atomically commit reserved continual level exposures with CAS fencing."""
+        if not reservations:
+            return
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._connection() as conn:
+            conn.isolation_level = None
+            cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            try:
+                for res in reservations:
+                    exp_id = res["exposure_id"]
+                    fence = res["fencing_token"]
+                    gen = res["generation"]
+                    cursor.execute(
+                        """
+                        SELECT reservation_state, fencing_token, generation FROM continual_level_exposures
+                        WHERE exposure_id = ?
+                        """,
+                        (exp_id,),
+                    )
+                    row = cursor.fetchone()
+                    if row is None:
+                        raise ReservationLostError(f"Continual exposure {exp_id} not found.")
+                    st, cur_fence, cur_gen = row[0], row[1], row[2]
+                    if st == "COMMITTED":
+                        continue
+                    if st != "RESERVED" or cur_fence != fence or cur_gen != gen:
+                        raise ReservationLostError(
+                            f"Stale worker cannot commit exposure {exp_id}: "
+                            f"expected gen={gen}, fence={fence}; found gen={cur_gen}, fence={cur_fence}, state={st}."
+                        )
+                    cursor.execute(
+                        """
+                        UPDATE continual_level_exposures
+                        SET reservation_state = 'COMMITTED', committed_at = ?
+                        WHERE exposure_id = ? AND generation = ? AND fencing_token = ?
+                        """,
+                        (now_iso, exp_id, gen, fence),
+                    )
+                cursor.execute("COMMIT")
+            except Exception:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def abort_continual_level_exposures(self, reservations: Sequence[Dict[str, Any]]) -> None:
+        """Abort reserved continual level exposures, returning budget immediately."""
+        if not reservations:
+            return
+        with self._connection() as conn:
+            conn.isolation_level = None
+            cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            try:
+                for res in reservations:
+                    exp_id = res["exposure_id"]
+                    fence = res.get("fencing_token")
+                    gen = res.get("generation")
+                    if fence and gen:
+                        cursor.execute(
+                            """
+                            UPDATE continual_level_exposures
+                            SET reservation_state = 'ABORTED'
+                            WHERE exposure_id = ? AND generation = ? AND fencing_token = ? AND reservation_state = 'RESERVED'
+                            """,
+                            (exp_id, gen, fence),
+                        )
+                    else:
+                        cursor.execute(
+                            """
+                            UPDATE continual_level_exposures
+                            SET reservation_state = 'ABORTED'
+                            WHERE exposure_id = ? AND reservation_state = 'RESERVED'
+                            """,
+                            (exp_id,),
+                        )
+                cursor.execute("COMMIT")
+            except Exception:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def recover_stale_continual_reservations(self, max_age_seconds: float = 300.0) -> int:
+        """Abort lingering RESERVED continual exposures older than max_age_seconds."""
+        now_ts = time.time()
+        with self._connection() as conn:
+            conn.isolation_level = None
+            cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            try:
+                cursor.execute(
+                    """
+                    UPDATE continual_level_exposures
+                    SET reservation_state = 'ABORTED'
+                    WHERE reservation_state IN ('RESERVED', 'PENDING')
+                      AND (lease_expires_at < ? OR lease_expires_at = 0.0)
+                    """,
+                    (now_ts,),
+                )
+                aborted_count = cursor.rowcount
+                cursor.execute("COMMIT")
+                return aborted_count
+            except Exception:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def register_or_verify_epoch_manifest(
+        self,
+        stream_fingerprint: str,
+        epoch_id: str,
+        manifest_fingerprint: str,
+        public_roster_fingerprint: str,
+        finalized_up_to_day: int,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
+        lateness_grace_days: int = 1,
+        current_wall_clock_day: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Verify or seal immutable epoch dataset manifest (Section 36, 101)."""
+        if not manifest_fingerprint or not str(manifest_fingerprint).strip():
+            raise ProductionSafetyConfigurationError("manifest_fingerprint / dataset_fingerprint REQUIRED in production.")
+        if not public_roster_fingerprint or not str(public_roster_fingerprint).strip():
+            raise ProductionSafetyConfigurationError("public_roster_fingerprint REQUIRED in production.")
+
+        if current_wall_clock_day is not None:
+            max_allowed = int(current_wall_clock_day) - int(lateness_grace_days)
+            if int(finalized_up_to_day) > max_allowed:
+                raise ProductionSafetyConfigurationError(
+                    f"finalized_up_to_day {finalized_up_to_day} violates lateness_grace_days={lateness_grace_days} policy "
+                    f"(current_day={current_wall_clock_day}, max_allowed={max_allowed})."
+                )
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._connection() as conn:
+            conn.isolation_level = None
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
+            try:
+                cursor.execute(
+                    """
+                    SELECT manifest_id, stream_fingerprint, epoch_id, manifest_fingerprint,
+                           public_roster_fingerprint, finalized_up_to_day, partition_fingerprints_json, status
+                    FROM continual_epoch_manifests
+                    WHERE stream_fingerprint = ? AND epoch_id = ?
+                    """,
+                    (stream_fingerprint, epoch_id),
+                )
+                row = cursor.fetchone()
+                if row is not None:
+                    persisted_mf = row["manifest_fingerprint"]
+                    persisted_rf = row["public_roster_fingerprint"]
+                    persisted_fin = row["finalized_up_to_day"]
+                    if persisted_mf != manifest_fingerprint:
+                        raise ProductionSafetyConfigurationError(
+                            f"DATASET_MANIFEST_MISMATCH: stream_fingerprint={stream_fingerprint}, epoch_id={epoch_id} has sealed manifest "
+                            f"{persisted_mf}, but current request provided {manifest_fingerprint}. Modifying epoch manifest is strictly forbidden."
+                        )
+                    if persisted_rf != public_roster_fingerprint:
+                        raise ProductionSafetyConfigurationError(
+                            f"DATASET_MANIFEST_MISMATCH: public roster fingerprint mismatch for stream={stream_fingerprint}, epoch={epoch_id} "
+                            f"(sealed={persisted_rf}, provided={public_roster_fingerprint})."
+                        )
+                    if int(finalized_up_to_day) < int(persisted_fin):
+                        raise ProductionSafetyConfigurationError(
+                            f"finalized_up_to_day cannot be rolled backward from {persisted_fin} to {finalized_up_to_day}."
+                        )
+                    if partition_fingerprints:
+                        persisted_parts = json.loads(row["partition_fingerprints_json"])
+                        if persisted_parts and persisted_parts != partition_fingerprints:
+                            raise ProductionSafetyConfigurationError(
+                                "DATASET_MANIFEST_MISMATCH: partition fingerprints mismatch with sealed epoch manifest."
+                            )
+                    cursor.execute("COMMIT")
+                    return dict(row)
+
+                man_id = f"man_{uuid.uuid4().hex[:12]}"
+                parts_json = json.dumps(partition_fingerprints or {}, sort_keys=True)
+                cursor.execute("SELECT stream_fingerprint FROM continual_streams WHERE stream_fingerprint = ?", (stream_fingerprint,))
+                if cursor.fetchone() is None:
+                    cursor.execute(
+                        """
+                        INSERT OR IGNORE INTO continual_streams (
+                            stream_fingerprint, stream_id, metric, granularity,
+                            epoch_id, epoch_start, epoch_days, timezone,
+                            daily_l2_bound, epoch_group_l12_bound, lateness_grace_days,
+                            tree_topology, tree_padding, noise_config_json,
+                            dataset_fingerprint, public_roster_fingerprint, created_at
+                        ) VALUES (?, ?, 'volume', 'overall_1_cell', ?, '2026-01-01', 90, 'UTC', 1.0, 1.0, 0, 'binary', 'virtual_zeros', '{}', ?, ?, ?)
+                        """,
+                        (stream_fingerprint, stream_fingerprint, epoch_id, manifest_fingerprint, public_roster_fingerprint, now_iso),
+                    )
+                cursor.execute(
+                    """
+                    INSERT INTO continual_epoch_manifests (
+                        manifest_id, stream_fingerprint, epoch_id, manifest_fingerprint,
+                        public_roster_fingerprint, finalized_up_to_day, partition_fingerprints_json,
+                        status, created_at, sealed_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, 'SEALED', ?, ?)
+                    """,
+                    (man_id, stream_fingerprint, epoch_id, manifest_fingerprint, public_roster_fingerprint, int(finalized_up_to_day), parts_json, now_iso, now_iso),
+                )
+                cursor.execute("COMMIT")
+                return {
+                    "manifest_id": man_id,
+                    "stream_fingerprint": stream_fingerprint,
+                    "epoch_id": epoch_id,
+                    "manifest_fingerprint": manifest_fingerprint,
+                    "public_roster_fingerprint": public_roster_fingerprint,
+                    "finalized_up_to_day": int(finalized_up_to_day),
+                    "partition_fingerprints_json": parts_json,
+                    "status": "SEALED",
+                    "created_at": now_iso,
+                    "sealed_at": now_iso,
+                }
+            except Exception:
+                cursor.execute("ROLLBACK")
+                raise
+
+    def get_exposed_continual_levels(
+        self,
+        budget_scope_id: str,
+        stream_fingerprint: str,
+        epoch_id: str,
+    ) -> Set[int]:
+        """Return set of committed level indices for stream and budget scope."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='continual_level_exposures'")
+            if cursor.fetchone() is None:
+                return set()
+            cursor.execute(
+                """
+                SELECT level FROM continual_level_exposures
+                WHERE budget_scope_id = ? AND stream_fingerprint = ? AND epoch_id = ?
+                  AND reservation_state = 'COMMITTED'
+                """,
+                (budget_scope_id, stream_fingerprint, epoch_id),
+            )
+            return {int(row[0]) for row in cursor.fetchall()}
+
     def clear(self) -> None:
         """Wipe all state (test-only helper)."""
         with self._connection() as conn:
@@ -1898,4 +2559,8 @@ class PrivacyStateManager:
             cursor.execute("DELETE FROM privacy_ledger")
             cursor.execute("DELETE FROM release_store")
             cursor.execute("DELETE FROM privacy_reservations")
+            for tbl in ["continual_query_log", "continual_level_exposures", "continual_epoch_manifests", "continual_nodes", "continual_streams", "privacy_policy_metadata"]:
+                cursor.execute(f"SELECT 1 FROM sqlite_master WHERE type='table' AND name='{tbl}'")
+                if cursor.fetchone():
+                    cursor.execute(f"DELETE FROM {tbl}")
             conn.commit()

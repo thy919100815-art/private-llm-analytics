@@ -13,13 +13,13 @@ from private_llm_analytics.privacy.exceptions import (
     ProductionSafetyConfigurationError,
 )
 
+from private_llm_analytics.privacy.rdp import DEFAULT_RDP_ORDERS
+
 SUPPORTED_CONTINUAL_METRICS = ("interaction_volume",)
 SUPPORTED_CONTINUAL_MECHANISMS = ("gaussian",)
 SUPPORTED_CONTINUAL_TOPOLOGIES = ("binary",)
 
-DEFAULT_CONTINUAL_RDP_ORDERS: Tuple[float, ...] = (
-    1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 12.0, 16.0, 20.0, 24.0, 32.0, 48.0, 64.0, 128.0
-)
+DEFAULT_CONTINUAL_RDP_ORDERS: Tuple[float, ...] = tuple(float(x) for x in DEFAULT_RDP_ORDERS)
 
 
 @dataclass(frozen=True)

@@ -70,8 +70,12 @@ def test_late_data_cannot_mutate_released_node(tmp_path: Path):
         })
     df_tampered = pd.DataFrame(records_late)
 
-    # Query same day [1, 2] again
-    res2 = engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=df_tampered, public_user_roster=roster)
+    # Attempting to query with tampered interactions on sealed epoch must fail closed
+    with pytest.raises(ProductionSafetyConfigurationError, match="DATASET_MANIFEST_MISMATCH"):
+        engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=df_tampered, public_user_roster=roster)
+
+    # Query same day [1, 2] again using cached nodes
+    res2 = engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=None, public_user_roster=None)
 
     # Output must remain 100% bitwise immutable!
     np.testing.assert_array_equal(res1.vector, res2.vector)

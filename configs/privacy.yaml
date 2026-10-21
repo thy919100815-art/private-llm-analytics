@@ -97,3 +97,20 @@ privacy:
       - 14
       - 30
     planning_horizon_days: 90
+
+  continual:
+    enabled: false
+    mode: binary_tree
+    epoch_days: 90
+    timezone: UTC
+    daily_l2_bound: 10.0
+    epoch_l12_bound: 40.0
+    lateness_grace_days: 1
+    tree:
+      topology: binary
+      padding: next_power_of_two
+    noise:
+      mechanism: gaussian
+      target_epoch_epsilon: 2.0
+      calibration_delta: 1e-6
+      equal_sigma_per_level: true

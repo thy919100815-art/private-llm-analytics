@@ -13,6 +13,7 @@ Implements:
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+import hashlib
 import json
 import math
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple, Union
@@ -24,6 +25,7 @@ from private_llm_analytics.continual.contributions import (
 )
 from private_llm_analytics.continual.mechanism import (
     calibrate_tree_gaussian_sigma,
+    compute_level_rdp_vector,
     evaluate_rdp_epsilon,
 )
 from private_llm_analytics.continual.models import ContinualStreamConfig
@@ -36,6 +38,7 @@ from private_llm_analytics.privacy.exceptions import (
     PrivacyConfigurationError,
     ProductionSafetyConfigurationError,
 )
+from private_llm_analytics.privacy.rdp import DEFAULT_RDP_ORDERS
 
 
 @dataclass(frozen=True)
@@ -90,14 +93,44 @@ class ContinualQueryEngine:
         state_manager: ContinualStateManager,
         composition_mode: str = "global_external",
         collusion_groups: Optional[Dict[str, List[str]]] = None,
-        delta_global: float = 1e-5,
+        recipient_roles: Optional[Dict[str, str]] = None,
+        delta_global: float = 1e-6,
         epsilon_cap: float = 4.0,
+        authoritative_orders: Optional[Sequence[float]] = None,
+        app_config: Optional[Any] = None,
     ):
         self.state_manager = state_manager
-        self.composition_mode = composition_mode
-        self.collusion_groups = collusion_groups or {}
-        self.delta_global = float(delta_global)
-        self.epsilon_cap = float(epsilon_cap)
+        if app_config is not None:
+            acc_mode = str(getattr(app_config.privacy.accountant, "mode", "")).lower()
+            if acc_mode != "rdp":
+                raise PrivacyConfigurationError(
+                    f"Fail-closed: Continual observation strictly requires accountant mode 'rdp', got '{acc_mode}'."
+                )
+            self.enabled = bool(getattr(app_config.privacy.continual, "enabled", False))
+            self.delta_global = float(app_config.privacy.accountant.delta_global)
+            self.epsilon_cap = float(app_config.privacy.accountant.epsilon_cap)
+            self.authoritative_orders = tuple(float(x) for x in app_config.privacy.accountant.orders)
+            self.composition_mode = str(app_config.privacy.recipient_composition.mode)
+            self.collusion_groups = getattr(app_config.privacy.recipient_composition, "collusion_groups", {}) or {}
+            self.recipient_roles = getattr(app_config.privacy.recipient_composition, "recipient_roles", {}) or {}
+        else:
+            self.enabled = True
+            self.composition_mode = composition_mode
+            self.collusion_groups = collusion_groups or {}
+            self.recipient_roles = recipient_roles or {}
+            self.delta_global = float(delta_global)
+            self.epsilon_cap = float(epsilon_cap)
+            self.authoritative_orders = tuple(float(x) for x in (authoritative_orders or DEFAULT_RDP_ORDERS))
+
+    @classmethod
+    def from_app_config(
+        cls,
+        app_config: Any,
+        state_manager: Optional[ContinualStateManager] = None,
+    ) -> "ContinualQueryEngine":
+        """Instantiate ContinualQueryEngine bound to authoritative AppConfig."""
+        sm = state_manager or ContinualStateManager(db_path=app_config.privacy.release.state_db_path)
+        return cls(state_manager=sm, app_config=app_config)
 
     def resolve_scope(self, recipient: str, recipient_role: str = "external") -> str:
         """Resolve budget scope ID according to active recipient composition policy."""
@@ -117,7 +150,7 @@ class ContinualQueryEngine:
             epoch_l12_bound=stream_config.epoch_group_l12_bound,
             target_tree_epsilon=stream_config.noise.target_epoch_epsilon,
             calibration_delta=stream_config.noise.calibration_delta,
-            rdp_orders=stream_config.noise.rdp_orders,
+            rdp_orders=self.authoritative_orders or stream_config.noise.rdp_orders,
         )
 
     def _execute_tree_query(
@@ -132,8 +165,18 @@ class ContinualQueryEngine:
         recipient_role: str = "external",
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
+        manifest_fingerprint: Optional[str] = None,
+        public_roster_fingerprint: Optional[str] = None,
+        current_wall_clock_day: Optional[int] = None,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
     ) -> ContinualQueryResult:
         """Internal execution of tree-based dyadic interval query."""
+        if not self.enabled:
+            raise PrivacyConfigurationError(
+                "Continual observation is disabled in configuration (privacy.continual.enabled=false). "
+                "Explicitly enable privacy.continual.enabled to authorize production continual queries."
+            )
+
         # 1. Register stream configuration
         self.state_manager.register_stream(stream_config)
 
@@ -158,6 +201,32 @@ class ContinualQueryEngine:
         # 5. Determine sigma
         sigma = self._get_calibrated_sigma(stream_config)
 
+        # 5b. Resolve dataset manifest and public roster fingerprints
+        mf = manifest_fingerprint or stream_config.dataset_fingerprint
+        if not mf and interactions is not None:
+            if isinstance(interactions, pd.DataFrame):
+                data_bytes = str(interactions.to_dict(orient="records")).encode("utf-8")
+            else:
+                data_bytes = json.dumps(interactions, sort_keys=True).encode("utf-8")
+            mf = hashlib.sha256(data_bytes).hexdigest()
+
+        rf = public_roster_fingerprint or stream_config.public_roster_fingerprint
+        if not rf and public_user_roster is not None:
+            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
+            rf = hashlib.sha256(roster_bytes).hexdigest()
+
+        if not mf:
+            with self.state_manager._connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT manifest_fingerprint, public_roster_fingerprint FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                    (stream_config.stream_fingerprint, stream_config.epoch_id),
+                )
+                m_row = cursor.fetchone()
+                if m_row:
+                    mf = m_row[0]
+                    rf = rf or m_row[1]
+
         # 6. Resolve scope
         budget_scope_id = self.resolve_scope(recipient, recipient_role=recipient_role)
 
@@ -178,10 +247,13 @@ class ContinualQueryEngine:
                 sigma=sigma,
                 delta_global=self.delta_global,
                 epsilon_cap=self.epsilon_cap,
+                authoritative_orders=self.authoritative_orders,
+                policy_mode=self.composition_mode,
+                policy_groups=self.collusion_groups,
+                recipient_roles=self.recipient_roles,
             )
 
-        # 9. Materialize / Retrieve Canonical Noisy Nodes
-        # Helper to lazily prepare contributions tensor if materialization is needed
+        # 9. Materialize / Retrieve Canonical Noisy Nodes with rollback protection
         contrib_tensor_holder: List[Optional[np.ndarray]] = [precomputed_contributions]
 
         def _get_contributions():
@@ -204,32 +276,39 @@ class ContinualQueryEngine:
                 contrib_tensor_holder[0] = tensor
             return contrib_tensor_holder[0]
 
-        node_noisy_vectors: List[np.ndarray] = []
-        for level, node_idx in nodes_used:
-            u, v = tree.node_interval(level, node_idx)
-            # Define lazy materializer
-            def _materialize_node_exact():
-                contribs = _get_contributions()
-                # 0-based slice [u - 1, min(v, epoch_days)]
-                start_idx = u - 1
-                end_idx = min(v, stream_config.epoch_days)
-                # Sum over interval for all users: (n_users, dim) -> sum over users -> (dim,)
-                node_slice = contribs[:, start_idx:end_idx, :]
-                exact_node = np.sum(node_slice, axis=(0, 1))
-                return exact_node
+        try:
+            node_noisy_vectors: List[np.ndarray] = []
+            for level, node_idx in nodes_used:
+                u, v = tree.node_interval(level, node_idx)
+                def _materialize_node_exact():
+                    contribs = _get_contributions()
+                    start_idx = u - 1
+                    end_idx = min(v, stream_config.epoch_days)
+                    node_slice = contribs[:, start_idx:end_idx, :]
+                    exact_node = np.sum(node_slice, axis=(0, 1))
+                    return exact_node
 
-            noisy_node = self.state_manager.get_or_create_noisy_node(
-                stream_config=stream_config,
-                level=level,
-                node_index=node_idx,
-                sigma=sigma,
-                materialize_fn=_materialize_node_exact,
-            )
-            node_noisy_vectors.append(noisy_node)
+                noisy_node = self.state_manager.get_or_create_noisy_node(
+                    stream_config=stream_config,
+                    level=level,
+                    node_index=node_idx,
+                    sigma=sigma,
+                    materialize_fn=_materialize_node_exact,
+                    finalized_up_to_day=finalized_up_to_day,
+                    manifest_fingerprint=mf,
+                    public_roster_fingerprint=rf,
+                    current_wall_clock_day=current_wall_clock_day,
+                    partition_fingerprints=partition_fingerprints,
+                )
+                node_noisy_vectors.append(noisy_node)
 
-        # 10. Commit level exposures
-        if reservations:
-            self.state_manager.commit_continual_level_exposures(reservations)
+            # 10. Commit level exposures
+            if reservations:
+                self.state_manager.commit_continual_level_exposures(reservations)
+        except Exception:
+            if reservations:
+                self.state_manager.abort_continual_level_exposures(reservations)
+            raise
 
         # 11. Deterministic post-processing summation (Section 22, 45 - NO RNG AT QUERY TIME)
         result_vector = np.sum(node_noisy_vectors, axis=0)
@@ -359,45 +438,236 @@ class ContinualQueryEngine:
         interactions_epoch_2: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         public_user_roster: Optional[Sequence[str]] = None,
         recipient_role: str = "external",
+        finalized_up_to_day_epoch_1: Optional[int] = None,
+        finalized_up_to_day_epoch_2: Optional[int] = None,
     ) -> ContinualQueryResult:
-        """Cross-epoch interval query decomposing across epoch boundaries (Section 103)."""
-        res_1 = self.query_interval(
-            stream_config=epoch_1_config,
+        """Cross-epoch interval query decomposing across epoch boundaries with atomic reservation (Section 103)."""
+        if not self.enabled:
+            raise PrivacyConfigurationError(
+                "Continual observation is disabled in configuration (privacy.continual.enabled=false)."
+            )
+
+        self.state_manager.register_stream(epoch_1_config)
+        self.state_manager.register_stream(epoch_2_config)
+
+        # 1. Decompose both intervals
+        tree_1 = BinaryTimeTree(epoch_days=epoch_1_config.epoch_days)
+        nodes_used_1 = tree_1.canonical_cover(epoch_1_start_day, epoch_1_config.epoch_days)
+        levels_used_1 = sorted(list({lvl for lvl, _ in nodes_used_1}))
+
+        tree_2 = BinaryTimeTree(epoch_days=epoch_2_config.epoch_days)
+        nodes_used_2 = tree_2.canonical_cover(1, epoch_2_end_day)
+        levels_used_2 = sorted(list({lvl for lvl, _ in nodes_used_2}))
+
+        budget_scope_id = self.resolve_scope(recipient, recipient_role=recipient_role)
+
+        # 2. Check exposed levels
+        exposed_1 = self.state_manager.get_exposed_levels(budget_scope_id, epoch_1_config.stream_fingerprint, epoch_1_config.epoch_id)
+        newly_1 = [lvl for lvl in levels_used_1 if lvl not in exposed_1]
+        reused_1 = [lvl for lvl in levels_used_1 if lvl in exposed_1]
+
+        exposed_2 = self.state_manager.get_exposed_levels(budget_scope_id, epoch_2_config.stream_fingerprint, epoch_2_config.epoch_id)
+        newly_2 = [lvl for lvl in levels_used_2 if lvl not in exposed_2]
+        reused_2 = [lvl for lvl in levels_used_2 if lvl in exposed_2]
+
+        sigma_1 = self._get_calibrated_sigma(epoch_1_config)
+        sigma_2 = self._get_calibrated_sigma(epoch_2_config)
+
+        rdp_1 = compute_level_rdp_vector(
+            epoch_l12_bound=epoch_1_config.epoch_group_l12_bound,
+            sigma=sigma_1,
+            rdp_orders=self.authoritative_orders or epoch_1_config.noise.rdp_orders,
+        )
+        rdp_2 = compute_level_rdp_vector(
+            epoch_l12_bound=epoch_2_config.epoch_group_l12_bound,
+            sigma=sigma_2,
+            rdp_orders=self.authoritative_orders or epoch_2_config.noise.rdp_orders,
+        )
+
+        epoch_requests = []
+        if newly_1:
+            epoch_requests.append((epoch_1_config.stream_fingerprint, epoch_1_config.epoch_id, newly_1, rdp_1))
+        if newly_2:
+            epoch_requests.append((epoch_2_config.stream_fingerprint, epoch_2_config.epoch_id, newly_2, rdp_2))
+
+        # 3. ATOMIC CROSS-EPOCH RESERVATION: all-or-nothing
+        all_reservations: List[Dict[str, Any]] = []
+        if epoch_requests:
+            all_reservations = self.state_manager.state_manager.reserve_cross_epoch_continual_level_exposures(
+                budget_scope_id=budget_scope_id,
+                epoch_requests=epoch_requests,
+                epsilon_cap=self.epsilon_cap,
+                delta_global=self.delta_global,
+                authoritative_orders=self.authoritative_orders,
+                policy_mode=self.composition_mode,
+                policy_groups=self.collusion_groups,
+                recipient_roles=self.recipient_roles,
+            )
+
+        mf_1 = epoch_1_config.dataset_fingerprint
+        if not mf_1 and interactions_epoch_1 is not None:
+            if isinstance(interactions_epoch_1, pd.DataFrame):
+                data_bytes = str(interactions_epoch_1.to_dict(orient="records")).encode("utf-8")
+            else:
+                data_bytes = json.dumps(interactions_epoch_1, sort_keys=True).encode("utf-8")
+            mf_1 = hashlib.sha256(data_bytes).hexdigest()
+
+        rf_1 = epoch_1_config.public_roster_fingerprint
+        if not rf_1 and public_user_roster is not None:
+            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
+            rf_1 = hashlib.sha256(roster_bytes).hexdigest()
+
+        mf_2 = epoch_2_config.dataset_fingerprint
+        if not mf_2 and interactions_epoch_2 is not None:
+            if isinstance(interactions_epoch_2, pd.DataFrame):
+                data_bytes = str(interactions_epoch_2.to_dict(orient="records")).encode("utf-8")
+            else:
+                data_bytes = json.dumps(interactions_epoch_2, sort_keys=True).encode("utf-8")
+            mf_2 = hashlib.sha256(data_bytes).hexdigest()
+
+        rf_2 = epoch_2_config.public_roster_fingerprint
+        if not rf_2 and public_user_roster is not None:
+            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
+            rf_2 = hashlib.sha256(roster_bytes).hexdigest()
+
+        # 4. Materialize nodes with rollback on error
+        try:
+            def _contribs_1():
+                if interactions_epoch_1 is None or public_user_roster is None:
+                    raise ValueError("Cannot materialize epoch 1 nodes: interactions and roster required.")
+                tensor, _, _ = build_temporal_user_contributions(
+                    interactions=interactions_epoch_1,
+                    public_user_roster=public_user_roster,
+                    epoch_start=epoch_1_config.epoch_start,
+                    epoch_days=epoch_1_config.epoch_days,
+                    granularity=epoch_1_config.granularity,
+                    daily_l2_bound=epoch_1_config.daily_l2_bound,
+                    epoch_l12_bound=epoch_1_config.epoch_group_l12_bound,
+                    metric=epoch_1_config.metric,
+                    timezone_name=epoch_1_config.timezone,
+                )
+                return tensor
+
+            def _contribs_2():
+                if interactions_epoch_2 is None or public_user_roster is None:
+                    raise ValueError("Cannot materialize epoch 2 nodes: interactions and roster required.")
+                tensor, _, _ = build_temporal_user_contributions(
+                    interactions=interactions_epoch_2,
+                    public_user_roster=public_user_roster,
+                    epoch_start=epoch_2_config.epoch_start,
+                    epoch_days=epoch_2_config.epoch_days,
+                    granularity=epoch_2_config.granularity,
+                    daily_l2_bound=epoch_2_config.daily_l2_bound,
+                    epoch_l12_bound=epoch_2_config.epoch_group_l12_bound,
+                    metric=epoch_2_config.metric,
+                    timezone_name=epoch_2_config.timezone,
+                )
+                return tensor
+
+            tensor_1_holder: List[Optional[np.ndarray]] = [None]
+            tensor_2_holder: List[Optional[np.ndarray]] = [None]
+
+            node_vectors_1 = []
+            for lvl, n_idx in nodes_used_1:
+                u, v = tree_1.node_interval(lvl, n_idx)
+                def _mat_1():
+                    if tensor_1_holder[0] is None:
+                        tensor_1_holder[0] = _contribs_1()
+                    s_idx = u - 1
+                    e_idx = min(v, epoch_1_config.epoch_days)
+                    return np.sum(tensor_1_holder[0][:, s_idx:e_idx, :], axis=(0, 1))
+
+                noisy = self.state_manager.get_or_create_noisy_node(
+                    stream_config=epoch_1_config,
+                    level=lvl,
+                    node_index=n_idx,
+                    sigma=sigma_1,
+                    materialize_fn=_mat_1,
+                    finalized_up_to_day=finalized_up_to_day_epoch_1,
+                    manifest_fingerprint=mf_1,
+                    public_roster_fingerprint=rf_1,
+                )
+                node_vectors_1.append(noisy)
+
+            node_vectors_2 = []
+            for lvl, n_idx in nodes_used_2:
+                u, v = tree_2.node_interval(lvl, n_idx)
+                def _mat_2():
+                    if tensor_2_holder[0] is None:
+                        tensor_2_holder[0] = _contribs_2()
+                    s_idx = u - 1
+                    e_idx = min(v, epoch_2_config.epoch_days)
+                    return np.sum(tensor_2_holder[0][:, s_idx:e_idx, :], axis=(0, 1))
+
+                noisy = self.state_manager.get_or_create_noisy_node(
+                    stream_config=epoch_2_config,
+                    level=lvl,
+                    node_index=n_idx,
+                    sigma=sigma_2,
+                    materialize_fn=_mat_2,
+                    finalized_up_to_day=finalized_up_to_day_epoch_2,
+                    manifest_fingerprint=mf_2,
+                    public_roster_fingerprint=rf_2,
+                )
+                node_vectors_2.append(noisy)
+
+            # 5. Commit all reservations across both epochs
+            if all_reservations:
+                self.state_manager.commit_continual_level_exposures(all_reservations)
+
+        except Exception:
+            if all_reservations:
+                self.state_manager.abort_continual_level_exposures(all_reservations)
+            raise
+
+        vec_1 = np.sum(node_vectors_1, axis=0)
+        vec_2 = np.sum(node_vectors_2, axis=0)
+        combined_vector = vec_1 + vec_2
+
+        std_1 = float(sigma_1 * math.sqrt(len(nodes_used_1)))
+        std_2 = float(sigma_2 * math.sqrt(len(nodes_used_2)))
+        combined_noise_std = math.sqrt(std_1**2 + std_2**2)
+
+        combined_nodes = list(nodes_used_1) + list(nodes_used_2)
+        combined_levels = sorted(list(set(levels_used_1 + levels_used_2)))
+        newly_exposed = sorted(list(set(newly_1 + newly_2)))
+        reused = sorted(list(set(reused_1 + reused_2)))
+
+        q_id_1 = self.state_manager.log_query(
+            budget_scope_id=budget_scope_id,
+            stream_fingerprint=epoch_1_config.stream_fingerprint,
+            epoch_id=epoch_1_config.epoch_id,
+            query_type="CROSS_EPOCH_PART1",
             start_day=epoch_1_start_day,
             end_day=epoch_1_config.epoch_days,
-            recipient=recipient,
-            interactions=interactions_epoch_1,
-            public_user_roster=public_user_roster,
-            recipient_role=recipient_role,
+            nodes_used=nodes_used_1,
+            levels_used=levels_used_1,
+            newly_exposed_levels=newly_1,
         )
-
-        res_2 = self.query_interval(
-            stream_config=epoch_2_config,
+        q_id_2 = self.state_manager.log_query(
+            budget_scope_id=budget_scope_id,
+            stream_fingerprint=epoch_2_config.stream_fingerprint,
+            epoch_id=epoch_2_config.epoch_id,
+            query_type="CROSS_EPOCH_PART2",
             start_day=1,
             end_day=epoch_2_end_day,
-            recipient=recipient,
-            interactions=interactions_epoch_2,
-            public_user_roster=public_user_roster,
-            recipient_role=recipient_role,
+            nodes_used=nodes_used_2,
+            levels_used=levels_used_2,
+            newly_exposed_levels=newly_2,
         )
 
-        combined_vector = res_1.vector + res_2.vector
-        combined_noise_std = math.sqrt(res_1.expected_query_noise_std**2 + res_2.expected_query_noise_std**2)
-        combined_nodes = list(res_1.nodes_used) + list(res_2.nodes_used)
-        combined_levels = sorted(list(set(res_1.levels_used + res_2.levels_used)))
-        newly_exposed = sorted(list(set(res_1.newly_exposed_levels + res_2.newly_exposed_levels)))
-        reused = sorted(list(set(res_1.reused_levels + res_2.reused_levels)))
+        _, cell_names = build_aggregation_matrix(epoch_1_config.granularity)
 
         return ContinualQueryResult(
             vector=combined_vector,
-            cell_names=res_1.cell_names,
+            cell_names=cell_names,
             nodes_used=combined_nodes,
             levels_used=combined_levels,
             newly_exposed_levels=newly_exposed,
             reused_levels=reused,
-            budget_scope_id=res_1.budget_scope_id,
+            budget_scope_id=budget_scope_id,
             expected_query_noise_std=combined_noise_std,
-            query_id=f"cross_{res_1.query_id}_{res_2.query_id}",
+            query_id=f"cross_{q_id_1}_{q_id_2}",
             stream_fingerprint=f"{epoch_1_config.stream_fingerprint}+{epoch_2_config.stream_fingerprint}",
             epoch_id=f"{epoch_1_config.epoch_id}+{epoch_2_config.epoch_id}",
             start_day=epoch_1_start_day,
