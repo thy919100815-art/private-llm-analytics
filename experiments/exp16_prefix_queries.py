@@ -25,6 +25,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from experiments.temporal_truth import generate_rate_consistent_temporal_truth
+from private_llm_analytics.continual.contributions import build_temporal_user_contributions
 from private_llm_analytics.continual.mechanism import calibrate_tree_gaussian_sigma, evaluate_rdp_epsilon
 from private_llm_analytics.continual.models import ContinualNoiseConfig, ContinualStreamConfig
 from private_llm_analytics.continual.query import ContinualQueryEngine
@@ -84,7 +85,22 @@ def run_exp16(smoke: bool = False, output_dir: Optional[Path] = None):
     )
     roster = sorted(df["user_id"].unique().tolist())
 
+    # Build reference tensors for Fair End-to-End Comparison (Section H):
+    raw_contrib, _, _ = build_temporal_user_contributions(
+        interactions=df, public_user_roster=roster, epoch_start="2026-10-01",
+        epoch_days=T, daily_l2_bound=1e9, epoch_l12_bound=1e9,
+    )
+    ind_contrib, _, _ = build_temporal_user_contributions(
+        interactions=df, public_user_roster=roster, epoch_start="2026-10-01",
+        epoch_days=T, daily_l2_bound=c_day, epoch_l12_bound=1e9,
+    )
+    tree_contrib, _, _ = build_temporal_user_contributions(
+        interactions=df, public_user_roster=roster, epoch_start="2026-10-01",
+        epoch_days=T, daily_l2_bound=c_day, epoch_l12_bound=c_epoch,
+    )
+
     rows: List[Dict[str, Any]] = []
+    rng = np.random.default_rng(seed=2026)
 
     with tempfile.TemporaryDirectory() as tmp_dir:
         db_path = Path(tmp_dir) / "exp16.db"
@@ -115,6 +131,62 @@ def run_exp16(smoke: bool = False, output_dir: Optional[Path] = None):
 
             noise_reduction = float(ind_mae / max(1e-9, tree_mae))
 
+            # Ground truth vectors for prefix [1, t]
+            V_raw = np.sum(raw_contrib[:, :t, :], axis=(0, 1))
+            V_ind_bounded = np.sum(ind_contrib[:, :t, :], axis=(0, 1))
+            V_tree_bounded = np.sum(tree_contrib[:, :t, :], axis=(0, 1))
+
+            tree_clip_l1 = float(np.sum(np.abs(V_tree_bounded - V_raw)))
+            ind_clip_l1 = float(np.sum(np.abs(V_ind_bounded - V_raw)))
+            raw_mean_cell = max(1e-9, float(np.mean(V_raw)))
+
+            # Empirical noise trials for prefix query (Section H)
+            tree_tot_l1_trials, ind_tot_l1_trials = [], []
+            tree_noise_l1_trials, ind_noise_l1_trials = [], []
+            tree_mae_trials, ind_mae_trials = [], []
+            tree_rmse_trials, ind_rmse_trials = [], []
+            tree_rel_mae_trials, ind_rel_mae_trials = [], []
+            tree_dp_tot_trials, ind_dp_tot_trials = [], []
+
+            for _ in range(n_trials):
+                tree_noise = rng.normal(0.0, tree_noise_std, size=9)
+                V_tree_dp = V_tree_bounded + tree_noise
+                t_noise_l1 = float(np.sum(np.abs(tree_noise)))
+                t_tot_l1 = float(np.sum(np.abs(V_tree_dp - V_raw)))
+                t_mae = t_tot_l1 / 9.0
+                t_rmse = float(math.sqrt(np.mean((V_tree_dp - V_raw) ** 2)))
+                t_rel_mae = t_mae / raw_mean_cell
+
+                tree_noise_l1_trials.append(t_noise_l1)
+                tree_tot_l1_trials.append(t_tot_l1)
+                tree_mae_trials.append(t_mae)
+                tree_rmse_trials.append(t_rmse)
+                tree_rel_mae_trials.append(t_rel_mae)
+                tree_dp_tot_trials.append(float(np.sum(V_tree_dp)))
+
+                ind_noise = rng.normal(0.0, ind_noise_std, size=9)
+                V_ind_dp = V_ind_bounded + ind_noise
+                i_noise_l1 = float(np.sum(np.abs(ind_noise)))
+                i_tot_l1 = float(np.sum(np.abs(V_ind_dp - V_raw)))
+                i_mae = i_tot_l1 / 9.0
+                i_rmse = float(math.sqrt(np.mean((V_ind_dp - V_raw) ** 2)))
+                i_rel_mae = i_mae / raw_mean_cell
+
+                ind_noise_l1_trials.append(i_noise_l1)
+                ind_tot_l1_trials.append(i_tot_l1)
+                ind_mae_trials.append(i_mae)
+                ind_rmse_trials.append(i_rmse)
+                ind_rel_mae_trials.append(i_rel_mae)
+                ind_dp_tot_trials.append(float(np.sum(V_ind_dp)))
+
+            tree_mae_mean = float(np.mean(tree_mae_trials))
+            tree_mae_std = float(np.std(tree_mae_trials, ddof=1)) if n_trials > 1 else 0.0
+            ind_mae_mean = float(np.mean(ind_mae_trials))
+            ind_mae_std = float(np.std(ind_mae_trials, ddof=1)) if n_trials > 1 else 0.0
+
+            ci_half_tree = 1.96 * tree_mae_std / math.sqrt(n_trials)
+            ci_half_ind = 1.96 * ind_mae_std / math.sqrt(n_trials)
+
             row = {
                 "prefix_day_t": t,
                 "tree_nodes_used": nodes_count,
@@ -124,9 +196,32 @@ def run_exp16(smoke: bool = False, output_dir: Optional[Path] = None):
                 "independent_noise_std": round(ind_noise_std, 4),
                 "independent_noise_mae": round(ind_mae, 4),
                 "noise_reduction_factor": round(noise_reduction, 2),
+                # Section H: End-to-end empirical comparison under fixed lifetime epsilon
+                "raw_truth_total": round(float(np.sum(V_raw)), 2),
+                "tree_bounded_truth_total": round(float(np.sum(V_tree_bounded)), 2),
+                "ind_bounded_truth_total": round(float(np.sum(V_ind_bounded)), 2),
+                "tree_dp_output_total_mean": round(float(np.mean(tree_dp_tot_trials)), 2),
+                "ind_dp_output_total_mean": round(float(np.mean(ind_dp_tot_trials)), 2),
+                "tree_clipping_error_l1": round(tree_clip_l1, 4),
+                "ind_clipping_error_l1": round(ind_clip_l1, 4),
+                "tree_noise_error_l1_mean": round(float(np.mean(tree_noise_l1_trials)), 4),
+                "ind_noise_error_l1_mean": round(float(np.mean(ind_noise_l1_trials)), 4),
+                "tree_total_l1_mean": round(float(np.mean(tree_tot_l1_trials)), 4),
+                "ind_total_l1_mean": round(float(np.mean(ind_tot_l1_trials)), 4),
+                "tree_mae_mean": round(tree_mae_mean, 4),
+                "ind_mae_mean": round(ind_mae_mean, 4),
+                "tree_rmse_mean": round(float(np.mean(tree_rmse_trials)), 4),
+                "ind_rmse_mean": round(float(np.mean(ind_rmse_trials)), 4),
+                "tree_relative_mae_mean": round(float(np.mean(tree_rel_mae_trials)), 4),
+                "ind_relative_mae_mean": round(float(np.mean(ind_rel_mae_trials)), 4),
+                "tree_mae_ci95_low": round(tree_mae_mean - ci_half_tree, 4),
+                "tree_mae_ci95_high": round(tree_mae_mean + ci_half_tree, 4),
+                "ind_mae_ci95_low": round(ind_mae_mean - ci_half_ind, 4),
+                "ind_mae_ci95_high": round(ind_mae_mean + ci_half_ind, 4),
+                "empirical_error_reduction_factor": round(ind_mae_mean / max(1e-9, tree_mae_mean), 2),
             }
             rows.append(row)
-            print(f"  Prefix t={t}: Tree MAE={tree_mae:.2f} (nodes={nodes_count}) vs Ind MAE={ind_mae:.2f} (days={t})")
+            print(f"  Prefix t={t}: Tree MAE={tree_mae_mean:.2f} (nodes={nodes_count}) vs Ind MAE={ind_mae_mean:.2f} (days={t})")
 
     df_out = pd.DataFrame(rows)
     csv_path = out_dir / "exp16_prefix_queries.csv"

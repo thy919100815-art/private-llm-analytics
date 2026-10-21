@@ -28,6 +28,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from experiments.temporal_truth import generate_rate_consistent_temporal_truth
 from private_llm_analytics.continual.contributions import build_temporal_user_contributions
 from private_llm_analytics.continual.mechanism import calibrate_tree_gaussian_sigma
+from private_llm_analytics.continual.tree import BinaryTimeTree
 
 
 def run_exp18(smoke: bool = False, output_dir: Optional[Path] = None):
@@ -83,8 +84,9 @@ def run_exp18(smoke: bool = False, output_dir: Optional[Path] = None):
             total_clipping_bias = diag.daily_clipping_bias + diag.temporal_clipping_bias
             rel_total_clipping_bias = float(total_clipping_bias / raw_tot)
 
-            # Expected 30-day query noise error (uses approx 4 tree nodes)
-            nodes_in_30d = 4
+            # Expected 30-day query noise error (dynamic canonical cover of [1, 30])
+            tree = BinaryTimeTree(epoch_days=T)
+            nodes_in_30d = len(tree.canonical_cover(1, 30))
             expected_noise_l1 = 9 * sigma * math.sqrt(nodes_in_30d) * math.sqrt(2.0 / math.pi)
             rel_noise_l1 = float(expected_noise_l1 / raw_tot)
 

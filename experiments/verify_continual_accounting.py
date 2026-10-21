@@ -47,7 +47,8 @@ def main():
         }])
 
         # 1. Verify GLOBAL_EXTERNAL
-        eng_global = ContinualQueryEngine(state_manager=state_mgr, composition_mode="global_external")
+        state_mgr_global = ContinualStateManager(db_path=Path(tmp_dir) / "global.db")
+        eng_global = ContinualQueryEngine(state_manager=state_mgr_global, composition_mode="global_external")
         res_g1 = eng_global.query_interval(cfg, 1, 4, recipient="ExtA", interactions=df, public_user_roster=roster)
         assert res_g1.newly_exposed_levels == [2]
         res_g2 = eng_global.query_interval(cfg, 1, 4, recipient="ExtB", interactions=df, public_user_roster=roster)
@@ -55,7 +56,8 @@ def main():
         print("[1/4] GLOBAL_EXTERNAL level charge once verified.")
 
         # 2. Verify PER_RECIPIENT
-        eng_per = ContinualQueryEngine(state_manager=state_mgr, composition_mode="per_recipient")
+        state_mgr_per = ContinualStateManager(db_path=Path(tmp_dir) / "per.db")
+        eng_per = ContinualQueryEngine(state_manager=state_mgr_per, composition_mode="per_recipient")
         res_p1 = eng_per.query_interval(cfg, 1, 2, recipient="RecA", interactions=df, public_user_roster=roster)
         assert res_p1.newly_exposed_levels == [1]
         res_p2 = eng_per.query_interval(cfg, 1, 2, recipient="RecB", interactions=df, public_user_roster=roster)
@@ -63,8 +65,9 @@ def main():
         print("[2/4] PER_RECIPIENT isolated scope accounting verified.")
 
         # 3. Verify COLLUSION_GROUP
+        state_mgr_col = ContinualStateManager(db_path=Path(tmp_dir) / "col.db")
         groups = {"g_team": ["PartnerX", "PartnerY"]}
-        eng_col = ContinualQueryEngine(state_manager=state_mgr, composition_mode="collusion_group", collusion_groups=groups)
+        eng_col = ContinualQueryEngine(state_manager=state_mgr_col, composition_mode="collusion_group", collusion_groups=groups)
         res_c1 = eng_col.query_interval(cfg, 1, 2, recipient="PartnerX", interactions=df, public_user_roster=roster)
         assert res_c1.newly_exposed_levels == [1]
         res_c2 = eng_col.query_interval(cfg, 1, 2, recipient="PartnerY", interactions=df, public_user_roster=roster)
@@ -72,7 +75,8 @@ def main():
         print("[3/4] COLLUSION_GROUP shared scope accounting verified.")
 
         # 4. Verify Multi-Level Atomic Debit Failure
-        eng_capped = ContinualQueryEngine(state_manager=state_mgr, composition_mode="per_recipient", epsilon_cap=0.01)
+        state_mgr_cap = ContinualStateManager(db_path=Path(tmp_dir) / "cap.db")
+        eng_capped = ContinualQueryEngine(state_manager=state_mgr_cap, composition_mode="per_recipient", epsilon_cap=0.01)
         try:
             eng_capped.query_interval(cfg, 1, 7, recipient="PoorRec", interactions=df, public_user_roster=roster)
             assert False, "Expected PrivacyBudgetExceededError"
@@ -80,7 +84,7 @@ def main():
             pass
 
         # Zero levels recorded
-        exposed = state_mgr.get_exposed_levels("recipient:PoorRec", cfg.stream_fingerprint, cfg.epoch_id)
+        exposed = state_mgr_cap.get_exposed_levels("recipient:PoorRec", cfg.stream_fingerprint, cfg.epoch_id)
         assert len(exposed) == 0
         print("[4/4] Multi-level atomic budget reservation failure verified (all-or-nothing).")
 

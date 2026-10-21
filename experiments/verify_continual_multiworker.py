@@ -31,6 +31,8 @@ def main():
             daily_l2_bound=10.0,
             epoch_group_l12_bound=20.0,
             noise=ContinualNoiseConfig(sigma=4.0),
+            dataset_fingerprint="dfp_multi",
+            public_roster_fingerprint="rfp_multi",
         )
         state_mgr.register_stream(cfg)
 

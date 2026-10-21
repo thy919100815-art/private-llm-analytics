@@ -482,6 +482,7 @@ To guarantee both mathematical privacy and security against multi-recipient coll
    $$\text{node\_id} = \text{hash}(\text{stream\_fingerprint}, \text{epoch\_id}, \text{level}, \text{node\_index})$$
    A node's noisy payload depends strictly on its temporal identity and never on recipient or query scope.
    **All recipients querying the same node receive the bitwise identical noisy payload**. This completely prevents noise averaging attacks across colluding recipients.
+   *Note on Noise Storage*: In accordance with production security architecture, `continual_nodes` does NOT store `noise_seed`. Node noisy payloads are sampled using cryptographically strong PRNG at materialization time and persisted directly in `noisy_payload_json` with single-flight CAS fencing. Deterministic replay across all recipients is achieved by storing the canonical noisy vector, not by persisting or replaying a seed.
 2. **Recipient Exposure Accounting**:
    $$\text{exposure\_key} = (\text{budget\_scope\_id}, \text{stream\_fingerprint}, \text{epoch\_id}, \text{level})$$
    A privacy scope is charged for a level mechanism **once** when any node on that level is first revealed to that scope. Subsequent queries utilizing that level (or other nodes on the same level) incur **zero additional privacy charge**.

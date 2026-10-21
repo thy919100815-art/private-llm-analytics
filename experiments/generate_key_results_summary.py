@@ -219,6 +219,7 @@ def generate_v04_key_results_json(
             "mean_epsilon_reduction_factor": float(round(df15["epsilon_reduction_factor"].mean(), 2)),
             "max_noise_reduction_factor": float(df15["noise_reduction_factor"].max()),
             "mean_noise_reduction_factor": float(round(df15["noise_reduction_factor"].mean(), 2)),
+            "max_empirical_mae_reduction_factor": float(df15["empirical_mae_reduction_factor"].max()) if "empirical_mae_reduction_factor" in df15.columns else None,
             "records": df15.to_dict(orient="records"),
         }
 
@@ -228,6 +229,7 @@ def generate_v04_key_results_json(
         df16 = pd.read_csv(exp16_path)
         summary["prefix_tracking"] = {
             "max_noise_reduction_factor": float(df16["noise_reduction_factor"].max()),
+            "max_empirical_error_reduction_factor": float(df16["empirical_error_reduction_factor"].max()) if "empirical_error_reduction_factor" in df16.columns else None,
             "records": df16.to_dict(orient="records"),
         }
 
@@ -238,6 +240,7 @@ def generate_v04_key_results_json(
         summary["sliding_window"] = {
             "max_epsilon_savings_ratio": float(df17["epsilon_savings_ratio"].max()),
             "mean_epsilon_savings_ratio": float(round(df17["epsilon_savings_ratio"].mean(), 2)),
+            "max_fixed_budget_utility_ratio": float(df17["fixed_budget_utility_ratio"].max()) if "fixed_budget_utility_ratio" in df17.columns else None,
             "records": df17.to_dict(orient="records"),
         }
 
