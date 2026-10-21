@@ -14,6 +14,18 @@ from private_llm_analytics.continual.tree import (
     ContinualNodeInfo,
     compute_continual_node_id,
 )
+from private_llm_analytics.continual.mechanism import (
+    calibrate_tree_gaussian_sigma,
+    compute_level_rdp_vector,
+    evaluate_rdp_epsilon,
+)
+from private_llm_analytics.continual.state import (
+    ContinualStateManager,
+)
+from private_llm_analytics.continual.query import (
+    ContinualQueryEngine,
+    ContinualQueryResult,
+)
 
 __all__ = [
     "ContinualStreamConfig",
@@ -24,4 +36,10 @@ __all__ = [
     "BinaryTimeTree",
     "ContinualNodeInfo",
     "compute_continual_node_id",
+    "calibrate_tree_gaussian_sigma",
+    "compute_level_rdp_vector",
+    "evaluate_rdp_epsilon",
+    "ContinualStateManager",
+    "ContinualQueryEngine",
+    "ContinualQueryResult",
 ]

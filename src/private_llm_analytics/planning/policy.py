@@ -10,7 +10,11 @@ import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
-from private_llm_analytics.aggregation.grouping import DEFAULT_PROVIDERS, DEFAULT_TASKS
+from private_llm_analytics.aggregation.grouping import (
+    DEFAULT_PROVIDERS,
+    DEFAULT_TASKS,
+    build_cell_definitions,
+)
 
 
 def _extract_matrix_and_names(
