@@ -16,6 +16,11 @@ from private_llm_analytics.config.loader import load_app_config
 from private_llm_analytics.config.models import UtilityWeightsConfig
 from private_llm_analytics.mechanisms.gaussian import calibrate_analytic_gaussian
 from private_llm_analytics.planning.candidates import ReleasePolicyCandidate
+from private_llm_analytics.planning.policy import (
+    build_aggregation_matrix,
+    build_reconstruction_matrix,
+    get_direct_granularity_l1_sensitivity,
+)
 from private_llm_analytics.planning.planner import (
     SmallNReleasePlanner,
     compute_planner_config_fingerprint,
@@ -596,7 +601,7 @@ def test_temporal_guard_checks_all_candidate_windows():
 
 
 def test_component_surrogate_laplace_expected_absolute_noise():
-    """Verify that NoiseEstimator evaluates E|Z| = b for Laplace without sqrt(2/pi) distortion."""
+    """Verify that NoiseEstimator evaluates coordinate-wise Laplace scale using L1 sensitivity."""
     cand = ReleasePolicyCandidate(
         contribution_bound=20.0,
         granularity="full_9_cell",
@@ -604,10 +609,32 @@ def test_component_surrogate_laplace_expected_absolute_noise():
         epsilon_per_release=0.5,
         delta_per_release=0.0,
     )
-    # Direct sensitivity = 20.0, b = 20.0 / 0.5 = 40.0.
-    # In full_9_cell (dim=9), total expected absolute error = 9 * 40.0 = 360.0.
+    # Direct L1 sensitivity for full_9_cell with C=20 is Delta_1 = 3 * 20 = 60.0.
+    # Laplace scale b = Delta_1 / epsilon = 60.0 / 0.5 = 120.0.
+    # Across dim=9 coordinates, total expected absolute noise = 9 * 120.0 = 1080.0.
     noise_err = NoiseEstimator.estimate_noise_error("interaction_volume", cand, 1000)
-    assert noise_err == 360.0
+    assert noise_err == 1080.0
+
+    # Test overall_1_cell: Delta_1 = 1 * 20 = 20.0, b = 20 / 0.5 = 40.0, dim = 1 => 40.0
+    cand_over = ReleasePolicyCandidate(
+        contribution_bound=20.0,
+        granularity="overall_1_cell",
+        mechanism="laplace",
+        epsilon_per_release=0.5,
+        delta_per_release=0.0,
+    )
+    assert NoiseEstimator.estimate_noise_error("interaction_volume", cand_over, 1000) == 40.0
+
+    # Test provider_3_cell: Delta_1 = sqrt(3)*20, b = 40*sqrt(3), dim=3 => 3 * 40*sqrt(3) = 120*sqrt(3)
+    cand_prov = ReleasePolicyCandidate(
+        contribution_bound=20.0,
+        granularity="provider_3_cell",
+        mechanism="laplace",
+        epsilon_per_release=0.5,
+        delta_per_release=0.0,
+    )
+    expected_prov = 3.0 * (math.sqrt(3.0) * 20.0 / 0.5)
+    assert abs(NoiseEstimator.estimate_noise_error("interaction_volume", cand_prov, 1000) - expected_prov) < 1e-9
 
 
 def test_component_surrogate_gaussian_noise_unchanged():
@@ -623,3 +650,144 @@ def test_component_surrogate_gaussian_noise_unchanged():
     expected_err = 9.0 * sigma * math.sqrt(2.0 / math.pi)
     noise_err = NoiseEstimator.estimate_noise_error("interaction_volume", cand, 1000)
     assert abs(noise_err - expected_err) < 1e-9
+
+
+def test_reconstruction_matrix_provider_matches_planner():
+    """Verify build_reconstruction_matrix provider_3_cell matches Planner semantics and satisfies A_G @ R_G = I."""
+    prior = PublicContributionPrior(reference_days=30, window_days=30)
+    R_G = build_reconstruction_matrix(
+        source_granularity="provider_3_cell",
+        target_9_cell_names=prior.cell_names,
+        provider_shares=prior.provider_shares,
+        task_shares=prior.task_shares,
+    )
+    assert R_G.shape == (9, 3)
+    # Column sums must equal 1.0 (marginal preservation)
+    assert np.allclose(np.sum(R_G, axis=0), np.ones(3))
+
+    # A_G @ R_G must equal identity
+    A_G, providers = build_aggregation_matrix("provider_3_cell", prior.cell_names)
+    assert np.allclose(A_G @ R_G, np.eye(3))
+
+    # Check each cell (p, t) gets normalized task share
+    t_tot = sum(prior.task_shares.values())
+    coords = [c.split(":") for c in prior.cell_names]
+    for i, (p, t) in enumerate(coords):
+        j = providers.index(p)
+        expected_w = prior.task_shares[t] / t_tot
+        assert abs(R_G[i, j] - expected_w) < 1e-9
+
+
+def test_reconstruction_matrix_task_matches_planner():
+    """Verify build_reconstruction_matrix task_3_cell matches Planner semantics and satisfies A_G @ R_G = I."""
+    prior = PublicContributionPrior(reference_days=30, window_days=30)
+    R_G = build_reconstruction_matrix(
+        source_granularity="task_3_cell",
+        target_9_cell_names=prior.cell_names,
+        provider_shares=prior.provider_shares,
+        task_shares=prior.task_shares,
+    )
+    assert R_G.shape == (9, 3)
+    # Column sums must equal 1.0
+    assert np.allclose(np.sum(R_G, axis=0), np.ones(3))
+
+    # A_G @ R_G must equal identity
+    A_G, tasks = build_aggregation_matrix("task_3_cell", prior.cell_names)
+    assert np.allclose(A_G @ R_G, np.eye(3))
+
+    # Check each cell (p, t) gets normalized provider share
+    p_tot = sum(prior.provider_shares.values())
+    coords = [c.split(":") for c in prior.cell_names]
+    for i, (p, t) in enumerate(coords):
+        j = tasks.index(t)
+        expected_w = prior.provider_shares[p] / p_tot
+        assert abs(R_G[i, j] - expected_w) < 1e-9
+
+
+def test_reconstruction_matrix_overall_matches_planner():
+    """Verify build_reconstruction_matrix overall_1_cell matches Planner semantics and satisfies A_G @ R_G = I."""
+    prior = PublicContributionPrior(reference_days=30, window_days=30)
+    R_G = build_reconstruction_matrix(
+        source_granularity="overall_1_cell",
+        target_9_cell_names=prior.cell_names,
+        provider_shares=prior.provider_shares,
+        task_shares=prior.task_shares,
+    )
+    assert R_G.shape == (9, 1)
+    # Column sum must equal 1.0
+    assert np.allclose(np.sum(R_G, axis=0), np.array([1.0]))
+
+    # A_G @ R_G must equal [1.0]
+    A_G, _ = build_aggregation_matrix("overall_1_cell", prior.cell_names)
+    assert np.allclose(A_G @ R_G, np.eye(1))
+
+
+def test_oracle_and_planner_use_identical_reconstruction_operator():
+    """Critical test: Planner expected release L1 and Oracle Monte Carlo empirical loss match under coarse granularities."""
+    prior = PublicContributionPrior(
+        mean=60.0,
+        std=20.0,
+        reference_days=30,
+        window_days=30,
+        num_reference_users=1000,
+        public_seed=900001,
+    )
+
+    class SyntheticUserMatrix:
+        def __init__(self, matrix, cell_names):
+            self.matrix = matrix
+            self.cell_names = cell_names
+
+    umatrix = SyntheticUserMatrix(matrix=prior.ref_matrix, cell_names=prior.cell_names)
+
+    wl_weights = {
+        "full_9_cell": 0.4,
+        "provider": 0.3,
+        "task": 0.2,
+        "overall": 0.1,
+    }
+
+    test_cases = [
+        ("provider_3_cell", 40.0),
+        ("task_3_cell", 40.0),
+        ("overall_1_cell", 40.0),
+    ]
+
+    for gran, c_bound in test_cases:
+        cand = ReleasePolicyCandidate(
+            contribution_bound=c_bound,
+            granularity=gran,
+            window_days=30,
+            frequency_days=14,
+            mechanism="gaussian",
+            epsilon_per_release=1.0,
+            delta_per_release=1e-5,
+        )
+
+        _, pred_norm = prior.expected_folded_normal_release_l1(
+            metric="interaction_volume",
+            candidate=cand,
+            population_size=1000,
+            workload_weights=wl_weights,
+        )
+
+        oracle_score, oracle_stderr, _ = compute_true_candidate_utility(
+            candidate=cand,
+            umatrix=umatrix,
+            cell_names=prior.cell_names,
+            reference_days=30,
+            n_trials=2000,
+            seed=42,
+            workload_weights=wl_weights,
+            weights_data=1.0,
+            weights_stale=0.0,
+            weights_win=0.0,
+            provider_shares=prior.provider_shares,
+            task_shares=prior.task_shares,
+        )
+
+        diff = abs(pred_norm - oracle_score)
+        assert diff <= max(0.015, 4.0 * oracle_stderr), (
+            f"Granularity {gran}: Planner pred={pred_norm:.4f}, Oracle emp={oracle_score:.4f}, "
+            f"diff={diff:.4f}, stderr={oracle_stderr:.4f}"
+        )

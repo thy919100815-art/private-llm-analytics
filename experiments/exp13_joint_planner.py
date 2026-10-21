@@ -75,6 +75,8 @@ def compute_true_candidate_utility(
     weights_data: float = 1.0,
     weights_stale: float = 0.5,
     weights_win: float = 0.2,
+    provider_shares: Optional[Dict[str, float]] = None,
+    task_shares: Optional[Dict[str, float]] = None,
 ) -> Tuple[float, float, Tuple[float, float]]:
     """Compute true empirical utility on ground truth user data without planner predictions.
 
@@ -143,12 +145,14 @@ def compute_true_candidate_utility(
         Z_G = rng.normal(loc=0.0, scale=sigma, size=dim)
         V_G_DP = bar_V_G + Z_G
 
-        # Deterministic reconstruction to 9-cell
+        # Deterministic reconstruction to 9-cell via shared single source of truth
         V_9_hat = reconstruct_to_9_cell(
             marginal_vector=V_G_DP,
             source_granularity=candidate.granularity,
             marginal_names=target_names,
             target_9_cell_names=cell_names,
+            provider_shares=provider_shares,
+            task_shares=task_shares,
         )
 
         weighted_err = 0.0
@@ -233,10 +237,11 @@ def run_joint_planner_experiment(
 
         cell_names = umatrices_by_window[ref_days].cell_names
 
-        # Evaluate temporal distribution diagnostics for all W in {7, 14, 30, 60, 90}
+        # Evaluate temporal distribution diagnostics across all candidate windows
         all_user_ids = df_90["user_id"].unique()
         diag_by_w: Dict[int, Dict[str, float]] = {}
-        for w in [7, 14, 30, 60, 90]:
+        cand_windows = sorted(set(app_config.privacy.planner.candidate_windows))
+        for w in cand_windows:
             t_start = t_end - pd.Timedelta(days=w)
             df_w = df_90[(df_90["timestamp"] > t_start) & (df_90["timestamp"] <= t_end)]
             counts_w = df_w.groupby("user_id").size().reindex(all_user_ids, fill_value=0)
@@ -259,8 +264,8 @@ def run_joint_planner_experiment(
             diag_by_w[w] = diag_w
             temporal_records.append(diag_w)
 
-        diag_30 = diag_by_w.get(ref_days, diag_by_w[30])
-        # Section F: Verify temporal match across ALL candidate windows {7, 14, 30, 60, 90}
+        diag_30 = diag_by_w.get(ref_days, diag_by_w.get(30, list(diag_by_w.values())[0]))
+        # Section F: Verify temporal match across ALL candidate windows
         is_temporal_mismatch = not check_all_windows_temporal_match(
             diag_by_w,
             mean_threshold=0.05,
@@ -269,6 +274,8 @@ def run_joint_planner_experiment(
 
         # Workload and utility weights
         workload_cfg = app_config.privacy.planner.workloads
+        p_shares = workload_cfg.provider_shares
+        t_shares = workload_cfg.task_shares
         wl_weights = {
             "full_9_cell": workload_cfg.full_9_cell_weight,
             "provider": workload_cfg.provider_weight,
@@ -369,6 +376,8 @@ def run_joint_planner_experiment(
                     weights_data=w_data,
                     weights_stale=w_stale,
                     weights_win=w_win,
+                    provider_shares=p_shares,
+                    task_shares=t_shares,
                 )
                 oracle_scores[cand] = score
                 oracle_stderr[cand] = stderr
@@ -393,6 +402,8 @@ def run_joint_planner_experiment(
                 weights_data=w_data,
                 weights_stale=w_stale,
                 weights_win=w_win,
+                provider_shares=p_shares,
+                task_shares=t_shares,
             )
 
             abs_reg, rel_reg = compute_regret(planner_true_util, oracle_true_util)

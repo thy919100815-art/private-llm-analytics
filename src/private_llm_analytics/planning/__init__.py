@@ -30,12 +30,15 @@ from private_llm_analytics.planning.diagnostics import (
 )
 from private_llm_analytics.planning.policy import (
     aggregate_to_granularity,
+    build_aggregation_matrix,
+    build_reconstruction_matrix,
     reconstruct_to_9_cell,
     compute_workload_reconstruction_error,
     build_volume_contributions_for_granularity,
     build_prevalence_contributions_for_granularity,
     build_share_contributions_for_granularity,
     get_direct_granularity_sensitivity,
+    get_direct_granularity_l1_sensitivity,
 )
 from private_llm_analytics.planning.planner import (
     ReleasePlanResult,
@@ -67,12 +70,15 @@ __all__ = [
     "compute_regret",
     "compute_calibration_error",
     "aggregate_to_granularity",
+    "build_aggregation_matrix",
+    "build_reconstruction_matrix",
     "reconstruct_to_9_cell",
     "compute_workload_reconstruction_error",
     "build_volume_contributions_for_granularity",
     "build_prevalence_contributions_for_granularity",
     "build_share_contributions_for_granularity",
     "get_direct_granularity_sensitivity",
+    "get_direct_granularity_l1_sensitivity",
     "ReleasePlanResult",
     "SmallNReleasePlanner",
     "compute_planner_config_fingerprint",

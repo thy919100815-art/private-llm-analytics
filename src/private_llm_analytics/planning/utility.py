@@ -20,8 +20,11 @@ from scipy.stats import norm, lognorm
 from private_llm_analytics.mechanisms.gaussian import calibrate_analytic_gaussian
 from private_llm_analytics.planning.candidates import ReleasePolicyCandidate
 from private_llm_analytics.planning.policy import (
+    build_aggregation_matrix,
+    build_reconstruction_matrix,
     compute_workload_reconstruction_error,
     get_direct_granularity_sensitivity,
+    get_direct_granularity_l1_sensitivity,
 )
 from private_llm_analytics.privacy.exceptions import ProductionSafetyConfigurationError
 
@@ -372,23 +375,20 @@ class PublicContributionPrior(PublicPriorDistribution):
         self.ref_totals = np.sum(self.ref_matrix, axis=1)
         self.expected_user_volume = float(np.mean(self.ref_totals))
         self.expected_raw_vector = np.mean(self.ref_matrix, axis=0)
+        self.cell_names = [f"{p}:{t}" for p in self.providers for t in self.tasks]
 
-        # Precompute target-space norms for each granularity
+        # Precompute target-space norms for each granularity via single-source aggregation operator
         self._norms: Dict[str, np.ndarray] = {}
         # 1. full_9_cell
         self._norms["full_9_cell"] = np.sqrt(np.sum(self.ref_matrix**2, axis=1))
 
         # 2. provider_3_cell
-        prov_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
-        for p in range(3):
-            prov_mat[:, p] = np.sum(self.ref_matrix[:, p * 3 : (p + 1) * 3], axis=1)
-        self._norms["provider_3_cell"] = np.sqrt(np.sum(prov_mat**2, axis=1))
+        A_prov, _ = build_aggregation_matrix("provider_3_cell", self.cell_names)
+        self._norms["provider_3_cell"] = np.sqrt(np.sum((self.ref_matrix @ A_prov.T)**2, axis=1))
 
         # 3. task_3_cell
-        task_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
-        for t in range(3):
-            task_mat[:, t] = np.sum(self.ref_matrix[:, t::3], axis=1)
-        self._norms["task_3_cell"] = np.sqrt(np.sum(task_mat**2, axis=1))
+        A_task, _ = build_aggregation_matrix("task_3_cell", self.cell_names)
+        self._norms["task_3_cell"] = np.sqrt(np.sum((self.ref_matrix @ A_task.T)**2, axis=1))
 
         # 4. overall_1_cell
         self._norms["overall_1_cell"] = self.ref_totals.copy()
@@ -498,65 +498,29 @@ class PublicContributionPrior(PublicPriorDistribution):
         else:
             raise PlannerConfigurationError("v0.3 EXPECTED_RELEASE_L1 currently supports Gaussian only.")
 
-        # 2. Reconstructed clipped vectors and reconstruction operator R_G
+        # 2. Reconstructed clipped vectors via single-source R_G and A_G
         norms = self._norms.get(g, self._norms["full_9_cell"])
         clip_scale = np.minimum(1.0, c / np.maximum(norms, 1e-9))
 
-        t_shares = np.array([self.task_shares.get(t, 1.0 / len(self.tasks)) for t in self.tasks], dtype=np.float64)
-        t_shares = t_shares / np.sum(t_shares)
-        p_shares = np.array([self.provider_shares.get(p, 1.0 / len(self.providers)) for p in self.providers], dtype=np.float64)
-        p_shares = p_shares / np.sum(p_shares)
-
-        if g == "full_9_cell":
-            R_G = np.eye(9, dtype=np.float64)
-            recon_mat = self.ref_matrix * clip_scale[:, np.newaxis]
-
-        elif g == "provider_3_cell":
-            R_G = np.zeros((9, 3), dtype=np.float64)
-            for p in range(3):
-                for t in range(3):
-                    R_G[p * 3 + t, p] = t_shares[t]
-            prov_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
-            for p in range(3):
-                prov_mat[:, p] = np.sum(self.ref_matrix[:, p * 3 : (p + 1) * 3], axis=1)
-            clipped_prov = prov_mat * clip_scale[:, np.newaxis]
-            recon_mat = clipped_prov @ R_G.T
-
-        elif g == "task_3_cell":
-            R_G = np.zeros((9, 3), dtype=np.float64)
-            for p in range(3):
-                for t in range(3):
-                    R_G[p * 3 + t, t] = p_shares[p]
-            task_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
-            for t in range(3):
-                task_mat[:, t] = np.sum(self.ref_matrix[:, t::3], axis=1)
-            clipped_task = task_mat * clip_scale[:, np.newaxis]
-            recon_mat = clipped_task @ R_G.T
-
-        elif g == "overall_1_cell":
-            R_G = np.zeros((9, 1), dtype=np.float64)
-            for p in range(3):
-                for t in range(3):
-                    R_G[p * 3 + t, 0] = p_shares[p] * t_shares[t]
-            R_G[:, 0] = R_G[:, 0] / np.sum(R_G[:, 0])
-            clipped_tot = self.ref_totals * clip_scale
-            recon_mat = clipped_tot[:, np.newaxis] @ R_G.T
-
-        else:
-            raise ValueError(f"Unsupported granularity '{g}'")
+        R_G = build_reconstruction_matrix(
+            source_granularity=g,
+            target_9_cell_names=self.cell_names,
+            provider_shares=self.provider_shares,
+            task_shares=self.task_shares,
+        )
+        A_G, _ = build_aggregation_matrix(g, self.cell_names)
+        user_target_mat = self.ref_matrix @ A_G.T
+        clipped_target = user_target_mat * clip_scale[:, np.newaxis]
+        recon_mat = clipped_target @ R_G.T
 
         # 3. Population bias vector in 9-cell space
         b9 = float(n_pop) * (np.mean(recon_mat, axis=0) - self.expected_raw_vector)
 
         # 4. Workload queries: Q_9 (9x9), Q_p (3x9), Q_t (3x9), Q_o (1x9)
-        Q9 = np.eye(9, dtype=np.float64)
-        Qp = np.zeros((3, 9), dtype=np.float64)
-        for p in range(3):
-            Qp[p, p * 3 : (p + 1) * 3] = 1.0
-        Qt = np.zeros((3, 9), dtype=np.float64)
-        for t in range(3):
-            Qt[t, t::3] = 1.0
-        Qo = np.ones((1, 9), dtype=np.float64)
+        Q9, _ = build_aggregation_matrix("full_9_cell", self.cell_names)
+        Qp, _ = build_aggregation_matrix("provider_3_cell", self.cell_names)
+        Qt, _ = build_aggregation_matrix("task_3_cell", self.cell_names)
+        Qo, _ = build_aggregation_matrix("overall_1_cell", self.cell_names)
 
         query_specs = [
             ("full_9_cell", w9, Q9),
@@ -714,27 +678,32 @@ class NoiseEstimator:
         metric: str,
         candidate: ReleasePolicyCandidate,
     ) -> Tuple[float, float]:
-        """Calibrate noise scale sigma and return (sigma, sensitivity)."""
-        sens = get_direct_granularity_sensitivity(
-            metric=metric,
-            granularity=candidate.granularity,
-            clip_norm=candidate.contribution_bound,
-        )
+        """Calibrate noise scale (sigma for Gaussian, b for Laplace) and sensitivity."""
         eps = float(candidate.epsilon_per_release)
         delta = float(candidate.delta_per_release)
 
         if candidate.mechanism == "gaussian":
+            sens = get_direct_granularity_sensitivity(
+                metric=metric,
+                granularity=candidate.granularity,
+                clip_norm=candidate.contribution_bound,
+            )
             sigma = calibrate_analytic_gaussian(
                 epsilon=eps,
                 delta=delta,
                 l2_sensitivity=sens,
             )
+            return float(sigma), float(sens)
         elif candidate.mechanism == "laplace":
-            sigma = sens / eps
+            sens_l1 = get_direct_granularity_l1_sensitivity(
+                metric=metric,
+                granularity=candidate.granularity,
+                clip_norm=candidate.contribution_bound,
+            )
+            b = sens_l1 / eps
+            return float(b), float(sens_l1)
         else:
             raise ValueError(f"Unsupported mechanism '{candidate.mechanism}'")
-
-        return float(sigma), float(sens)
 
     @staticmethod
     def estimate_noise_error(
@@ -743,17 +712,17 @@ class NoiseEstimator:
         population_size: int,
     ) -> float:
         """Estimate expected absolute noise error according to direct metric semantics."""
-        sigma, _ = NoiseEstimator.estimate_noise_sigma(metric, candidate)
+        scale, _ = NoiseEstimator.estimate_noise_sigma(metric, candidate)
         dim = GRANULARITY_DIMENSIONS.get(candidate.granularity, 9)
         metric_norm = metric.lower().strip()
 
         # Expected 1D absolute error:
         # Gaussian N(0, sigma^2) => E|Z| = sigma * sqrt(2 / pi)
-        # Laplace(0, b) with scale b = sigma => E|Z| = b
+        # Laplace(0, b) with scale b => E|Z| = b
         if candidate.mechanism == "laplace":
-            e_abs_1d = float(sigma)
+            e_abs_1d = float(scale)
         else:
-            e_abs_1d = float(sigma * math.sqrt(2.0 / math.pi))
+            e_abs_1d = float(scale * math.sqrt(2.0 / math.pi))
 
         return float(dim * e_abs_1d)
 

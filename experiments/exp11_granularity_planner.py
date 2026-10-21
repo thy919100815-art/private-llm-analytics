@@ -17,6 +17,7 @@ import numpy as np
 import pandas as pd
 
 from private_llm_analytics.aggregation.user_matrix import build_user_matrix
+from private_llm_analytics.config.loader import load_app_config
 from private_llm_analytics.evaluation.report import plot_single_line_chart, save_summary_table
 from private_llm_analytics.mechanisms.gaussian import calibrate_analytic_gaussian
 from private_llm_analytics.planning.candidates import GRANULARITY_DIMENSIONS
@@ -50,6 +51,11 @@ def run_granularity_experiment(
     figures_dir = out_base / "figures"
     tables_dir.mkdir(parents=True, exist_ok=True)
     figures_dir.mkdir(parents=True, exist_ok=True)
+
+    app_config = load_app_config("configs")
+    workload_cfg = app_config.privacy.planner.workloads
+    p_shares = workload_cfg.provider_shares
+    t_shares = workload_cfg.task_shares
 
     granularities = ["full_9_cell", "provider_3_cell", "task_3_cell", "overall_1_cell"]
     records: List[Dict[str, Any]] = []
@@ -105,7 +111,14 @@ def run_granularity_experiment(
                 clipping_loss = float(np.sum(np.abs(true_target_unclipped - exact_target))) / pop_total_vol
 
                 # 2. Reconstruction bias on exact clipped
-                reconstructed_exact_9 = reconstruct_to_9_cell(exact_target, g, target_names, cell_names)
+                reconstructed_exact_9 = reconstruct_to_9_cell(
+                    marginal_vector=exact_target,
+                    source_granularity=g,
+                    marginal_names=target_names,
+                    target_9_cell_names=cell_names,
+                    provider_shares=p_shares,
+                    task_shares=t_shares,
+                )
                 reconstruction_loss = float(np.sum(np.abs(reconstructed_exact_9 - unclipped_9))) / pop_total_vol
 
                 # 3. DP Noise trials
@@ -121,7 +134,14 @@ def run_granularity_experiment(
                     noise_l1_trials.append(float(np.sum(np.abs(noise))))
                     target_dp_trials.append(float(np.mean(np.abs(dp_release - true_target_unclipped))))
 
-                    reconstructed_dp_9 = reconstruct_to_9_cell(dp_release, g, target_names, cell_names)
+                    reconstructed_dp_9 = reconstruct_to_9_cell(
+                        marginal_vector=dp_release,
+                        source_granularity=g,
+                        marginal_names=target_names,
+                        target_9_cell_names=cell_names,
+                        provider_shares=p_shares,
+                        task_shares=t_shares,
+                    )
                     end_to_end_trials.append(float(np.sum(np.abs(reconstructed_dp_9 - unclipped_9))))
 
                 dp_noise_loss = float(np.mean(noise_l1_trials)) / pop_total_vol
