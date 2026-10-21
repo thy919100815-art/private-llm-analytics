@@ -9,6 +9,11 @@ from private_llm_analytics.continual.models import (
 from private_llm_analytics.continual.contributions import (
     build_temporal_user_contributions,
 )
+from private_llm_analytics.continual.tree import (
+    BinaryTimeTree,
+    ContinualNodeInfo,
+    compute_continual_node_id,
+)
 
 __all__ = [
     "ContinualStreamConfig",
@@ -16,4 +21,7 @@ __all__ = [
     "ContinualTreeConfig",
     "TemporalContributionDiagnostics",
     "build_temporal_user_contributions",
+    "BinaryTimeTree",
+    "ContinualNodeInfo",
+    "compute_continual_node_id",
 ]
