@@ -13,11 +13,22 @@ Reports Oracle mean, standard error, 95% CI, and logs explicit records for infea
 
 import argparse
 from pathlib import Path
+import sys
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 import numpy as np
 import pandas as pd
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT / "src") not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT / "src"))
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+try:
+    from experiments.temporal_truth import generate_rate_consistent_temporal_truth
+except ImportError:
+    from temporal_truth import generate_rate_consistent_temporal_truth
 from private_llm_analytics.aggregation.user_matrix import build_user_matrix
 from private_llm_analytics.config.loader import load_app_config
 from private_llm_analytics.evaluation.report import plot_single_line_chart, save_summary_table
@@ -32,42 +43,6 @@ from private_llm_analytics.planning.policy import (
     reconstruct_to_9_cell,
 )
 from private_llm_analytics.planning.utility import PublicContributionPrior, UtilityEstimator
-from private_llm_analytics.simulator.generator import SyntheticDataGenerator
-from private_llm_analytics.simulator.scenario import SimulationScenario
-
-
-def generate_rate_consistent_temporal_truth(
-    n_users: int,
-    horizon_days: int,
-    reference_days: int = 30,
-    reference_mean: float = 60.0,
-    reference_std: float = 20.0,
-    seed: int = 42,
-) -> pd.DataFrame:
-    """Generate longitudinal synthetic interaction log with rate consistency relative to reference window.
-
-    Scales parameters so that slicing any window of size W yields expected per-user volume
-    consistent with daily arrival rate lambda = reference_mean / reference_days.
-    """
-    rho = float(horizon_days) / float(reference_days)
-    scaled_mean = reference_mean * rho
-    scaled_std = reference_std * np.sqrt(rho)
-    scaled_min = max(1, int(5 * rho))
-    scaled_max = int(150 * rho)
-
-    scenario = SimulationScenario(
-        n_users=n_users,
-        n_days=horizon_days,
-        freq_mean=scaled_mean,
-        freq_std=scaled_std,
-        freq_min=scaled_min,
-        freq_max=scaled_max,
-        random_seed=seed,
-    )
-    generator = SyntheticDataGenerator(scenario)
-    df = generator.generate(seed=seed)
-    df["timestamp"] = pd.to_datetime(df["timestamp"])
-    return df
 
 
 def compute_true_candidate_utility(
@@ -77,43 +52,59 @@ def compute_true_candidate_utility(
     reference_days: int = 30,
     n_trials: int = 200,
     seed: int = 42,
+    workload_weights: Optional[Dict[str, float]] = None,
+    weights_data: float = 1.0,
+    weights_stale: float = 0.5,
+    weights_win: float = 0.2,
 ) -> Tuple[float, float, Tuple[float, float]]:
     """Compute true empirical utility on ground truth user data without planner predictions.
 
-    Returns:
-        (mean_utility, stderr, (ci_low, ci_high))
+    Uses actual reconstructed end-to-end release error under declared workload queries:
+        V_9_hat = R_G(V_G_DP)
+        L_data_trial = sum(w_Q * ||Q V_9_hat - Q V_raw||_1) / (sum(w_Q) * max(1, ||V_raw||_1))
+        L_trial = w_data * L_data_trial + w_stale * L_stale + w_win * L_win
     """
     raw_mat = umatrix.matrix
     w_days = candidate.window_days
+    V_raw = np.sum(raw_mat, axis=0)
+    true_total_vol = max(1.0, float(np.sum(V_raw)))
 
-    # 1. True empirical clipping loss in target G-space
-    clipped_users, exact_agg, target_names, _ = build_volume_contributions_for_granularity(
+    # 1. Direct target-space contribution + clipping: bar_V_G
+    clipped_users, bar_V_G, target_names, _ = build_volume_contributions_for_granularity(
         raw_user_matrix=umatrix,
         granularity=candidate.granularity,
         clip_norm=candidate.contribution_bound or 20.0,
     )
-    unclipped_9 = np.sum(raw_mat, axis=0)
-    true_total_vol = max(1.0, float(np.sum(unclipped_9)))
 
-    true_target_unclipped, _ = aggregate_to_granularity(unclipped_9, cell_names, candidate.granularity)
-    emp_clip_loss = float(np.sum(np.abs(true_target_unclipped - exact_agg))) / true_total_vol
-
-    # 2. True empirical DP noise error
+    # 2. DP Gaussian noise scale sigma
     sigma = calibrate_analytic_gaussian(
         epsilon=candidate.epsilon_per_release,
         delta=candidate.delta_per_release,
         l2_sensitivity=candidate.contribution_bound or 20.0,
     )
-    dim = len(exact_agg)
+    dim = len(bar_V_G)
 
-    # 3. Workload reconstruction loss
-    emp_agg_loss = compute_workload_reconstruction_error(
-        true_9_cell=unclipped_9,
-        cell_names=cell_names,
-        granularity=candidate.granularity,
-    )
+    # 3. Workload queries
+    w_dict = workload_weights or {
+        "full_9_cell": 0.4,
+        "provider": 0.3,
+        "task": 0.2,
+        "overall": 0.1,
+    }
+    w9 = float(w_dict.get("full_9_cell", 0.0))
+    wp = float(w_dict.get("provider", 0.0))
+    wt = float(w_dict.get("task", 0.0))
+    wo = float(w_dict.get("overall", 0.0))
+    tot_w = w9 + wp + wt + wo
+    if tot_w <= 0:
+        w9 = 1.0
+        tot_w = 1.0
 
-    # 4. Freshness and window relevance loss
+    raw_prov, _ = aggregate_to_granularity(V_raw, cell_names, "provider_3_cell")
+    raw_task, _ = aggregate_to_granularity(V_raw, cell_names, "task_3_cell")
+    raw_over, _ = aggregate_to_granularity(V_raw, cell_names, "overall_1_cell")
+
+    # Freshness and window relevance loss
     emp_stale_loss = float(candidate.frequency_days / (2.0 * w_days))
     emp_win_loss = float(abs(w_days - reference_days) / float(reference_days))
 
@@ -121,14 +112,35 @@ def compute_true_candidate_utility(
     trial_scores = []
     for t in range(n_trials):
         rng = np.random.default_rng(seed + t * 100)
-        noise = rng.normal(loc=0.0, scale=sigma, size=dim)
-        trial_noise_loss = float(np.sum(np.abs(noise))) / true_total_vol
+        Z_G = rng.normal(loc=0.0, scale=sigma, size=dim)
+        V_G_DP = bar_V_G + Z_G
+
+        # Deterministic reconstruction to 9-cell
+        V_9_hat = reconstruct_to_9_cell(
+            marginal_vector=V_G_DP,
+            source_granularity=candidate.granularity,
+            marginal_names=target_names,
+            target_9_cell_names=cell_names,
+        )
+
+        weighted_err = 0.0
+        if w9 > 0:
+            weighted_err += w9 * np.sum(np.abs(V_9_hat - V_raw))
+        if wp > 0:
+            rec_prov, _ = aggregate_to_granularity(V_9_hat, cell_names, "provider_3_cell")
+            weighted_err += wp * np.sum(np.abs(rec_prov - raw_prov))
+        if wt > 0:
+            rec_task, _ = aggregate_to_granularity(V_9_hat, cell_names, "task_3_cell")
+            weighted_err += wt * np.sum(np.abs(rec_task - raw_task))
+        if wo > 0:
+            rec_over, _ = aggregate_to_granularity(V_9_hat, cell_names, "overall_1_cell")
+            weighted_err += wo * np.sum(np.abs(rec_over - raw_over))
+
+        L_data_trial = float((weighted_err / tot_w) / true_total_vol)
         trial_score = (
-            1.0 * emp_clip_loss
-            + 1.0 * trial_noise_loss
-            + 1.0 * emp_agg_loss
-            + 0.5 * emp_stale_loss
-            + 0.2 * emp_win_loss
+            weights_data * L_data_trial
+            + weights_stale * emp_stale_loss
+            + weights_win * emp_win_loss
         )
         trial_scores.append(trial_score)
 
@@ -165,6 +177,7 @@ def run_joint_planner_experiment(
     ref_days = app_config.privacy.planner.window_model.reference_days
 
     records: List[Dict[str, Any]] = []
+    temporal_records: List[Dict[str, Any]] = []
 
     for n in populations:
         print(f"\n--- Population N = {n} ---")
@@ -181,7 +194,7 @@ def run_joint_planner_experiment(
         )
         t_end = df_90["timestamp"].max()
 
-        # Build window-specific user matrices for W in {7, 14, 30, 60, 90}
+        # Build window-specific user matrices for W in candidate_windows
         candidate_windows = app_config.privacy.planner.candidate_windows
         umatrices_by_window: Dict[int, Any] = {}
         for w in candidate_windows:
@@ -190,6 +203,51 @@ def run_joint_planner_experiment(
             umatrices_by_window[w] = build_user_matrix(df_w, public_population_size=n)
 
         cell_names = umatrices_by_window[ref_days].cell_names
+
+        # Evaluate temporal distribution diagnostics for all W in {7, 14, 30, 60, 90}
+        all_user_ids = df_90["user_id"].unique()
+        diag_by_w: Dict[int, Dict[str, float]] = {}
+        for w in [7, 14, 30, 60, 90]:
+            t_start = t_end - pd.Timedelta(days=w)
+            df_w = df_90[(df_90["timestamp"] > t_start) & (df_90["timestamp"] <= t_end)]
+            counts_w = df_w.groupby("user_id").size().reindex(all_user_ids, fill_value=0)
+            emp_mean_w = float(counts_w.mean())
+            emp_std_w = float(counts_w.std())
+            pub_mean_w = 60.0 * (float(w) / float(ref_days))
+            pub_std_w = 20.0 * np.sqrt(float(w) / float(ref_days))
+            mean_rel_err_w = float(abs(emp_mean_w - pub_mean_w) / max(1e-9, pub_mean_w))
+            std_rel_err_w = float(abs(emp_std_w - pub_std_w) / max(1e-9, pub_std_w))
+            diag_w = {
+                "population_n": n,
+                "window_days": w,
+                "empirical_mean_user_volume": round(emp_mean_w, 4),
+                "public_expected_mean_user_volume": round(pub_mean_w, 4),
+                "mean_relative_model_error": round(mean_rel_err_w, 4),
+                "empirical_std_user_volume": round(emp_std_w, 4),
+                "public_expected_std_user_volume": round(pub_std_w, 4),
+                "std_relative_model_error": round(std_rel_err_w, 4),
+            }
+            diag_by_w[w] = diag_w
+            temporal_records.append(diag_w)
+
+        diag_30 = diag_by_w.get(ref_days, diag_by_w[30])
+        is_temporal_mismatch = (
+            diag_30["mean_relative_model_error"] >= 0.05
+            or diag_30["std_relative_model_error"] >= 0.10
+        )
+
+        # Workload and utility weights
+        workload_cfg = app_config.privacy.planner.workloads
+        wl_weights = {
+            "full_9_cell": workload_cfg.full_9_cell_weight,
+            "provider": workload_cfg.provider_weight,
+            "task": workload_cfg.task_weight,
+            "overall": workload_cfg.overall_weight,
+        }
+        w_cfg = app_config.privacy.planner.weights
+        w_data = float(w_cfg.data if w_cfg.data is not None else 1.0)
+        w_stale = float(w_cfg.staleness)
+        w_win = float(w_cfg.window)
 
         for cap in epsilon_caps:
             app_config.privacy.accountant.epsilon_cap = cap
@@ -207,7 +265,7 @@ def run_joint_planner_experiment(
             feasible_evals = [rec for rec in plan_res.candidate_evaluations if rec["feasible"]]
             feasible_candidates = [rec["candidate"] for rec in feasible_evals]
 
-            # Section J: Explicitly record infeasible conditions
+            # Infeasible condition check
             if not feasible_candidates:
                 all_projected = [rec.get("projected_epsilon", 999.0) for rec in plan_res.candidate_evaluations]
                 min_projected = float(min(all_projected)) if all_projected else 999.0
@@ -220,9 +278,13 @@ def run_joint_planner_experiment(
                     "oracle_true_utility": None,
                     "planner_true_utility": None,
                     "planner_rel_regret": None,
-                    "empirical_mean_user_volume": None,
-                    "public_expected_mean_user_volume": None,
-                    "relative_volume_model_error": None,
+                    "empirical_mean_user_volume": diag_30["empirical_mean_user_volume"],
+                    "public_expected_mean_user_volume": diag_30["public_expected_mean_user_volume"],
+                    "mean_relative_model_error": diag_30["mean_relative_model_error"],
+                    "empirical_std_user_volume": diag_30["empirical_std_user_volume"],
+                    "public_expected_std_user_volume": diag_30["public_expected_std_user_volume"],
+                    "std_relative_model_error": diag_30["std_relative_model_error"],
+                    "relative_volume_model_error": diag_30["mean_relative_model_error"],
                     "minimum_projected_epsilon": round(min_projected, 4),
                     "feasible_candidate_count": 0,
                     "base_a_feasible": False,
@@ -230,6 +292,32 @@ def run_joint_planner_experiment(
                 }
                 records.append(rec)
                 print(f"  N={n:5d}, Cap={cap:3.1f} | STATUS: NO_FEASIBLE_POLICY | Min Projected Eps={min_projected:.2f} | Feasible Count=0")
+                continue
+
+            if is_temporal_mismatch:
+                rec = {
+                    "population_n": n,
+                    "epsilon_cap": cap,
+                    "status": "TEMPORAL_MODEL_MISMATCH",
+                    "planner_candidate": "NULL",
+                    "oracle_candidate": "NULL",
+                    "oracle_true_utility": None,
+                    "planner_true_utility": None,
+                    "planner_rel_regret": None,
+                    "empirical_mean_user_volume": diag_30["empirical_mean_user_volume"],
+                    "public_expected_mean_user_volume": diag_30["public_expected_mean_user_volume"],
+                    "mean_relative_model_error": diag_30["mean_relative_model_error"],
+                    "empirical_std_user_volume": diag_30["empirical_std_user_volume"],
+                    "public_expected_std_user_volume": diag_30["public_expected_std_user_volume"],
+                    "std_relative_model_error": diag_30["std_relative_model_error"],
+                    "relative_volume_model_error": diag_30["mean_relative_model_error"],
+                    "minimum_projected_epsilon": 0.0,
+                    "feasible_candidate_count": len(feasible_candidates),
+                    "base_a_feasible": False,
+                    "base_b_feasible": False,
+                }
+                records.append(rec)
+                print(f"  N={n:5d}, Cap={cap:3.1f} | STATUS: TEMPORAL_MODEL_MISMATCH (mean err={diag_30['mean_relative_model_error']*100:.1f}%, std err={diag_30['std_relative_model_error']*100:.1f}%)")
                 continue
 
             # Compute true empirical utility for all feasible policies
@@ -246,6 +334,10 @@ def run_joint_planner_experiment(
                     reference_days=ref_days,
                     n_trials=n_trials,
                     seed=seed,
+                    workload_weights=wl_weights,
+                    weights_data=w_data,
+                    weights_stale=w_stale,
+                    weights_win=w_win,
                 )
                 oracle_scores[cand] = score
                 oracle_stderr[cand] = stderr
@@ -266,6 +358,10 @@ def run_joint_planner_experiment(
                 reference_days=ref_days,
                 n_trials=n_trials,
                 seed=seed,
+                workload_weights=wl_weights,
+                weights_data=w_data,
+                weights_stale=w_stale,
+                weights_win=w_win,
             )
 
             abs_reg, rel_reg = compute_regret(planner_true_util, oracle_true_util)
@@ -279,14 +375,6 @@ def run_joint_planner_experiment(
             base_b_rec = eval_dict.get(base_b, {})
             base_a_feas = bool(base_a_rec.get("feasible", False))
             base_b_feas = bool(base_b_rec.get("feasible", False))
-
-            # Volume model consistency
-            cand_w = planner_cand.window_days
-            df_w_sel = df_90[(df_90["timestamp"] > (t_end - pd.Timedelta(days=cand_w))) & (df_90["timestamp"] <= t_end)]
-            emp_mean_vol = float(len(df_w_sel)) / float(n)
-            scaled_prior = planner.utility_estimator.public_prior.with_window(cand_w)
-            pub_exp_vol = float(scaled_prior.expected_user_volume)
-            rel_vol_err = float(abs(emp_mean_vol - pub_exp_vol) / max(1e-9, emp_mean_vol))
 
             rec = {
                 "population_n": n,
@@ -302,9 +390,13 @@ def run_joint_planner_experiment(
                 "planner_ci_95": f"[{planner_ci[0]:.4f}, {planner_ci[1]:.4f}]",
                 "planner_abs_regret": round(abs_reg, 4),
                 "planner_rel_regret": round(rel_reg, 4),
-                "empirical_mean_user_volume": round(emp_mean_vol, 4),
-                "public_expected_mean_user_volume": round(pub_exp_vol, 4),
-                "relative_volume_model_error": round(rel_vol_err, 4),
+                "empirical_mean_user_volume": diag_30["empirical_mean_user_volume"],
+                "public_expected_mean_user_volume": diag_30["public_expected_mean_user_volume"],
+                "mean_relative_model_error": diag_30["mean_relative_model_error"],
+                "empirical_std_user_volume": diag_30["empirical_std_user_volume"],
+                "public_expected_std_user_volume": diag_30["public_expected_std_user_volume"],
+                "std_relative_model_error": diag_30["std_relative_model_error"],
+                "relative_volume_model_error": diag_30["mean_relative_model_error"],
                 "feasible_candidate_count": len(feasible_candidates),
                 "base_a_feasible": base_a_feas,
                 "base_b_feasible": base_b_feas,
@@ -318,6 +410,9 @@ def run_joint_planner_experiment(
 
     results_df = pd.DataFrame(records)
     save_summary_table(results_df, str(tables_dir / "exp13_joint_planner.csv"))
+
+    temporal_df = pd.DataFrame(temporal_records)
+    save_summary_table(temporal_df, str(tables_dir / "exp13_temporal_diagnostics.csv"))
 
     # Plot True Utility comparison for Cap=4.0
     sub_df = results_df[(results_df["epsilon_cap"] == 4.0) & (results_df["status"] == "SUCCESS")]

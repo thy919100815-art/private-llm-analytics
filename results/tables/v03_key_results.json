@@ -75,11 +75,11 @@
     },
     "N500_eps4.0": {
       "status": "FEASIBLE",
-      "candidate": "C40_Gfull_9_cell_W30_F14",
+      "candidate": "C80_Gfull_9_cell_W30_F14",
       "selected_window_days": 30,
-      "planner_true_utility": 0.1821,
-      "oracle_true_utility": 0.1821,
-      "planner_rel_regret": 0.0
+      "planner_true_utility": 0.1773,
+      "oracle_true_utility": 0.1735,
+      "planner_rel_regret": 0.022
     },
     "N1000_eps2.0": {
       "status": "NO_FEASIBLE_POLICY",
@@ -89,8 +89,8 @@
       "status": "FEASIBLE",
       "candidate": "C80_Gfull_9_cell_W30_F14",
       "selected_window_days": 30,
-      "planner_true_utility": 0.1582,
-      "oracle_true_utility": 0.1582,
+      "planner_true_utility": 0.1467,
+      "oracle_true_utility": 0.1467,
       "planner_rel_regret": 0.0
     },
     "N5000_eps2.0": {
@@ -101,8 +101,8 @@
       "status": "FEASIBLE",
       "candidate": "C80_Gfull_9_cell_W30_F14",
       "selected_window_days": 30,
-      "planner_true_utility": 0.125,
-      "oracle_true_utility": 0.125,
+      "planner_true_utility": 0.1227,
+      "oracle_true_utility": 0.1227,
       "planner_rel_regret": 0.0
     }
   },

@@ -1,7 +1,7 @@
-population_n,epsilon_cap,status,planner_candidate,oracle_candidate,oracle_true_utility,planner_true_utility,planner_rel_regret,empirical_mean_user_volume,public_expected_mean_user_volume,relative_volume_model_error,minimum_projected_epsilon,feasible_candidate_count,base_a_feasible,base_b_feasible,oracle_stderr,oracle_ci_95,planner_stderr,planner_ci_95,planner_abs_regret
-500,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,,,,2.2657,0,False,False,,,,,
-500,4.0,SUCCESS,C40_Gfull_9_cell_W30_F14,C40_Gfull_9_cell_W30_F14,0.1821,0.1821,0.0,60.17,60.3035,0.0022,,200,False,True,0.0007,"[0.1807, 0.1835]",0.0007,"[0.1807, 0.1835]",0.0
-1000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,,,,2.2657,0,False,False,,,,,
-1000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C80_Gfull_9_cell_W30_F14,0.1582,0.1582,0.0,59.954,60.3035,0.0058,,200,False,True,0.0007,"[0.1568, 0.1595]",0.0007,"[0.1568, 0.1595]",0.0
-5000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,,,,2.2657,0,False,False,,,,,
-5000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C80_Gfull_9_cell_W30_F14,0.125,0.125,0.0,59.751,60.3035,0.0092,,200,False,True,0.0001,"[0.1247, 0.1253]",0.0001,"[0.1247, 0.1253]",0.0
+population_n,epsilon_cap,status,planner_candidate,oracle_candidate,oracle_true_utility,planner_true_utility,planner_rel_regret,empirical_mean_user_volume,public_expected_mean_user_volume,mean_relative_model_error,empirical_std_user_volume,public_expected_std_user_volume,std_relative_model_error,relative_volume_model_error,minimum_projected_epsilon,feasible_candidate_count,base_a_feasible,base_b_feasible,oracle_stderr,oracle_ci_95,planner_stderr,planner_ci_95,planner_abs_regret
+500,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,59.83,60.0,0.0028,18.8746,20.0,0.0563,0.0028,2.2657,0,False,False,,,,,
+500,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C40_Gfull_9_cell_W30_F14,0.1735,0.1773,0.022,59.83,60.0,0.0028,18.8746,20.0,0.0563,0.0028,,200,False,True,0.0011,"[0.1714, 0.1756]",0.0011,"[0.1751, 0.1796]",0.0038
+1000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,60.33,60.0,0.0055,19.3855,20.0,0.0307,0.0055,2.2657,0,False,False,,,,,
+1000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C80_Gfull_9_cell_W30_F14,0.1467,0.1467,0.0,60.33,60.0,0.0055,19.3855,20.0,0.0307,0.0055,,200,False,True,0.0006,"[0.1456, 0.1478]",0.0006,"[0.1456, 0.1478]",0.0
+5000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,60.2588,60.0,0.0043,19.8838,20.0,0.0058,0.0043,2.2657,0,False,False,,,,,
+5000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C80_Gfull_9_cell_W30_F14,0.1227,0.1227,0.0,60.2588,60.0,0.0043,19.8838,20.0,0.0058,0.0043,,200,False,True,0.0001,"[0.1225, 0.1229]",0.0001,"[0.1225, 0.1229]",0.0

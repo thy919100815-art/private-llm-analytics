@@ -23,6 +23,15 @@ from private_llm_analytics.planning.policy import (
     compute_workload_reconstruction_error,
     get_direct_granularity_sensitivity,
 )
+from private_llm_analytics.privacy.exceptions import ProductionSafetyConfigurationError
+
+
+class PlannerConfigurationError(ProductionSafetyConfigurationError):
+    """Raised when release planner configuration or candidate evaluation violates safety or scope guards."""
+    pass
+
+
+SUPPORTED_EXPECTED_RELEASE_L1_METRICS = {"interaction_volume"}
 
 
 GRANULARITY_DIMENSIONS: Dict[str, int] = {
@@ -45,7 +54,7 @@ class UtilityWeights:
     """Non-negative weights for multi-objective normalized utility loss formulation."""
 
     objective_mode: str = "EXPECTED_RELEASE_L1"
-    data: float = 1.0
+    data: Optional[float] = None
     staleness: float = 0.5
     window: float = 0.2
     clipping: float = 1.0
@@ -53,6 +62,20 @@ class UtilityWeights:
     aggregation: float = 1.0
 
     def __post_init__(self):
+        resolved_data = self.data
+        if resolved_data is None:
+            if (
+                self.clipping == 0
+                and self.noise == 0
+                and self.aggregation == 0
+                and self.staleness == 0
+                and self.window == 0
+            ):
+                resolved_data = 0.0
+            else:
+                resolved_data = 1.0
+        object.__setattr__(self, "data", resolved_data)
+
         for name, val in [
             ("data", self.data),
             ("staleness", self.staleness),
@@ -61,10 +84,10 @@ class UtilityWeights:
             ("noise", self.noise),
             ("aggregation", self.aggregation),
         ]:
-            if val < 0:
+            if val is not None and val < 0:
                 raise ValueError(f"Utility weight '{name}' must be >= 0, got {val}")
         if self.objective_mode == "EXPECTED_RELEASE_L1":
-            total = self.data + self.staleness + self.window
+            total = (self.data or 0.0) + self.staleness + self.window
         else:
             total = self.clipping + self.noise + self.aggregation + self.staleness + self.window
         if total <= 0:
@@ -130,8 +153,9 @@ class PublicPriorDistribution(ABC):
         metric: str,
         candidate: ReleasePolicyCandidate,
         population_size: int,
-        granularity: str = "full_9_cell",
+        granularity: Optional[str] = None,
         window_days: Optional[int] = None,
+        workload_weights: Optional[Dict[str, float]] = None,
     ) -> Tuple[float, float]:
         return 0.0, 0.0
 
@@ -414,8 +438,9 @@ class PublicContributionPrior(PublicPriorDistribution):
         metric: str,
         candidate: ReleasePolicyCandidate,
         population_size: int,
-        granularity: str = "full_9_cell",
+        granularity: Optional[str] = None,
         window_days: Optional[int] = None,
+        workload_weights: Optional[Dict[str, float]] = None,
     ) -> Tuple[float, float]:
         """Compute public-model expected end-to-end L1 release error via folded-normal closed form."""
         if window_days is not None and window_days != self.window_days:
@@ -425,14 +450,44 @@ class PublicContributionPrior(PublicPriorDistribution):
                 candidate=candidate,
                 population_size=population_size,
                 granularity=granularity,
+                workload_weights=workload_weights,
+            )
+
+        # Safety & Scope guards (Tasks E and F)
+        if candidate.mechanism == "laplace":
+            raise PlannerConfigurationError(
+                "v0.3 EXPECTED_RELEASE_L1 currently supports Gaussian only."
+            )
+        norm_metric = metric.lower().strip()
+        if norm_metric not in SUPPORTED_EXPECTED_RELEASE_L1_METRICS:
+            raise PlannerConfigurationError(
+                f"Unsupported metric '{metric}' under EXPECTED_RELEASE_L1. "
+                f"v0.3 utility-aware parameter optimization is formally evaluated and production-enabled for "
+                f"Interaction Volume only ({SUPPORTED_EXPECTED_RELEASE_L1_METRICS})."
             )
 
         n_pop = max(1, population_size)
         c = float(candidate.contribution_bound) if candidate.contribution_bound is not None else 20.0
-        g = granularity or candidate.granularity or "full_9_cell"
+        g = granularity or (candidate.granularity if candidate else None) or "full_9_cell"
         eps = float(candidate.epsilon_per_release)
         delta = float(candidate.delta_per_release)
-        cache_key = (c, g, n_pop, eps, delta)
+
+        w_dict = workload_weights or {
+            "full_9_cell": 0.4,
+            "provider": 0.3,
+            "task": 0.2,
+            "overall": 0.1,
+        }
+        w9 = float(w_dict.get("full_9_cell", 0.0))
+        wp = float(w_dict.get("provider", 0.0))
+        wt = float(w_dict.get("task", 0.0))
+        wo = float(w_dict.get("overall", 0.0))
+        tot_w = w9 + wp + wt + wo
+        if tot_w <= 0:
+            w9 = 1.0
+            tot_w = 1.0
+
+        cache_key = (c, g, n_pop, eps, delta, w9, wp, wt, wo)
         if cache_key in self._folded_normal_cache:
             return self._folded_normal_cache[cache_key]
 
@@ -440,80 +495,96 @@ class PublicContributionPrior(PublicPriorDistribution):
         sens = get_direct_granularity_sensitivity(metric, g, c)
         if candidate.mechanism == "gaussian":
             sigma = calibrate_analytic_gaussian(eps, delta, sens)
-        elif candidate.mechanism == "laplace":
-            sigma = sens / eps
         else:
-            raise ValueError(f"Unsupported mechanism '{candidate.mechanism}'")
+            raise PlannerConfigurationError("v0.3 EXPECTED_RELEASE_L1 currently supports Gaussian only.")
 
-        # 2. Reconstructed clipped vectors and reconstruction operator row norms
+        # 2. Reconstructed clipped vectors and reconstruction operator R_G
         norms = self._norms.get(g, self._norms["full_9_cell"])
         clip_scale = np.minimum(1.0, c / np.maximum(norms, 1e-9))
 
+        t_shares = np.array([self.task_shares.get(t, 1.0 / len(self.tasks)) for t in self.tasks], dtype=np.float64)
+        t_shares = t_shares / np.sum(t_shares)
+        p_shares = np.array([self.provider_shares.get(p, 1.0 / len(self.providers)) for p in self.providers], dtype=np.float64)
+        p_shares = p_shares / np.sum(p_shares)
+
         if g == "full_9_cell":
+            R_G = np.eye(9, dtype=np.float64)
             recon_mat = self.ref_matrix * clip_scale[:, np.newaxis]
-            row_norms = np.ones(9, dtype=np.float64)
 
         elif g == "provider_3_cell":
+            R_G = np.zeros((9, 3), dtype=np.float64)
+            for p in range(3):
+                for t in range(3):
+                    R_G[p * 3 + t, p] = t_shares[t]
             prov_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
             for p in range(3):
                 prov_mat[:, p] = np.sum(self.ref_matrix[:, p * 3 : (p + 1) * 3], axis=1)
             clipped_prov = prov_mat * clip_scale[:, np.newaxis]
-
-            t_shares = np.array([self.task_shares.get(t, 1.0 / 3.0) for t in self.tasks], dtype=np.float64)
-            t_shares = t_shares / np.sum(t_shares)
-            recon_mat = np.zeros((self.num_reference_users, 9), dtype=np.float64)
-            row_norms = np.zeros(9, dtype=np.float64)
-            for p in range(3):
-                for t in range(3):
-                    j = p * 3 + t
-                    recon_mat[:, j] = clipped_prov[:, p] * t_shares[t]
-                    row_norms[j] = t_shares[t]
+            recon_mat = clipped_prov @ R_G.T
 
         elif g == "task_3_cell":
+            R_G = np.zeros((9, 3), dtype=np.float64)
+            for p in range(3):
+                for t in range(3):
+                    R_G[p * 3 + t, t] = p_shares[p]
             task_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
             for t in range(3):
                 task_mat[:, t] = np.sum(self.ref_matrix[:, t::3], axis=1)
             clipped_task = task_mat * clip_scale[:, np.newaxis]
-
-            p_shares = np.array([self.provider_shares.get(p, 1.0 / 3.0) for p in self.providers], dtype=np.float64)
-            p_shares = p_shares / np.sum(p_shares)
-            recon_mat = np.zeros((self.num_reference_users, 9), dtype=np.float64)
-            row_norms = np.zeros(9, dtype=np.float64)
-            for p in range(3):
-                for t in range(3):
-                    j = p * 3 + t
-                    recon_mat[:, j] = clipped_task[:, t] * p_shares[p]
-                    row_norms[j] = p_shares[p]
+            recon_mat = clipped_task @ R_G.T
 
         elif g == "overall_1_cell":
+            R_G = np.zeros((9, 1), dtype=np.float64)
+            for p in range(3):
+                for t in range(3):
+                    R_G[p * 3 + t, 0] = p_shares[p] * t_shares[t]
+            R_G[:, 0] = R_G[:, 0] / np.sum(R_G[:, 0])
             clipped_tot = self.ref_totals * clip_scale
-            cell_w = np.array([
-                self.provider_shares.get(p, 1.0 / 3.0) * self.task_shares.get(t, 1.0 / 3.0)
-                for p in self.providers
-                for t in self.tasks
-            ], dtype=np.float64)
-            cell_w = cell_w / np.sum(cell_w)
-            recon_mat = clipped_tot[:, np.newaxis] * cell_w[np.newaxis, :]
-            row_norms = cell_w
+            recon_mat = clipped_tot[:, np.newaxis] @ R_G.T
 
         else:
             raise ValueError(f"Unsupported granularity '{g}'")
 
-        # 3. Population bias vector: b_j = N * (E[recon]_j - E[raw]_j)
-        e_recon = np.mean(recon_mat, axis=0)
-        b = float(n_pop) * (e_recon - self.expected_raw_vector)
+        # 3. Population bias vector in 9-cell space
+        b9 = float(n_pop) * (np.mean(recon_mat, axis=0) - self.expected_raw_vector)
 
-        # 4. Folded normal expectation per cell
-        total_data_error = 0.0
-        for j in range(9):
-            bj = float(abs(b[j]))
-            sig_j = float(sigma * row_norms[j])
-            if sig_j <= 1e-12:
-                e_abs = bj
-            else:
-                z = bj / (math.sqrt(2.0) * sig_j)
-                e_abs = sig_j * math.sqrt(2.0 / math.pi) * math.exp(-(bj**2) / (2.0 * sig_j**2)) + bj * float(special.erf(z))
-            total_data_error += e_abs
+        # 4. Workload queries: Q_9 (9x9), Q_p (3x9), Q_t (3x9), Q_o (1x9)
+        Q9 = np.eye(9, dtype=np.float64)
+        Qp = np.zeros((3, 9), dtype=np.float64)
+        for p in range(3):
+            Qp[p, p * 3 : (p + 1) * 3] = 1.0
+        Qt = np.zeros((3, 9), dtype=np.float64)
+        for t in range(3):
+            Qt[t, t::3] = 1.0
+        Qo = np.ones((1, 9), dtype=np.float64)
+
+        query_specs = [
+            ("full_9_cell", w9, Q9),
+            ("provider", wp, Qp),
+            ("task", wt, Qt),
+            ("overall", wo, Qo),
+        ]
+
+        total_weighted_error = 0.0
+        for q_name, w_q, Q in query_specs:
+            if w_q <= 0:
+                continue
+            b_Q = Q @ b9
+            M_Q = Q @ R_G
+            d_Q = len(Q)
+            q_l1 = 0.0
+            for k in range(d_Q):
+                sig_k = float(sigma * np.sqrt(np.sum(M_Q[k] ** 2)))
+                beta_k = float(abs(b_Q[k]))
+                if sig_k <= 1e-12:
+                    e_abs = beta_k
+                else:
+                    z = beta_k / (math.sqrt(2.0) * sig_k)
+                    e_abs = sig_k * math.sqrt(2.0 / math.pi) * math.exp(-(beta_k ** 2) / (2.0 * sig_k ** 2)) + beta_k * float(special.erf(z))
+                q_l1 += e_abs
+            total_weighted_error += w_q * q_l1
+
+        total_data_error = total_weighted_error / tot_w
 
         # 5. Normalized loss
         expected_pop_vol = max(1.0, float(n_pop * self.expected_user_volume))
@@ -801,6 +872,19 @@ class UtilityEstimator:
         population_size: int,
     ) -> UtilityComponents:
         """Compute full normalized dimensionless utility loss for a policy candidate."""
+        if self.weights.objective_mode == "EXPECTED_RELEASE_L1":
+            if candidate.mechanism == "laplace":
+                raise PlannerConfigurationError(
+                    "v0.3 EXPECTED_RELEASE_L1 currently supports Gaussian only."
+                )
+            norm_metric = metric.lower().strip()
+            if norm_metric not in SUPPORTED_EXPECTED_RELEASE_L1_METRICS:
+                raise PlannerConfigurationError(
+                    f"Unsupported metric '{metric}' under EXPECTED_RELEASE_L1. "
+                    f"v0.3 utility-aware parameter optimization is formally evaluated and production-enabled for "
+                    f"Interaction Volume only ({SUPPORTED_EXPECTED_RELEASE_L1_METRICS})."
+                )
+
         w_days = candidate.window_days or self.reference_days
         window_prior = scale_prior_for_window(
             prior=self.public_prior,
@@ -883,6 +967,7 @@ class UtilityEstimator:
                 population_size=n_pop,
                 granularity=candidate.granularity,
                 window_days=w_days,
+                workload_weights=self.workload_weights,
             )
 
         # Unified Dimensionless Objective

@@ -24,8 +24,10 @@ from private_llm_analytics.planning.candidates import (
 from private_llm_analytics.planning.utility import (
     LogNormalPrior,
     NoiseEstimator,
+    PlannerConfigurationError,
     PublicContributionPrior,
     PublicPriorDistribution,
+    SUPPORTED_EXPECTED_RELEASE_L1_METRICS,
     TruncatedNormalPrior,
     UtilityComponents,
     UtilityEstimator,
@@ -264,6 +266,19 @@ class SmallNReleasePlanner:
     ) -> ReleasePlanResult:
         """Evaluate candidate policies and return optimal budget-feasible plan."""
         mode = self.planner_config.mode
+
+        if self.planner_config.weights.objective_mode == "EXPECTED_RELEASE_L1":
+            norm_metric = metric.lower().strip()
+            if norm_metric not in SUPPORTED_EXPECTED_RELEASE_L1_METRICS:
+                raise PlannerConfigurationError(
+                    f"Unsupported metric '{metric}' under EXPECTED_RELEASE_L1. "
+                    f"v0.3 utility-aware parameter optimization is formally evaluated and production-enabled for "
+                    f"Interaction Volume only ({SUPPORTED_EXPECTED_RELEASE_L1_METRICS})."
+                )
+            if self.app_config.privacy.default_mechanism.type == "laplace":
+                raise PlannerConfigurationError(
+                    "v0.3 EXPECTED_RELEASE_L1 currently supports Gaussian only."
+                )
 
         # 1. Mode safety enforcement
         recip_policy = self.app_config.recipients.recipients.get(recipient)
