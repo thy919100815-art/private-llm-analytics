@@ -1,4 +1,4 @@
-# Private LLM Analytics (v0.3 — Small-n Utility-Aware Differential Privacy Release Planner)
+# Private LLM Analytics (v0.4 — User-Level Continual Observation & Sliding-Window Differential Privacy)
 
 A **User-Level Central Differential Privacy Analytics Layer** prototype for enterprise multi-model AI telemetry.
 
@@ -411,3 +411,118 @@ All values are automatically verified and synchronized from [`results/tables/v03
 | **Selected $F$ by Budget (Exp 12)** | Under $\epsilon_{\text{cap}}=4.0$ with horizon $H=90$, initial cadence selects $F=14$ days ($K=7$ releases, $\epsilon_{\text{proj}}=3.50$). When historical budget consumption reaches $73.4\%$ ($\epsilon_{\text{hist}}=2.9358$), the planner automatically throttles to $F=30$ days ($K=3$ releases, $\epsilon_{\text{proj}}=3.77$), strictly preserving budget feasibility. |
 | **Prior Misspecification (Exp 14)** | Evaluated across three distinct ground-truth regimes (`light` $\mu=25$, `default` $\mu=60$, `heavy_tail` $\mu=100$) using independent public seeds: <br>• Under matched priors: **0.00% regret** across all three regimes. <br>• `light` regime: Mean misspecified regret $= 4.48\%$, max regret $= 13.44\%$ (vs fixed mid baseline $13.44\%$). <br>• `default` regime: Mean misspecified regret $= 29.96\%$, max regret $= 89.87\%$ (vs fixed mid baseline $89.87\%$). <br>• `heavy_tail` regime: Mean misspecified regret $= 33.74\%$, max regret $= 101.21\%$ (vs fixed mid baseline $101.21\%$). In the tested misspecification set, regret did not exceed the fixed-mid baseline. |
 | **Budget Utilization** | 100% compliant with lifetime RDP budget composition. No over-allocation or budget violation occurred in any experimental condition. |
+
+
+---
+
+## Continual Observation and Sliding-Window DP
+
+Version 0.4 introduces **User-Level Continual Observation** and **Sliding-Window Differential Privacy** for enterprise multi-model AI analytics, solving the problem of continuous temporal monitoring (e.g., daily 7-day, 30-day, 90-day sliding windows, quarter-to-date prefixes, and arbitrary fixed intervals) without incurring linear privacy budget degradation from overlapping releases.
+
+### 1. The Overlapping Release Challenge
+In traditional differential privacy architectures, releasing statistics over overlapping sliding windows (e.g. Day $t-29$ to Day $t$ published daily) creates a distinct release for every day. Under standard DP composition theorems, each fresh noisy release leaks additional privacy budget. Over a 365-day year, 336 daily 30-day sliding window releases accumulate linear privacy cost, causing lifetime $\epsilon$ to explode (e.g. accumulating $\epsilon > 900$ for standard release configurations) or requiring impractical noise scales that render analytics useless.
+
+### 2. User-Level vs. Event-Level Continual Observation
+In literature, continual observation is often presented under **event-level DP**, where each time step contains independent events from disjoint individuals. In enterprise LLM telemetry, this assumption is fundamentally false:
+- The authoritative privacy unit is the **USER**.
+- The DP adjacency relationship dictates that two databases differ by **one user's entire history of LLM interactions across the entire observation epoch**.
+- A user may participate actively on every single day, or concentrate their activity in bursts.
+- Treating daily events as independent would lead to a catastrophic privacy violation.
+
+### 3. Group-$L_1$-of-$L_2$ Temporal Contribution Bounding
+To provide rigorous user-level differential privacy across continuous temporal queries, v0.4 establishes a two-stage hierarchical contribution bounding operator:
+
+1. **Target-Space Projection**: Raw daily 9-cell interaction vectors are first projected into the target granularity space $\mathbb{R}^d$ via linear operator $A_G$:
+   $$x_{u, t} = A_G m_{u, t}$$
+2. **Daily $L_2$ Clipping**: Daily contributions are clipped to bound $C_{\text{day}}$:
+   $$y_{u, t} = x_{u, t} \cdot \min\left(1, \frac{C_{\text{day}}}{\max(\|x_{u, t}\|_2, 10^{-12})}\right)$$
+3. **Epoch Group-$L_1$-of-$L_2$ Clipping**: The user's total temporal activity across the epoch $T$ is bounded by evaluating the sum of daily $L_2$ norms $S_u = \sum_{t=1}^T \|y_{u, t}\|_2$, and scaling all daily vectors by:
+   $$z_{u, t} = y_{u, t} \cdot \min\left(1, \frac{C_{\text{epoch}}}{\max(S_u, 10^{-12})}\right)$$
+
+This mathematical construction guarantees two simultaneous invariants for every user $u$ and day $t$:
+$$\|z_{u, t}\|_2 \le C_{\text{day}} \quad \text{and} \quad \sum_{t=1}^T \|z_{u, t}\|_2 \le C_{\text{epoch}}$$
+
+### 4. Per-Level Sensitivity Proof for Binary Time Trees
+A binary time tree decomposes an epoch of $T$ days (padded to $\text{tree\_size} = 2^{\lceil \log_2(T) \rceil}$) into $L = \lceil \log_2(T) \rceil + 1$ dyadic levels:
+- Level $0$: single-day leaf nodes (length $1$)
+- Level $l$: dyadic nodes of duration $2^l$ days
+- Root Level $L-1$: node covering the entire tree size
+
+**Theorem (Per-Level $L_2$ Sensitivity Bound)**:
+> On any tree level $l$, the temporal node intervals $I_{l, j}$ are pairwise mutually disjoint:
+> $$I_{l, j} \cap I_{l, j'} = \emptyset \quad \text{for } j \ne j'$$
+> Let $v_{u, l, j} = \sum_{t \in I_{l, j}} z_{u, t}$ denote user $u$'s contribution vector to node $j$ on level $l$.
+> By the triangle inequality:
+> $$\|v_{u, l, j}\|_2 = \left\| \sum_{t \in I_{l, j}} z_{u, t} \right\|_2 \le \sum_{t \in I_{l, j}} \|z_{u, t}\|_2$$
+> Let $V_{u, l} = (v_{u, l, 0}, v_{u, l, 1}, \dots, v_{u, l, M-1})$ denote the concatenated joint vector of user $u$'s contributions across all nodes on level $l$. The Euclidean norm of $V_{u, l}$ satisfies:
+> $$\|V_{u, l}\|_2 = \sqrt{\sum_{j=0}^{M-1} \|v_{u, l, j}\|_2^2} \le \sum_{j=0}^{M-1} \|v_{u, l, j}\|_2 \le \sum_{j=0}^{M-1} \sum_{t \in I_{l, j}} \|z_{u, t}\|_2 = \sum_{t=1}^T \|z_{u, t}\|_2 \le C_{\text{epoch}}$$
+> Therefore, for ANY level $l$, the user-level $L_2$ sensitivity of the joint level vector query is bounded by:
+> $$\Delta_l \le C_{\text{epoch}}$$
+
+### 5. Level Gaussian Vector Mechanism & RDP Composition
+Each tree level $l$ is materialized as a joint Gaussian vector mechanism:
+$$\mathcal{M}_l(D) = \text{LevelAggregate}_l(D) + \mathcal{N}(0, \sigma^2 I)$$
+- All levels share an equal noise scale $\sigma = \sigma_{\text{tree}}$ in v0.4.
+- For each Rényi order $lpha$, the level mechanism incurs RDP cost:
+  $$\rho_l(\alpha) = \frac{\alpha C_{\text{epoch}}^2}{2 \sigma^2}$$
+- Across the $L$ levels of the tree, the full mechanism composes via RDP addition:
+  $$\text{RDP}_{\text{tree}}(lpha) = L \cdot \frac{\alpha C_{\text{epoch}}^2}{2 \sigma^2}$$
+- The number of charged tree level mechanisms is $O(\log T)$ per epoch. Actual effective $\epsilon$ is determined by RDP composition and calibrated $\sigma$.
+
+### 6. Epoch Boundaries Do NOT Reset Lifetime Privacy
+Epochs partition tree construction and coordinate indexing (e.g. 90-day quarters). However:
+- **An epoch is NOT a privacy reset**.
+- Users active across multiple epochs (Epoch 1, Epoch 2, ...) have their lifetime privacy budget composed additively across all epochs and prior v0.1/v0.2/v0.3 releases:
+  $$\text{RDP}_{\text{lifetime}}(\alpha) = \sum_{\text{epochs}} \text{RDP}_{\text{epoch}}(\alpha) + \sum_{\text{releases}} \text{RDP}_{\text{release}}(\alpha)$$
+- Production strictly enforces lifetime continuity; rolling resets fail closed.
+
+### 7. Decoupling Node Noise Identity from Recipient Exposure Accounting
+To guarantee both mathematical privacy and security against multi-recipient collusion:
+1. **Canonical Node Key**:
+   $$\text{node\_id} = \text{hash}(\text{stream\_fingerprint}, \text{epoch\_id}, \text{level}, \text{node\_index})$$
+   A node's noisy payload depends strictly on its temporal identity and never on recipient or query scope.
+   **All recipients querying the same node receive the bitwise identical noisy payload**. This completely prevents noise averaging attacks across colluding recipients.
+2. **Recipient Exposure Accounting**:
+   $$\text{exposure\_key} = (\text{budget\_scope\_id}, \text{stream\_fingerprint}, \text{epoch\_id}, \text{level})$$
+   A privacy scope is charged for a level mechanism **once** when any node on that level is first revealed to that scope. Subsequent queries utilizing that level (or other nodes on the same level) incur **zero additional privacy charge**.
+3. **Multi-Recipient Composition Policies**:
+   - `GLOBAL_EXTERNAL`: All external recipients share a unified global external scope. The first external query pays for level $l$; all subsequent external queries reuse level $l$ at zero additional cost.
+   - `PER_RECIPIENT`: Each external recipient pays for level $l$ once in their isolated scope, but both recipients receive bitwise identical noisy nodes.
+   - `COLLUSION_GROUP`: Recipients in a collusion consortium share level exposures within the group scope.
+
+### 8. Deterministic Query Post-Processing
+All user-facing temporal queries (prefix $[1, t]$, fixed interval $[l, r]$, and sliding window $[t-W+1, t]$) are executed purely as **deterministic linear combinations of canonical committed noisy nodes**:
+$$V_{\text{query}} = \sum_{\text{node} \in \text{canonical\_cover}} V_{\text{node}}$$
+- **Query execution has ZERO RNG at query time**.
+- Once nodes are materialized in the persistent SQLite store, query execution never accesses raw interactions telemetry (verified via raw loader fault injection).
+
+### 9. Finalized Data Barrier and Immutability
+To protect privacy invariants:
+- Only days marked as finalized (outside `lateness_grace_days`) can be materialized into queryable tree nodes.
+- Once a tree node is materialized and released, retroactively altering underlying telemetry is rejected (fail-closed immutability).
+
+### 10. Required Limitations (Section 92)
+The v0.4 Continual Observation implementation is subject to the following explicit operational and theoretical boundaries:
+1. **Interaction Volume Metric Only**: Production continual observation strictly supports the `interaction_volume` metric. Calls with `user_prevalence` or `user_normalized_share` fail closed with `ProductionSafetyConfigurationError`.
+2. **Gaussian Mechanism Only**: Production continual observation strictly requires the Gaussian mechanism; Laplace requests fail closed.
+3. **Binary Tree Topology Only**: Topology is fixed to dyadic binary trees with next-power-of-two padding; arbitrary wavelet or non-dyadic splits are not supported.
+4. **Fixed Public Topology**: Tree structure and interval partitions are public, fixed, and data-independent. No data-dependent adaptive tree topology is claimed or implemented.
+5. **Fixed Epoch Boundaries**: Epoch lengths are predetermined by configuration; dynamic epoch partitioning is not supported.
+6. **Finalized Data Immutability**: Underlying telemetry for released nodes cannot be silently updated or backfilled.
+7. **Temporal Clipping Bias**: Group-$L_1$-of-$L_2$ clipping introduces deterministic temporal bias ($C_{\text{epoch}}$ truncation), which must be balanced against noise variance.
+8. **Lifetime Composition**: Epoch transitions do not clear consumed privacy budget; lifetime RDP composes indefinitely.
+9. **No Optimality Claims**: v0.4 does not claim theoretical optimality over all possible continual mechanisms; it provides a rigorous, verified user-level baseline.
+10. **Prevalence / Share Continual Observation**: Continual tracking of user prevalence and normalized share metrics remains a subject for future releases.
+
+---
+
+### Key Empirical Results (Exp 15 – Exp 19)
+
+| Experiment | Metric / Finding | Quantitative Result |
+| :--- | :--- | :--- |
+| **Exp 15: Tree Privacy Scaling** | Epsilon Reduction Factor (Fixed Noise) | Tree accumulates up to **1.79x lower lifetime $\epsilon$** over $T=365$ days compared to independent daily releases. |
+| **Exp 15: Noise Reduction** | Noise Reduction Factor (Fixed $\epsilon=2.0$) | At fixed lifetime $\epsilon=2.0$, tree achieves **up to 4.14x lower query noise MAE** for 30-day queries over a 1-year horizon. |
+| **Exp 16: Prefix Tracking** | Cumulative Noise Growth | Prefix query noise grows as $O(\log t)$ in binary tree vs. $O(t)$ linear variance growth in independent daily sums (**up to 3.98x noise reduction** at $t=90$). |
+| **Exp 17: Sliding-Window DP** | Lifetime Privacy Savings | Over a 365-day horizon, daily 7-day sliding-window releases accumulate $\epsilon=952.76$ under independent releases vs. $\epsilon=53.82$ under binary tree (**17.7x lifetime privacy savings**). |
+| **Exp 18: Temporal Clipping Tradeoff** | Bias-Variance Pareto Frontier | As $C_{\text{epoch}}$ increases from 10 to 160 (at $C_{\text{day}}=10$), relative clipping bias drops from $91.5\%$ to $2.7\%$, while relative DP noise increases from $0.6\%$ to $9.8\%$. Minimum total relative error is achieved at $C_{\text{epoch}}=160$. |
+| **Exp 19: Long-Horizon System Scaling** | Query Latency & Storage Footprint | Cached interval query latency remains constant at **$\approx 13$ ms** from $T=30$ to $T=730$ days. SQLite storage footprint remains compact at **$\approx 104$ KB**. |
