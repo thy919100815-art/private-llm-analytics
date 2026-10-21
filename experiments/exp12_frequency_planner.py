@@ -10,7 +10,7 @@ import argparse
 from decimal import Decimal
 from pathlib import Path
 import time
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional, Sequence, Tuple
 import pandas as pd
 
 from private_llm_analytics.config.loader import load_app_config

@@ -14,7 +14,7 @@ import argparse
 import math
 from pathlib import Path
 import sys
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
