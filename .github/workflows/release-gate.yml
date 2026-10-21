@@ -9,13 +9,14 @@ on:
         type: boolean
         default: true
       run_formal_experiments:
-        description: 'Run formal Exp09-Exp14 experiments and generate figures'
+        description: 'Run formal Exp09-Exp19 experiments and generate figures'
         required: true
         type: boolean
         default: true
   push:
     branches:
       - v0.3-dev
+      - v0.4-dev
 
 jobs:
   verification-gate:
@@ -62,7 +63,7 @@ jobs:
           "
 
   formal-experiments:
-    name: Formal Small-N Release Planning Experiments
+    name: Formal Release Planning & Continual DP Experiments
     needs: verification-gate
     if: ${{ github.event_name == 'push' || github.event.inputs.run_formal_experiments == 'true' || github.event.inputs.run_formal_experiments == true }}
     runs-on: ubuntu-latest
@@ -106,6 +107,26 @@ jobs:
         run: |
           python experiments/exp14_prior_misspecification.py
 
+      - name: Run Formal Exp15 (Tree Privacy Scaling)
+        run: |
+          python experiments/exp15_continual_tree_privacy.py
+
+      - name: Run Formal Exp16 (Prefix Tracking)
+        run: |
+          python experiments/exp16_prefix_queries.py
+
+      - name: Run Formal Exp17 (Sliding Window DP)
+        run: |
+          python experiments/exp17_sliding_window.py
+
+      - name: Run Formal Exp18 (Temporal Clipping Tradeoff)
+        run: |
+          python experiments/exp18_temporal_clipping.py
+
+      - name: Run Formal Exp19 (System Scaling)
+        run: |
+          python experiments/exp19_continual_system_scaling.py
+
       - name: Generate Key Results Summary JSON
         run: |
           python experiments/generate_key_results_summary.py
@@ -140,6 +161,7 @@ jobs:
           name: formal-research-artifacts
           path: |
             results/tables/*.csv
+            results/tables/*.json
             results/figures/*.png
             results/manifests/*.json
           retention-days: 30

@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "v0.2-dev", "v0.3-dev" ]
+    branches: [ "main", "v0.2-dev", "v0.3-dev", "v0.4-dev" ]
   pull_request:
-    branches: [ "main", "v0.2-dev", "v0.3-dev" ]
+    branches: [ "main", "v0.2-dev", "v0.3-dev", "v0.4-dev" ]
 
 jobs:
   test:
@@ -42,3 +42,8 @@ jobs:
           python experiments/verify_policy_binding_atomicity.py
           python experiments/verify_recipient_collusion.py
           python experiments/verify_planner_architecture.py
+          python experiments/verify_continual_tree_math.py
+          python experiments/verify_continual_node_reuse.py
+          python experiments/verify_continual_accounting.py
+          python experiments/verify_continual_multiworker.py
+          python experiments/verify_continual_epoch_history.py
