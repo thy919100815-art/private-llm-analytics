@@ -1,4 +1,4 @@
-# Private LLM Analytics (v0.2 — Longitudinal Multi-Recipient Privacy Accounting)
+# Private LLM Analytics (v0.3 — Small-n Utility-Aware Differential Privacy Release Planner)
 
 A **User-Level Central Differential Privacy Analytics Layer** prototype for enterprise multi-model AI telemetry.
 
@@ -318,3 +318,96 @@ python run_all_experiments.py --smoke --include-longitudinal
 > **Smoke Mode Isolation**:
 > - Smoke outputs are written exclusively to `results/verification/` (`results/verification/tables/`, `results/verification/raw/`, `results/verification/figures/`).
 > - Official research artifacts (`results/tables/*`, `results/raw/*`, `results/figures/*`) remain 100% byte-identical and unmodified.
+
+
+---
+
+## 8. Small-n Utility-Aware Differential Privacy Release Planner (v0.3)
+
+### 8.1 Motivation & Research Question
+In mid-sized enterprise environments ($N \in [500, 5000]$ employees), raw telemetry volume is orders of magnitude smaller than national population datasets. Under user-level Differential Privacy:
+1. Setting clipping bound $C$ too low introduces severe systematic clipping bias: $E_{\text{clip}}(C) = \mathbb{E}[(R_u - C)_+]$.
+2. Setting $C$ too high inflates $L_2$ query sensitivity $\Delta_2 = C$, injecting overwhelming DP Gaussian noise: $\sigma = \text{calibrate\_analytic\_gaussian}(\epsilon, \delta, C)$.
+3. Releasing fine-grained 9-cell statistics spreads signal thin, causing noise to dominate each cell. Aggregating to coarse marginals ($G \in \{\text{provider\_3\_cell}, \text{task\_3\_cell}, \text{overall\_1\_cell}\}$) trades dimensional granularity against variance reduction.
+4. Releasing frequently ($F=1$ or $F=7$) rapidly consumes cumulative longitudinal privacy budget over a planning horizon $H$.
+
+**The v0.3 Release Planner** automatically determines the optimal release policy tuple:
+$$\pi^* = (C^*, G^*, W^*, F^*)$$
+minimizing dimensionless normalized loss while strictly satisfying the lifetime privacy budget.
+
+---
+
+### 8.2 Direct Granularity User-Level DP Semantics
+
+Unlike post-clipping linear aggregation (which inflates operator norm and sensitivity by $\sqrt{3}$ or $3.0$), **Direct Granularity Release** performs linear aggregation directly in user-space before target-dimensional clipping:
+
+1. **Volume Metric**:
+   $$m_u^G = A_G m_u \in \mathbb{R}^{d_G}$$
+   $$\bar{m}_u^G = m_u^G \cdot \min\left(1, \frac{C}{\|m_u^G\|_2}\right)$$
+   $$V_G = \sum_{u=1}^N \bar{m}_u^G \implies \Delta_2 = C$$
+   Gaussian noise is calibrated with sensitivity $\Delta_2 = C$ in the target dimension $d_G \in \{9, 3, 3, 1\}$.
+
+2. **Prevalence Metric**:
+   Direct binary indicators are constructed per user at target granularity:
+   - Provider: $b_{u,p} = \mathbf{1}[\text{user } u \text{ used provider } p \text{ at least once}] \implies \Delta_2 = \sqrt{3}$
+   - Task: $b_{u,t} = \mathbf{1}[\text{user } u \text{ used task } t \text{ at least once}] \implies \Delta_2 = \sqrt{3}$
+   - Overall: $b_u = \mathbf{1}[\text{user } u \text{ active}] \implies \Delta_2 = 1.0$
+   - Full 9-cell: $b_{u,p,t} = \mathbf{1}[\text{user } u \text{ used cell } (p,t)] \implies \Delta_2 = 3.0$
+
+3. **Baseline Comparison (`POST_PROCESS_9_CELL`)**:
+   Full 9-cell DP release followed by deterministic linear aggregation $A_G \widetilde{V}_9$. Incurs **zero additional privacy cost**, but carries higher noise variance than direct coarse releases under small $N$.
+
+---
+
+### 8.3 Public Time Window Model & Dimensionless Loss
+
+To evaluate arbitrary statistical windows $W$ without private data leakage, the planner employs a public first-two-moment scaling prior calibrated against reference window $W_{\text{ref}} = 30$ days:
+$$\mu_W = \mu_{\text{ref}} \cdot \frac{W}{W_{\text{ref}}}, \quad \sigma_W = \sigma_{\text{ref}} \cdot \sqrt{\frac{W}{W_{\text{ref}}}}$$
+
+#### Default Objective: `EXPECTED_RELEASE_L1`
+Under the production default objective mode, the total loss directly optimizes expected workload release accuracy alongside dimensionless temporal freshness and relevance penalties:
+$$L_{\text{total}}(\pi) = w_{\text{data}} L_{\text{expected\_release\_workload}}(\pi) + w_{\text{stale}} L_{\text{stale}}(\pi) + w_{\text{window}} L_{\text{window}}(\pi)$$
+where:
+- **Workload Expected Release Error ($L_{\text{expected\_release\_workload}}$)**: Evaluated across declared workload queries $Q \in \{Q_9, Q_p, Q_t, Q_o\}$ (full 9-cell, provider marginal, task marginal, and overall scalar total) weighted by $(w_9, w_p, w_t, w_o)$:
+  $$L_{\text{expected\_release\_workload}} = \frac{1}{\sum_{Q} w_Q} \sum_{Q} w_Q \frac{\sum_k \mathbb{E}[|(Q \hat{V}_9 - Q V_{\text{raw}})_k|]}{\max(1, \mathbb{E}[\|V_{\text{raw}}\|_1])}$$
+  where $\hat{V}_9 = R_G(V_{G, \text{DP}})$ is the deterministic reconstruction to 9-cell space and each coordinate error $\mathbb{E}[|(Q \hat{V}_9 - Q V_{\text{raw}})_k|]$ follows a folded-normal closed form under Gaussian DP noise.
+- **Reporting Freshness / Staleness Penalty ($L_{\text{stale}}$)**:
+  $$L_{\text{stale}} = \frac{F}{2 W}$$
+- **Window Misalignment Penalty ($L_{\text{window}}$)**:
+  $$L_{\text{window}} = \frac{|W - W_{\text{ref}}|}{W_{\text{ref}}}$$
+All business trade-offs are governed strictly by the non-negative weights $(w_{\text{data}}, w_{\text{stale}}, w_{\text{window}})$ without auxiliary hidden multiplier distortions.
+
+#### Diagnostic / Legacy Objective: `COMPONENT_SURROGATE`
+For offline analysis and ablation studies, the planner retains the decoupled component surrogate loss:
+$$L_{\text{total}}(\pi) = w_{\text{clip}} L_{\text{clip}} + w_{\text{noise}} L_{\text{noise}} + w_{\text{agg}} L_{\text{agg}} + w_{\text{stale}} L_{\text{stale}} + w_{\text{window}} L_{\text{window}}$$
+where $L_{\text{clip}} = \frac{E_{\text{clip}}(C, W)}{N \cdot \mu_W}$, $L_{\text{noise}} = \frac{E_{\text{noise}}(C, G, \epsilon)}{N \cdot \mu_W}$ (with $\mathbb{E}[|Z|] = \sigma \sqrt{2/\pi}$ for Gaussian and $\mathbb{E}[|Z|] = b$ for Laplace), and $L_{\text{agg}}$ measures deterministic reconstruction error.
+
+Subject to lifetime privacy budget constraint:
+$$\text{RDP}_{\text{projected}}(\alpha) = \text{RDP}_{\text{historical}}(\alpha) + \left\lceil \frac{H}{F} \right\rceil \cdot \text{RDP}_{\text{single}}(\alpha; \pi) \implies \epsilon_{\text{projected}} \le \epsilon_{\text{cap}}$$
+
+---
+
+### 8.4 Strict Privacy Provenance & Production Isolation
+$$\boxed{\text{Production Planner operates exclusively on Public or Committed DP Feedback}}$$
+- **STATIC_PUBLIC Mode**: Relies exclusively on public configurations, public prior $\mathcal{TN}(\mu, \sigma)$, public population $N_{\text{public}}$, and candidate policy grids.
+- **DP_FEEDBACK Mode**: May incorporate committed historical release IDs (`DP_RELEASE:<id>`) through authoritative `PrivacyStateManager`. Raw private context is rejected (`ProductionSafetyConfigurationError`).
+- **ORACLE_EXACT_EVAL Mode**: Permitted exclusively in offline evaluation benchmarks. If `ORACLE_EXACT_EVAL` appears in production execution, the system fails closed immediately.
+
+---
+
+### 8.5 Empirical Research Findings (Formal Exp 09–14)
+
+> [!NOTE]
+> **Metric Scope**: v0.3 utility-aware parameter optimization is formally evaluated and production-enabled for Interaction Volume. Existing v0.1/v0.2 DP release support for prevalence and normalized share remains active and unchanged.
+
+All values are automatically verified and synchronized from [`results/tables/v03_key_results.json`](file:///f:/Private%20LLM%20Analytics/results/tables/v03_key_results.json):
+
+| Metric / Dimension | Formal Finding & Empirical Result |
+| :--- | :--- |
+| **Selected $C$ by $N$ (Exp 10)** | $N=500 \to C^*=40$ (Oracle $C^*=40$, relative regret $= 0.0\%$); $N=1000 \to C^*=80$ (Oracle $C^*=80$, regret $= 0.0\%$); $N=2500 \to C^*=80$ (regret $= 0.0\%$); $N=5000 \to C^*=80$ (regret $= 0.0\%$). Across all $N \in [500, 5000]$, static public planning with closed-form folded-normal expected $L_1$ release loss achieves **0.0% regret**, perfectly matching the empirical Oracle optimal clipping bound. |
+| **Estimator Calibration (Exp 09)** | Evaluated under unified normalized total L1 loss with `PublicContributionPrior`: **Absolute Calibration MAE = 0.002203**, **Relative Calibration Error = 0.55%** (Global Relative MAE = 0.55%, Mean Condition Relative Error = 1.64%, Worst Condition Relative Error = 13.34%), **Calibration Bias = +0.001743**, **Spearman Rank Correlation $\rho = 0.9860$** ($p = 2.50 \times 10^{-23}$, 30 conditions, 500 noise trials per condition). Confirms exceptional magnitude calibration and ranking accuracy. |
+| **Selected $G$ by $N$ (Exp 11)** | Direct target sensitivity release $\Delta_2 = C$ decomposes total loss into clipping loss, DP noise loss, and reconstruction loss. Noise variance reduction reaches **66.6%** for 3-cell granularities and **89.4%** for overall 1-cell, eliminating the $\sqrt{3}\times$ sensitivity penalty of post-clipping linear aggregation. |
+| **Selected $W$ by $N$ & Oracle Regret (Exp 13)** | In joint $(C, G, W, F)$ policy optimization over 90-day horizon with first-two-moment temporal model alignment / scaling matched (daily Negative Binomial increments matching public scaling laws with mean error $< 0.55\%$ and std error $< 5.63\%$): <br>• Under $\epsilon_{\text{cap}}=2.0$: Correctly detects infeasibility across all $N \in \{500, 1000, 5000\}$ and reports `NO_FEASIBLE_POLICY` (minimum projected $\epsilon=2.2657 > 2.0$, 0 feasible candidates). <br>• Under $\epsilon_{\text{cap}}=4.0$: Selects $W=30$ days, $F=14$ days, $G=\text{full\_9\_cell}$. At $N=500$, selects $C=80$ with true empirical utility $0.1773$ (Oracle $C=40$, true utility $0.1735$, relative regret $= 2.2\%$, 95% CI: Planner $[0.1751, 0.1796]$, Oracle $[0.1714, 0.1756]$). At $N=1000$, selects $C=80$ with true utility $0.1467$ matching Oracle ($C=80$, true utility $0.1467$, **0.0% regret**, 95% CI: $[0.1456, 0.1478]$). At $N=5000$, selects $C=80$ with true utility $0.1227$ matching Oracle ($C=80$, true utility $0.1227$, **0.0% regret**, 95% CI: $[0.1225, 0.1229]$). |
+| **Selected $F$ by Budget (Exp 12)** | Under $\epsilon_{\text{cap}}=4.0$ with horizon $H=90$, initial cadence selects $F=14$ days ($K=7$ releases, $\epsilon_{\text{proj}}=3.50$). When historical budget consumption reaches $73.4\%$ ($\epsilon_{\text{hist}}=2.9358$), the planner automatically throttles to $F=30$ days ($K=3$ releases, $\epsilon_{\text{proj}}=3.77$), strictly preserving budget feasibility. |
+| **Prior Misspecification (Exp 14)** | Evaluated across three distinct ground-truth regimes (`light` $\mu=25$, `default` $\mu=60$, `heavy_tail` $\mu=100$) using independent public seeds: <br>• Under matched priors: **0.00% regret** across all three regimes. <br>• `light` regime: Mean misspecified regret $= 4.48\%$, max regret $= 13.44\%$ (vs fixed mid baseline $13.44\%$). <br>• `default` regime: Mean misspecified regret $= 29.96\%$, max regret $= 89.87\%$ (vs fixed mid baseline $89.87\%$). <br>• `heavy_tail` regime: Mean misspecified regret $= 33.74\%$, max regret $= 101.21\%$ (vs fixed mid baseline $101.21\%$). In the tested misspecification set, regret did not exceed the fixed-mid baseline. |
+| **Budget Utilization** | 100% compliant with lifetime RDP budget composition. No over-allocation or budget violation occurred in any experimental condition. |

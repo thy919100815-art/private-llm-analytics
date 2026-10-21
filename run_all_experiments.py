@@ -13,12 +13,19 @@ from experiments.exp05_composition import run_composition_experiment
 from experiments.exp06_release_frequency import run_release_frequency_experiment
 from experiments.exp07_recipient_composition import run_recipient_composition_experiment
 from experiments.exp08_longitudinal_budget import run_longitudinal_budget_experiment
+from experiments.exp09_small_n_error_decomposition import run_error_decomposition_experiment
+from experiments.exp10_clipping_planner import run_clipping_planner_experiment
+from experiments.exp11_granularity_planner import run_granularity_experiment
+from experiments.exp12_frequency_planner import run_frequency_planner_experiment
+from experiments.exp13_joint_planner import run_joint_planner_experiment
+from experiments.exp14_prior_misspecification import run_prior_misspecification_experiment
 
 
 def run_all_experiments(
     smoke: bool = False,
     output_dir: Optional[str] = None,
     include_longitudinal: bool = False,
+    include_planning: bool = False,
 ):
     out_root = output_dir or ("results/verification" if smoke else "results")
     t_start = time.time()
@@ -70,6 +77,49 @@ def run_all_experiments(
             run_release_frequency_experiment(cadences={"weekly": 6, "monthly": 3}, n_trials=2, output_dir=out_root)
             run_recipient_composition_experiment(n_weeks=4, output_dir=out_root)
             run_longitudinal_budget_experiment(max_steps=6, output_dir=out_root)
+
+        if include_planning:
+            print("\n--- Running Small-n Release Planning Experiments (Smoke) ---")
+            run_error_decomposition_experiment(
+                populations=(500, 1000),
+                clipping_norms=(10.0, 20.0, 40.0),
+                n_trials=5,
+                output_dir=out_root,
+            )
+            run_clipping_planner_experiment(
+                populations=(500, 1000),
+                c_candidates=(10.0, 20.0, 40.0),
+                n_trials=5,
+                output_dir=out_root,
+            )
+            run_granularity_experiment(
+                populations=(500, 1000),
+                epsilons=(0.5, 2.0),
+                n_trials=5,
+                output_dir=out_root,
+            )
+            run_frequency_planner_experiment(
+                spent_ratios=(0.0, 0.50),
+                output_dir=out_root,
+            )
+            run_joint_planner_experiment(
+                populations=(500, 1000),
+                epsilon_caps=(2.0, 4.0),
+                n_trials=5,
+                output_dir=out_root,
+            )
+            run_prior_misspecification_experiment(
+                n_users=500,
+                n_trials=5,
+                output_dir=out_root,
+                regimes=["default"],
+            )
+
+            from experiments.generate_key_results_summary import generate_key_results_json
+            generate_key_results_json(
+                tables_dir=f"{out_root}/tables",
+                output_file=f"{out_root}/tables/v03_key_results.json",
+            )
     else:
         print("============================================================")
         print("FULL EXPERIMENT MODE")
@@ -113,6 +163,21 @@ def run_all_experiments(
             run_recipient_composition_experiment(output_dir=out_root)
             run_longitudinal_budget_experiment(output_dir=out_root)
 
+        if include_planning:
+            print("\n--- Running Small-n Release Planning Experiments (Full) ---")
+            run_error_decomposition_experiment(output_dir=out_root)
+            run_clipping_planner_experiment(output_dir=out_root)
+            run_granularity_experiment(output_dir=out_root)
+            run_frequency_planner_experiment(output_dir=out_root)
+            run_joint_planner_experiment(output_dir=out_root)
+            run_prior_misspecification_experiment(output_dir=out_root)
+
+            from experiments.generate_key_results_summary import generate_key_results_json
+            generate_key_results_json(
+                tables_dir=f"{out_root}/tables",
+                output_file=f"{out_root}/tables/v03_key_results.json",
+            )
+
     total_time = time.time() - t_start
     print("======================================================================")
     print(f"All experiments successfully completed in {total_time/60:.2f} minutes.")
@@ -127,8 +192,14 @@ def main():
     parser.add_argument("--smoke", action="store_true", help="Run rapid smoke test with minimal trials into results/verification")
     parser.add_argument("--output-dir", type=str, default=None, help="Output directory for results (defaults to results/verification for smoke, results for full)")
     parser.add_argument("--include-longitudinal", "--v02", action="store_true", help="Also execute v0.2 longitudinal experiments (Exp 05-08)")
+    parser.add_argument("--include-planning", "--v03", action="store_true", help="Also execute v0.3 release planning experiments (Exp 09-14)")
     args = parser.parse_args()
-    run_all_experiments(smoke=args.smoke, output_dir=args.output_dir, include_longitudinal=args.include_longitudinal)
+    run_all_experiments(
+        smoke=args.smoke,
+        output_dir=args.output_dir,
+        include_longitudinal=args.include_longitudinal,
+        include_planning=args.include_planning,
+    )
 
 
 if __name__ == "__main__":

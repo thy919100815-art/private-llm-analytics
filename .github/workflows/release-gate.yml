@@ -1,0 +1,145 @@
+name: Release Gate & Heavy Verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_noise_trials:
+        description: 'Run 500 noise trials verification'
+        required: true
+        type: boolean
+        default: true
+      run_formal_experiments:
+        description: 'Run formal Exp09-Exp14 experiments and generate figures'
+        required: true
+        type: boolean
+        default: true
+  push:
+    branches:
+      - v0.3-dev
+
+jobs:
+  verification-gate:
+    name: Core Verification Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run Pytest suite
+        run: |
+          python -m pytest tests/ -v
+
+      - name: Run Verification Scripts
+        env:
+          RUN_NOISE_TRIALS: ${{ github.event.inputs.run_noise_trials || 'true' }}
+        run: |
+          python -c "
+          import os, subprocess, sys, glob
+          run_noise = os.environ.get('RUN_NOISE_TRIALS', 'true').lower() == 'true'
+          scripts = sorted(glob.glob('experiments/verify_*.py'))
+          for s in scripts:
+              if 'verify_500_noise_trials' in s and not run_noise:
+                  print(f'=== Skipping {s} (run_noise_trials=false) ===')
+                  continue
+              print(f'=== Running {s} ===', flush=True)
+              res = subprocess.run([sys.executable, s])
+              if res.returncode != 0:
+                  print(f'FAILED: {s}', file=sys.stderr)
+                  sys.exit(res.returncode)
+          print('ALL VERIFICATION SCRIPTS PASSED.')
+          "
+
+  formal-experiments:
+    name: Formal Small-N Release Planning Experiments
+    needs: verification-gate
+    if: ${{ github.event_name == 'push' || github.event.inputs.run_formal_experiments == 'true' || github.event.inputs.run_formal_experiments == true }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .[dev]
+
+      - name: Run Formal Exp09 (Error Decomposition)
+        run: |
+          python experiments/exp09_small_n_error_decomposition.py
+
+      - name: Run Formal Exp10 (Clipping Planner)
+        run: |
+          python experiments/exp10_clipping_planner.py
+
+      - name: Run Formal Exp11 (Granularity Planner)
+        run: |
+          python experiments/exp11_granularity_planner.py
+
+      - name: Run Formal Exp12 (Frequency Planner)
+        run: |
+          python experiments/exp12_frequency_planner.py
+
+      - name: Run Formal Exp13 (Joint Planner vs Oracle)
+        run: |
+          python experiments/exp13_joint_planner.py
+
+      - name: Run Formal Exp14 (Prior Misspecification Robustness)
+        run: |
+          python experiments/exp14_prior_misspecification.py
+
+      - name: Generate Key Results Summary JSON
+        run: |
+          python experiments/generate_key_results_summary.py
+
+      - name: Generate Experiment Manifest
+        run: |
+          python -c "
+          import hashlib, json, time
+          from pathlib import Path
+          from private_llm_analytics.config.loader import load_app_config
+          from private_llm_analytics.planning.planner import compute_planner_config_fingerprint
+          cfg = load_app_config('configs')
+          fp = compute_planner_config_fingerprint(cfg)
+          manifest = {
+              'timestamp': time.time(),
+              'planner_config_fingerprint': fp,
+              'candidate_clipping': cfg.privacy.planner.candidate_clipping,
+              'candidate_granularities': cfg.privacy.planner.candidate_granularities,
+              'candidate_windows': cfg.privacy.planner.candidate_windows,
+              'candidate_frequencies': cfg.privacy.planner.candidate_frequencies,
+              'artifacts': [str(p) for p in Path('results').glob('**/*') if p.is_file()],
+          }
+          Path('results/manifests').mkdir(parents=True, exist_ok=True)
+          with open('results/manifests/experiment_manifest.json', 'w') as f:
+              json.dump(manifest, f, indent=2)
+          print('Experiment manifest generated.')
+          "
+
+      - name: Upload Research Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: formal-research-artifacts
+          path: |
+            results/tables/*.csv
+            results/figures/*.png
+            results/manifests/*.json
+          retention-days: 30

@@ -109,6 +109,105 @@ class DefaultMechanismConfig(BaseModel):
     type: Literal["gaussian", "laplace"] = "gaussian"
 
 
+class PublicPriorConfig(BaseModel):
+    distribution: Literal["truncated_normal", "lognormal", "contribution_model"] = "contribution_model"
+    mean: float = Field(default=60.0, gt=0)
+    std: float = Field(default=20.0, gt=0)
+    lower: float = Field(default=5.0, ge=0)
+    upper: float = Field(default=150.0, gt=0)
+    public_seed: int = 900001
+    num_reference_users: int = 2000
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> "PublicPriorConfig":
+        if self.lower >= self.upper:
+            raise ValueError(f"lower ({self.lower}) must be strictly less than upper ({self.upper})")
+        return self
+
+
+class UtilityWeightsConfig(BaseModel):
+    objective_mode: Literal["EXPECTED_RELEASE_L1", "COMPONENT_SURROGATE"] = "EXPECTED_RELEASE_L1"
+    data: Optional[float] = Field(default=None, ge=0)
+    clipping: float = Field(default=1.0, ge=0)
+    noise: float = Field(default=1.0, ge=0)
+    aggregation: float = Field(default=1.0, ge=0)
+    staleness: float = Field(default=0.5, ge=0)
+    window: float = Field(default=0.2, ge=0)
+
+    @model_validator(mode="after")
+    def validate_non_zero_sum(self) -> "UtilityWeightsConfig":
+        if self.data is None:
+            if (
+                self.clipping == 0
+                and self.noise == 0
+                and self.aggregation == 0
+                and self.staleness == 0
+                and self.window == 0
+            ):
+                self.data = 0.0
+            else:
+                self.data = 1.0
+
+        if self.objective_mode == "EXPECTED_RELEASE_L1":
+            total = self.data + self.staleness + self.window
+        else:
+            total = self.clipping + self.noise + self.aggregation + self.staleness + self.window
+
+        if total <= 0:
+            raise ValueError("Sum of utility weights must be strictly positive.")
+        return self
+
+
+class PlannerWorkloadConfig(BaseModel):
+    default_arrival_rate: float = Field(default=0.1, gt=0)
+    full_9_cell_weight: float = Field(default=0.4, ge=0)
+    provider_weight: float = Field(default=0.3, ge=0)
+    task_weight: float = Field(default=0.2, ge=0)
+    overall_weight: float = Field(default=0.1, ge=0)
+    provider_shares: Dict[str, float] = Field(
+        default_factory=lambda: {"provider_a": 0.5, "provider_b": 0.3, "provider_c": 0.2}
+    )
+    task_shares: Dict[str, float] = Field(
+        default_factory=lambda: {"technical": 0.4, "document": 0.35, "analysis": 0.25}
+    )
+
+    @model_validator(mode="after")
+    def validate_workload_weights(self) -> "PlannerWorkloadConfig":
+        total = self.full_9_cell_weight + self.provider_weight + self.task_weight + self.overall_weight
+        if total <= 0:
+            raise ValueError("Sum of workload weights must be strictly positive.")
+        return self
+
+
+class WindowModelConfig(BaseModel):
+    reference_days: int = Field(default=30, gt=0)
+    mean_scaling: Literal["linear", "sublinear"] = "linear"
+    std_scaling: Literal["sqrt_time", "linear"] = "sqrt_time"
+    temporal_averaging_penalty: float = Field(default=0.2, ge=0)
+
+
+class PlannerConfig(BaseModel):
+    enabled: bool = False
+    mode: Literal["static_public", "dp_feedback", "oracle_eval_only"] = "static_public"
+    prior: PublicPriorConfig = Field(default_factory=PublicPriorConfig)
+    weights: UtilityWeightsConfig = Field(default_factory=UtilityWeightsConfig)
+    workloads: PlannerWorkloadConfig = Field(default_factory=PlannerWorkloadConfig)
+    window_model: WindowModelConfig = Field(default_factory=WindowModelConfig)
+    candidate_clipping: List[float] = Field(
+        default_factory=lambda: [5.0, 10.0, 20.0, 40.0, 80.0]
+    )
+    candidate_granularities: List[str] = Field(
+        default_factory=lambda: ["full_9_cell", "provider_3_cell", "task_3_cell", "overall_1_cell"]
+    )
+    candidate_windows: List[int] = Field(
+        default_factory=lambda: [7, 14, 30, 60, 90]
+    )
+    candidate_frequencies: List[int] = Field(
+        default_factory=lambda: [1, 7, 14, 30]
+    )
+    planning_horizon_days: int = Field(default=90, gt=0)
+
+
 class PrivacyReleaseConfig(BaseModel):
     reuse_existing_release: bool = True
     allow_budget_overrun: bool = False
@@ -130,6 +229,7 @@ class PrivacyConfig(BaseModel):
     recipient_composition: RecipientCompositionConfig = Field(default_factory=RecipientCompositionConfig)
     default_mechanism: DefaultMechanismConfig = Field(default_factory=DefaultMechanismConfig)
     release: PrivacyReleaseConfig = Field(default_factory=PrivacyReleaseConfig)
+    planner: PlannerConfig = Field(default_factory=PlannerConfig)
 
 
 class ContributionConfig(BaseModel):
@@ -169,7 +269,6 @@ class MetricDefinition(BaseModel):
     dimensions: List[str] = Field(default_factory=lambda: ["provider", "task"])
     contribution: ContributionConfig
     mechanism: MechanismItemConfig = Field(default_factory=MechanismItemConfig)
-
 
 
 class MetricsConfig(BaseModel):

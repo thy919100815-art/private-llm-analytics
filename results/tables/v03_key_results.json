@@ -1,0 +1,281 @@
+{
+  "metadata": {
+    "version": "v0.3",
+    "source_tables_dir": "results\\tables"
+  },
+  "calibration_metrics": {
+    "metric_definition": "normalized_total_l1_loss",
+    "calibration_bias": 0.001743,
+    "calibration_MAE": 0.002203,
+    "relative_calibration_error": 0.005548,
+    "global_relative_MAE": 0.005548,
+    "mean_condition_relative_error": 0.016395,
+    "worst_condition_relative_error": 0.133446,
+    "spearman_rho": 0.986,
+    "p_value": 2.5028897904275375e-23,
+    "sample_count": 30
+  },
+  "selected_C_by_N": {
+    "500": 40.0,
+    "1000": 80.0,
+    "2500": 80.0,
+    "5000": 80.0
+  },
+  "oracle_C_by_N": {
+    "500": 40.0,
+    "1000": 80.0,
+    "2500": 80.0,
+    "5000": 80.0
+  },
+  "regret_by_N": {
+    "500": 0.0,
+    "1000": 0.0,
+    "2500": 0.0,
+    "5000": 0.0
+  },
+  "selected_G_by_N": {
+    "description": "Direct target sensitivity release eliminates post-processing amplification",
+    "evaluated_granularities": [
+      "full_9_cell",
+      "provider_3_cell",
+      "task_3_cell",
+      "overall_1_cell"
+    ]
+  },
+  "selected_F_by_budget": {
+    "0%_spent": {
+      "remaining_epsilon": 4.0,
+      "selected_frequency_days": 14,
+      "planned_releases_count": 7,
+      "actual_initial_epsilon": 0.0
+    },
+    "25%_spent": {
+      "remaining_epsilon": 2.6579,
+      "selected_frequency_days": 14,
+      "planned_releases_count": 7,
+      "actual_initial_epsilon": 1.3421
+    },
+    "50%_spent": {
+      "remaining_epsilon": 2.1825,
+      "selected_frequency_days": 14,
+      "planned_releases_count": 7,
+      "actual_initial_epsilon": 1.8175
+    },
+    "75%_spent": {
+      "remaining_epsilon": 1.0642,
+      "selected_frequency_days": 30,
+      "planned_releases_count": 3,
+      "actual_initial_epsilon": 2.9358
+    }
+  },
+  "selected_W_by_N": {
+    "N500_eps2.0": {
+      "status": "NO_FEASIBLE_POLICY",
+      "policy": null
+    },
+    "N500_eps4.0": {
+      "status": "FEASIBLE",
+      "candidate": "C80_Gfull_9_cell_W30_F14",
+      "selected_window_days": 30,
+      "planner_true_utility": 0.1773,
+      "oracle_true_utility": 0.1735,
+      "planner_rel_regret": 0.022
+    },
+    "N1000_eps2.0": {
+      "status": "NO_FEASIBLE_POLICY",
+      "policy": null
+    },
+    "N1000_eps4.0": {
+      "status": "FEASIBLE",
+      "candidate": "C80_Gfull_9_cell_W30_F14",
+      "selected_window_days": 30,
+      "planner_true_utility": 0.1467,
+      "oracle_true_utility": 0.1467,
+      "planner_rel_regret": 0.0
+    },
+    "N5000_eps2.0": {
+      "status": "NO_FEASIBLE_POLICY",
+      "policy": null
+    },
+    "N5000_eps4.0": {
+      "status": "FEASIBLE",
+      "candidate": "C80_Gfull_9_cell_W30_F14",
+      "selected_window_days": 30,
+      "planner_true_utility": 0.1227,
+      "oracle_true_utility": 0.1227,
+      "planner_rel_regret": 0.0
+    }
+  },
+  "infeasible_conditions": [
+    {
+      "population_n": 500,
+      "epsilon_cap": 2.0,
+      "status": "NO_FEASIBLE_POLICY",
+      "minimum_projected_epsilon": 2.2657
+    },
+    {
+      "population_n": 1000,
+      "epsilon_cap": 2.0,
+      "status": "NO_FEASIBLE_POLICY",
+      "minimum_projected_epsilon": 2.2657
+    },
+    {
+      "population_n": 5000,
+      "epsilon_cap": 2.0,
+      "status": "NO_FEASIBLE_POLICY",
+      "minimum_projected_epsilon": 2.2657
+    }
+  ],
+  "prior_robustness": {
+    "light": {
+      "matched_prior_regret": 0.0,
+      "mean_misspecified_regret": 0.0448,
+      "max_misspecified_regret": 0.1344,
+      "fixed_baseline_regret": 0.1344,
+      "cases": [
+        {
+          "case": "Matched (25, 10)",
+          "selected_c": 30.0,
+          "oracle_c": 30.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.1344
+        },
+        {
+          "case": "Mean +25% (31.2, 10)",
+          "selected_c": 30.0,
+          "oracle_c": 30.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.1344
+        },
+        {
+          "case": "Mean -25% (18.8, 10)",
+          "selected_c": 20.0,
+          "oracle_c": 30.0,
+          "planner_regret": 0.1344,
+          "fixed_baseline_regret": 0.1344
+        },
+        {
+          "case": "Std +50% (25, 15)",
+          "selected_c": 30.0,
+          "oracle_c": 30.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.1344
+        },
+        {
+          "case": "Std -50% (25, 5)",
+          "selected_c": 20.0,
+          "oracle_c": 30.0,
+          "planner_regret": 0.1344,
+          "fixed_baseline_regret": 0.1344
+        },
+        {
+          "case": "LogNormal Mismatch (25, 10)",
+          "selected_c": 30.0,
+          "oracle_c": 30.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.1344
+        }
+      ]
+    },
+    "default": {
+      "matched_prior_regret": 0.0,
+      "mean_misspecified_regret": 0.2996,
+      "max_misspecified_regret": 0.8987,
+      "fixed_baseline_regret": 0.8987,
+      "cases": [
+        {
+          "case": "Matched (60, 20)",
+          "selected_c": 60.0,
+          "oracle_c": 60.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.8987
+        },
+        {
+          "case": "Mean +25% (75.0, 20)",
+          "selected_c": 60.0,
+          "oracle_c": 60.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.8987
+        },
+        {
+          "case": "Mean -25% (45.0, 20)",
+          "selected_c": 40.0,
+          "oracle_c": 60.0,
+          "planner_regret": 0.8987,
+          "fixed_baseline_regret": 0.8987
+        },
+        {
+          "case": "Std +50% (60, 30)",
+          "selected_c": 60.0,
+          "oracle_c": 60.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.8987
+        },
+        {
+          "case": "Std -50% (60, 10)",
+          "selected_c": 40.0,
+          "oracle_c": 60.0,
+          "planner_regret": 0.8987,
+          "fixed_baseline_regret": 0.8987
+        },
+        {
+          "case": "LogNormal Mismatch (60, 20)",
+          "selected_c": 60.0,
+          "oracle_c": 60.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 0.8987
+        }
+      ]
+    },
+    "heavy_tail": {
+      "matched_prior_regret": 0.0,
+      "mean_misspecified_regret": 0.3374,
+      "max_misspecified_regret": 1.0121,
+      "fixed_baseline_regret": 1.0121,
+      "cases": [
+        {
+          "case": "Matched (100, 40)",
+          "selected_c": 100.0,
+          "oracle_c": 100.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 1.0121
+        },
+        {
+          "case": "Mean +25% (125.0, 40)",
+          "selected_c": 100.0,
+          "oracle_c": 100.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 1.0121
+        },
+        {
+          "case": "Mean -25% (75.0, 40)",
+          "selected_c": 70.0,
+          "oracle_c": 100.0,
+          "planner_regret": 1.0121,
+          "fixed_baseline_regret": 1.0121
+        },
+        {
+          "case": "Std +50% (100, 60)",
+          "selected_c": 100.0,
+          "oracle_c": 100.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 1.0121
+        },
+        {
+          "case": "Std -50% (100, 20)",
+          "selected_c": 70.0,
+          "oracle_c": 100.0,
+          "planner_regret": 1.0121,
+          "fixed_baseline_regret": 1.0121
+        },
+        {
+          "case": "LogNormal Mismatch (100, 40)",
+          "selected_c": 100.0,
+          "oracle_c": 100.0,
+          "planner_regret": 0.0,
+          "fixed_baseline_regret": 1.0121
+        }
+      ]
+    }
+  }
+}

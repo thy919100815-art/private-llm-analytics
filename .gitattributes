@@ -1,0 +1,2 @@
+# Ensure deterministic line endings for data files verified by sha256 checksums
+data/synthetic_sample.csv eol=crlf

@@ -58,6 +58,7 @@ def validate_production_config(config: AppConfig) -> None:
       1. reuse_existing_release MUST be True (prevents noise-averaging attacks).
       2. allow_budget_overrun MUST be False (strictly enforces global budget invariant).
       3. history.mode MUST be 'lifetime' (forbids rolling privacy resets).
+      4. planner.mode MUST NOT be 'oracle_eval_only' (prevents private data snooping).
     """
     if not config.privacy.release.reuse_existing_release:
         raise ProductionSafetyConfigurationError(
@@ -73,4 +74,9 @@ def validate_production_config(config: AppConfig) -> None:
         raise ProductionSafetyConfigurationError(
             "Production configuration requires privacy.history.mode='lifetime'. "
             "Rolling privacy reset is strictly forbidden in production because external recipients permanently retain historical releases."
+        )
+    if config.privacy.planner.mode == "oracle_eval_only":
+        raise ProductionSafetyConfigurationError(
+            "Production configuration strictly forbids privacy.planner.mode='oracle_eval_only'. "
+            "Oracle evaluation accesses private raw data and is permitted only in isolated experiment benchmarks."
         )
