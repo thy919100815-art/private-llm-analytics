@@ -747,18 +747,15 @@ class NoiseEstimator:
         dim = GRANULARITY_DIMENSIONS.get(candidate.granularity, 9)
         metric_norm = metric.lower().strip()
 
-        # Expected 1D absolute error for N(0, sigma^2) is sigma * sqrt(2 / pi)
-        e_abs_1d = sigma * math.sqrt(2.0 / math.pi)
-
-        if "volume" in metric_norm:
-            return float(dim * e_abs_1d)
-        elif "prevalence" in metric_norm:
-            # Absolute count error across active target cells
-            return float(dim * e_abs_1d)
-        elif "share" in metric_norm:
-            return float(dim * e_abs_1d)
+        # Expected 1D absolute error:
+        # Gaussian N(0, sigma^2) => E|Z| = sigma * sqrt(2 / pi)
+        # Laplace(0, b) with scale b = sigma => E|Z| = b
+        if candidate.mechanism == "laplace":
+            e_abs_1d = float(sigma)
         else:
-            return float(dim * e_abs_1d)
+            e_abs_1d = float(sigma * math.sqrt(2.0 / math.pi))
+
+        return float(dim * e_abs_1d)
 
 
 class GranularityEstimator:
@@ -801,6 +798,53 @@ class GranularityEstimator:
         )
 
 
+def compute_temporal_utility_components(
+    frequency_days: int,
+    window_days: Optional[int] = None,
+    reference_days: int = 30,
+    lambda_stale: float = 1.0,
+    lambda_window: float = 1.0,
+) -> Tuple[float, float]:
+    """Single source of truth for normalized dimensionless temporal utility components.
+
+    Returns:
+        (norm_staleness_loss, norm_window_loss)
+    where:
+        norm_staleness_loss = lambda_stale * (frequency_days / (2.0 * window_days))
+        norm_window_loss = lambda_window * (abs(window_days - reference_days) / float(reference_days))
+    By default lambda_stale=1.0 and lambda_window=1.0, so dimensionless penalties are
+    F/(2W) and |W - Wref|/Wref, and all business weighting is governed strictly
+    by weights.staleness and weights.window.
+    """
+    denom = (2.0 * float(window_days)) if (window_days is not None and window_days > 0) else 2.0
+    norm_stale = float(lambda_stale * (float(frequency_days) / denom))
+    w_ref = max(1, reference_days)
+    w_val = window_days if window_days is not None else reference_days
+    norm_win = float(lambda_window * (abs(w_val - w_ref) / float(w_ref)))
+    return norm_stale, norm_win
+
+
+def compute_total_expected_release_utility(
+    data_loss: float,
+    staleness_loss: float,
+    window_loss: float,
+    weights: UtilityWeights,
+) -> float:
+    """Single source of truth for total expected release utility under active objective mode."""
+    if weights.objective_mode == "EXPECTED_RELEASE_L1":
+        return float(
+            weights.data * data_loss
+            + weights.staleness * staleness_loss
+            + weights.window * window_loss
+        )
+    else:
+        return float(
+            weights.clipping * data_loss
+            + weights.staleness * staleness_loss
+            + weights.window * window_loss
+        )
+
+
 class StalenessEstimator:
     """Estimates reporting staleness / lag relative to the operational window."""
 
@@ -811,13 +855,19 @@ class StalenessEstimator:
         window_days: Optional[int] = None,
         lambda_stale: float = 1.0,
     ) -> float:
-        """Dimensionless reporting freshness loss."""
+        """Dimensionless reporting freshness loss: lambda_stale * F / (2 * W)."""
         if isinstance(frequency_or_metric, str):
             f = frequency_days if frequency_days is not None else 7
         else:
             f = frequency_or_metric if frequency_days is None else frequency_days
-        denom = (2.0 * float(window_days)) if window_days is not None else 2.0
-        return float(lambda_stale * (float(f) / denom))
+        norm_stale, _ = compute_temporal_utility_components(
+            frequency_days=f,
+            window_days=window_days,
+            reference_days=30,
+            lambda_stale=lambda_stale,
+            lambda_window=1.0,
+        )
+        return norm_stale
 
 
 class WindowEstimator:
@@ -827,11 +877,17 @@ class WindowEstimator:
     def estimate_window_error(
         window_days: int,
         reference_days: int = 30,
-        lambda_window: float = 0.2,
+        lambda_window: float = 1.0,
     ) -> float:
-        """Dimensionless temporal relevance loss: lambda * |W - W_ref| / W_ref."""
-        w_ref = max(1, reference_days)
-        return float(lambda_window * (abs(window_days - w_ref) / float(w_ref)))
+        """Dimensionless temporal relevance loss: lambda_window * |W - W_ref| / W_ref."""
+        _, norm_win = compute_temporal_utility_components(
+            frequency_days=7,
+            window_days=window_days,
+            reference_days=reference_days,
+            lambda_stale=1.0,
+            lambda_window=lambda_window,
+        )
+        return norm_win
 
 
 class UtilityEstimator:
@@ -846,7 +902,7 @@ class UtilityEstimator:
         provider_shares: Optional[Dict[str, float]] = None,
         task_shares: Optional[Dict[str, float]] = None,
         lambda_stale: float = 1.0,
-        lambda_window: float = 0.2,
+        lambda_window: float = 1.0,
     ):
         self.weights = weights or UtilityWeights()
         self.public_prior = public_prior or PublicContributionPrior(
@@ -941,20 +997,15 @@ class UtilityEstimator:
         )
         raw_agg = norm_agg * expected_pop_volume
 
-        # 4. Freshness / Staleness loss
-        norm_stale = StalenessEstimator.estimate_staleness_error(
+        # 4 & 5. Temporal losses via shared single source of truth
+        norm_stale, norm_win = compute_temporal_utility_components(
             frequency_days=candidate.frequency_days,
             window_days=w_days,
-            lambda_stale=self.lambda_stale,
-        )
-        raw_stale = float(candidate.frequency_days)
-
-        # 5. Window misalignment loss
-        norm_win = WindowEstimator.estimate_window_error(
-            window_days=w_days,
             reference_days=self.reference_days,
+            lambda_stale=self.lambda_stale,
             lambda_window=self.lambda_window,
         )
+        raw_stale = float(candidate.frequency_days)
         raw_win = float(abs(w_days - self.reference_days))
 
         # 6. End-to-end data error via folded-normal expectation
@@ -970,12 +1021,13 @@ class UtilityEstimator:
                 workload_weights=self.workload_weights,
             )
 
-        # Unified Dimensionless Objective
+        # Unified Dimensionless Objective via shared helper
         if self.weights.objective_mode == "EXPECTED_RELEASE_L1" and (norm_data_loss > 0.0 or data_error > 0.0 or (norm_clip == 0.0 and norm_noise == 0.0)):
-            total_loss = (
-                self.weights.data * norm_data_loss
-                + self.weights.staleness * norm_stale
-                + self.weights.window * norm_win
+            total_loss = compute_total_expected_release_utility(
+                data_loss=norm_data_loss,
+                staleness_loss=norm_stale,
+                window_loss=norm_win,
+                weights=self.weights,
             )
         else:
             total_loss = (

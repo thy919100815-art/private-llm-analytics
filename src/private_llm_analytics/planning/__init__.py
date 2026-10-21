@@ -20,6 +20,8 @@ from private_llm_analytics.planning.utility import (
     UtilityComponents,
     UtilityEstimator,
     UtilityWeights,
+    compute_temporal_utility_components,
+    compute_total_expected_release_utility,
     scale_prior_for_window,
 )
 from private_llm_analytics.planning.diagnostics import (
@@ -60,6 +62,8 @@ __all__ = [
     "UtilityWeights",
     "UtilityComponents",
     "UtilityEstimator",
+    "compute_temporal_utility_components",
+    "compute_total_expected_release_utility",
     "compute_regret",
     "compute_calibration_error",
     "aggregate_to_granularity",

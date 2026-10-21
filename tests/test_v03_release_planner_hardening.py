@@ -7,6 +7,7 @@ import pandas as pd
 import pytest
 
 from experiments.exp13_joint_planner import (
+    check_all_windows_temporal_match,
     compute_true_candidate_utility,
     generate_rate_consistent_temporal_truth,
 )
@@ -20,10 +21,13 @@ from private_llm_analytics.planning.planner import (
     compute_planner_config_fingerprint,
 )
 from private_llm_analytics.planning.utility import (
+    NoiseEstimator,
     PlannerConfigurationError,
     PublicContributionPrior,
     UtilityEstimator,
     UtilityWeights,
+    compute_temporal_utility_components,
+    compute_total_expected_release_utility,
     scale_prior_for_window,
 )
 
@@ -501,3 +505,121 @@ def test_utility_weights_validator_expected_release_l1():
             staleness=0.0,
             window=0.0,
         )
+
+
+def test_planner_and_oracle_temporal_components_identical():
+    """Verify that Planner UtilityEstimator and Oracle compute bit-for-bit identical temporal loss components."""
+    estimator = UtilityEstimator(reference_days=30, lambda_stale=1.0, lambda_window=1.0)
+    windows = [7, 14, 30, 60, 90]
+    frequencies = [1, 7, 14, 30]
+
+    for w in windows:
+        for f in frequencies:
+            cand = ReleasePolicyCandidate(
+                contribution_bound=40.0,
+                granularity="full_9_cell",
+                window_days=w,
+                frequency_days=f,
+                mechanism="gaussian",
+                epsilon_per_release=1.0,
+                delta_per_release=1e-5,
+            )
+            eval_res = estimator.evaluate_candidate("interaction_volume", cand, 1000)
+            planner_stale = eval_res.norm_staleness_loss
+            planner_win = eval_res.norm_window_loss
+
+            oracle_stale, oracle_win = compute_temporal_utility_components(
+                frequency_days=f,
+                window_days=w,
+                reference_days=30,
+            )
+
+            assert planner_stale == oracle_stale == (float(f) / (2.0 * float(w)))
+            assert planner_win == oracle_win == (float(abs(w - 30)) / 30.0)
+
+
+def test_exp13_total_objective_matches_planner_definition():
+    """Verify that Oracle total score matches Planner total score when given identical data loss."""
+    weights = UtilityWeights(
+        objective_mode="EXPECTED_RELEASE_L1",
+        data=1.0,
+        staleness=0.5,
+        window=0.2,
+    )
+    estimator = UtilityEstimator(weights=weights, reference_days=30, lambda_stale=1.0, lambda_window=1.0)
+    cand = ReleasePolicyCandidate(
+        contribution_bound=40.0,
+        granularity="full_9_cell",
+        window_days=14,
+        frequency_days=7,
+        mechanism="gaussian",
+        epsilon_per_release=0.5,
+        delta_per_release=1e-5,
+    )
+    eval_res = estimator.evaluate_candidate("interaction_volume", cand, 1000)
+    planner_total = eval_res.total_error
+
+    oracle_stale, oracle_win = compute_temporal_utility_components(
+        frequency_days=cand.frequency_days,
+        window_days=cand.window_days,
+        reference_days=30,
+    )
+    oracle_total = compute_total_expected_release_utility(
+        data_loss=eval_res.norm_data_loss,
+        staleness_loss=oracle_stale,
+        window_loss=oracle_win,
+        weights=weights,
+    )
+
+    diff = abs(planner_total - oracle_total)
+    assert diff <= 1e-12
+
+
+def test_temporal_guard_checks_all_candidate_windows():
+    """Verify that Exp13 temporal guard checks all candidate windows W in {7, 14, 30, 60, 90}."""
+    clean_diags = {
+        7: {"mean_relative_model_error": 0.01, "std_relative_model_error": 0.03},
+        14: {"mean_relative_model_error": 0.02, "std_relative_model_error": 0.02},
+        30: {"mean_relative_model_error": 0.005, "std_relative_model_error": 0.04},
+        60: {"mean_relative_model_error": 0.015, "std_relative_model_error": 0.02},
+        90: {"mean_relative_model_error": 0.01, "std_relative_model_error": 0.01},
+    }
+    assert check_all_windows_temporal_match(clean_diags, mean_threshold=0.05, std_threshold=0.10) is True
+
+    failing_w7 = dict(clean_diags)
+    failing_w7[7] = {"mean_relative_model_error": 0.06, "std_relative_model_error": 0.03}
+    assert check_all_windows_temporal_match(failing_w7, mean_threshold=0.05, std_threshold=0.10) is False
+
+    failing_w90 = dict(clean_diags)
+    failing_w90[90] = {"mean_relative_model_error": 0.01, "std_relative_model_error": 0.12}
+    assert check_all_windows_temporal_match(failing_w90, mean_threshold=0.05, std_threshold=0.10) is False
+
+
+def test_component_surrogate_laplace_expected_absolute_noise():
+    """Verify that NoiseEstimator evaluates E|Z| = b for Laplace without sqrt(2/pi) distortion."""
+    cand = ReleasePolicyCandidate(
+        contribution_bound=20.0,
+        granularity="full_9_cell",
+        mechanism="laplace",
+        epsilon_per_release=0.5,
+        delta_per_release=0.0,
+    )
+    # Direct sensitivity = 20.0, b = 20.0 / 0.5 = 40.0.
+    # In full_9_cell (dim=9), total expected absolute error = 9 * 40.0 = 360.0.
+    noise_err = NoiseEstimator.estimate_noise_error("interaction_volume", cand, 1000)
+    assert noise_err == 360.0
+
+
+def test_component_surrogate_gaussian_noise_unchanged():
+    """Verify that NoiseEstimator evaluates Gaussian noise as dim * sigma * sqrt(2/pi)."""
+    cand = ReleasePolicyCandidate(
+        contribution_bound=20.0,
+        granularity="full_9_cell",
+        mechanism="gaussian",
+        epsilon_per_release=1.0,
+        delta_per_release=1e-5,
+    )
+    sigma = calibrate_analytic_gaussian(1.0, 1e-5, 20.0)
+    expected_err = 9.0 * sigma * math.sqrt(2.0 / math.pi)
+    noise_err = NoiseEstimator.estimate_noise_error("interaction_volume", cand, 1000)
+    assert abs(noise_err - expected_err) < 1e-9

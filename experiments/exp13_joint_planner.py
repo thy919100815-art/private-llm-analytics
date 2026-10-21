@@ -42,7 +42,26 @@ from private_llm_analytics.planning.policy import (
     compute_workload_reconstruction_error,
     reconstruct_to_9_cell,
 )
-from private_llm_analytics.planning.utility import PublicContributionPrior, UtilityEstimator
+from private_llm_analytics.planning.utility import (
+    PublicContributionPrior,
+    UtilityEstimator,
+    UtilityWeights,
+    compute_temporal_utility_components,
+    compute_total_expected_release_utility,
+)
+
+
+def check_all_windows_temporal_match(
+    diag_by_w: Dict[int, Dict[str, float]],
+    mean_threshold: float = 0.05,
+    std_threshold: float = 0.10,
+) -> bool:
+    """Return True if all candidate windows satisfy mean and std thresholds, False if any window mismatches."""
+    return not any(
+        d.get("mean_relative_model_error", 0.0) >= mean_threshold
+        or d.get("std_relative_model_error", 0.0) >= std_threshold
+        for d in diag_by_w.values()
+    )
 
 
 def compute_true_candidate_utility(
@@ -104,9 +123,18 @@ def compute_true_candidate_utility(
     raw_task, _ = aggregate_to_granularity(V_raw, cell_names, "task_3_cell")
     raw_over, _ = aggregate_to_granularity(V_raw, cell_names, "overall_1_cell")
 
-    # Freshness and window relevance loss
-    emp_stale_loss = float(candidate.frequency_days / (2.0 * w_days))
-    emp_win_loss = float(abs(w_days - reference_days) / float(reference_days))
+    # 4. Freshness and window relevance loss via shared single source of truth
+    emp_stale_loss, emp_win_loss = compute_temporal_utility_components(
+        frequency_days=candidate.frequency_days,
+        window_days=w_days,
+        reference_days=reference_days,
+    )
+    utility_weights_obj = UtilityWeights(
+        objective_mode="EXPECTED_RELEASE_L1",
+        data=weights_data,
+        staleness=weights_stale,
+        window=weights_win,
+    )
 
     # Evaluate across trials using Common Random Numbers (CRN)
     trial_scores = []
@@ -137,10 +165,11 @@ def compute_true_candidate_utility(
             weighted_err += wo * np.sum(np.abs(rec_over - raw_over))
 
         L_data_trial = float((weighted_err / tot_w) / true_total_vol)
-        trial_score = (
-            weights_data * L_data_trial
-            + weights_stale * emp_stale_loss
-            + weights_win * emp_win_loss
+        trial_score = compute_total_expected_release_utility(
+            data_loss=L_data_trial,
+            staleness_loss=emp_stale_loss,
+            window_loss=emp_win_loss,
+            weights=utility_weights_obj,
         )
         trial_scores.append(trial_score)
 
@@ -231,9 +260,11 @@ def run_joint_planner_experiment(
             temporal_records.append(diag_w)
 
         diag_30 = diag_by_w.get(ref_days, diag_by_w[30])
-        is_temporal_mismatch = (
-            diag_30["mean_relative_model_error"] >= 0.05
-            or diag_30["std_relative_model_error"] >= 0.10
+        # Section F: Verify temporal match across ALL candidate windows {7, 14, 30, 60, 90}
+        is_temporal_mismatch = not check_all_windows_temporal_match(
+            diag_by_w,
+            mean_threshold=0.05,
+            std_threshold=0.10,
         )
 
         # Workload and utility weights

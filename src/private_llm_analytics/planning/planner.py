@@ -244,8 +244,8 @@ class SmallNReleasePlanner:
                 workload_weights=workload_weights,
                 provider_shares=workload_cfg.provider_shares,
                 task_shares=workload_cfg.task_shares,
-                lambda_stale=workload_cfg.default_arrival_rate,
-                lambda_window=self.planner_config.window_model.temporal_averaging_penalty,
+                lambda_stale=1.0,
+                lambda_window=1.0,
             )
 
         self._plan_cache: Dict[str, ReleasePlanResult] = {}
