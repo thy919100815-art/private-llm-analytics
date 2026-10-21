@@ -53,7 +53,11 @@ privacy:
       std: 20.0
       lower: 5.0
       upper: 150.0
+      public_seed: 900001
+      num_reference_users: 2000
     weights:
+      objective_mode: EXPECTED_RELEASE_L1
+      data: 1.0
       clipping: 1.0
       noise: 1.0
       aggregation: 1.0

@@ -60,7 +60,7 @@ def run_error_decomposition_experiment(
         num_reference_users=2000,
     )
     estimator = UtilityEstimator(
-        weights=UtilityWeights(clipping=1.0, noise=1.0, aggregation=0.0, staleness=0.0, window=0.0),
+        weights=UtilityWeights(objective_mode="EXPECTED_RELEASE_L1", data=1.0, staleness=0.0, window=0.0),
         public_prior=prior,
     )
 
@@ -128,7 +128,7 @@ def run_error_decomposition_experiment(
             theory_eval = estimator.evaluate_candidate("interaction_volume", cand, population_size=n)
             pred_norm_clip = float(theory_eval.norm_clipping_loss)
             pred_norm_noise = float(theory_eval.norm_noise_loss)
-            pred_norm_total = float(pred_norm_clip + pred_norm_noise)
+            pred_norm_total = float(theory_eval.norm_data_loss)
 
             pred_totals.append(pred_norm_total)
             obs_totals.append(emp_norm_total)
@@ -159,18 +159,26 @@ def run_error_decomposition_experiment(
     # Compute overall calibration error across all conditions
     bias = float(np.mean(np.array(pred_totals) - np.array(obs_totals)))
     mae = float(np.mean(np.abs(np.array(pred_totals) - np.array(obs_totals))))
-    rel_calib = float(np.mean(np.abs(np.array(pred_totals) - np.array(obs_totals)) / np.maximum(1e-4, np.array(obs_totals))))
+    global_relative_mae = float(np.sum(np.abs(np.array(pred_totals) - np.array(obs_totals))) / np.sum(np.array(obs_totals)))
+    condition_rel_errors = np.abs(np.array(pred_totals) - np.array(obs_totals)) / np.maximum(1e-4, np.array(obs_totals))
+    mean_condition_rel_error = float(np.mean(condition_rel_errors))
+    worst_condition_rel_error = float(np.max(condition_rel_errors))
     spearman_corr, _ = spearmanr(pred_totals, obs_totals)
 
     results_df["Spearman"] = round(float(spearman_corr), 4)
+    results_df["global_relative_MAE"] = round(global_relative_mae, 4)
+    results_df["mean_condition_relative_error"] = round(mean_condition_rel_error, 4)
+    results_df["worst_condition_relative_error"] = round(worst_condition_rel_error, 4)
     save_summary_table(results_df, str(tables_dir / "exp09_small_n_error_decomposition.csv"))
 
     print("\n=======================================================")
     print(f"[CALIBRATION SUMMARY]")
-    print(f"  Absolute Calibration MAE:    {mae:.4f}")
-    print(f"  Relative Calibration Error:  {rel_calib * 100:.2f}%")
-    print(f"  Calibration Bias:            {bias:+.4f}")
-    print(f"  Spearman Rank Correlation:   {spearman_corr:.4f}")
+    print(f"  Absolute Calibration MAE:          {mae:.4f}")
+    print(f"  Global Relative MAE:               {global_relative_mae * 100:.2f}%")
+    print(f"  Mean Condition Relative Error:     {mean_condition_rel_error * 100:.2f}%")
+    print(f"  Worst Condition Relative Error:    {worst_condition_rel_error * 100:.2f}%")
+    print(f"  Calibration Bias:                  {bias:+.4f}")
+    print(f"  Spearman Rank Correlation:         {spearman_corr:.4f}")
     print("=======================================================")
 
     # Plot tradeoff for N=1000

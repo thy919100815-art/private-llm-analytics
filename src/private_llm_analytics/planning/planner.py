@@ -84,8 +84,12 @@ def compute_planner_config_fingerprint(config: Union[AppConfig, PlannerConfig, A
             "std": float(prior.std),
             "lower": float(prior.lower),
             "upper": float(prior.upper),
+            "public_seed": int(prior.public_seed),
+            "num_reference_users": int(prior.num_reference_users),
         },
         "weights": {
+            "objective_mode": weights.objective_mode,
+            "data": float(weights.data),
             "clipping": float(weights.clipping),
             "noise": float(weights.noise),
             "aggregation": float(weights.aggregation),
@@ -196,28 +200,28 @@ class SmallNReleasePlanner:
             self.utility_estimator = utility_estimator
         else:
             prior_cfg = self.planner_config.prior
-            if prior_cfg.distribution in ("contribution_model", "truncated_normal"):
+            dist_name = prior_cfg.distribution.lower().strip()
+            if dist_name in ("contribution_model", "truncated_normal", "lognormal"):
                 prior: PublicPriorDistribution = PublicContributionPrior(
                     mean=prior_cfg.mean,
                     std=prior_cfg.std,
                     min_val=prior_cfg.lower,
                     max_val=prior_cfg.upper,
+                    distribution="lognormal" if dist_name == "lognormal" else "truncated_normal",
+                    mean_scaling=self.planner_config.window_model.mean_scaling,
+                    std_scaling=self.planner_config.window_model.std_scaling,
                     reference_days=self.planner_config.window_model.reference_days,
                     window_days=self.planner_config.window_model.reference_days,
-                    provider_shares=self.planner_config.workloads.provider_shares,
-                    task_shares=self.planner_config.workloads.task_shares,
-                )
-            elif prior_cfg.distribution == "lognormal":
-                prior = LogNormalPrior(
-                    mean=prior_cfg.mean,
-                    std=prior_cfg.std,
-                    max_cutoff=prior_cfg.upper,
+                    public_seed=prior_cfg.public_seed,
+                    num_reference_users=prior_cfg.num_reference_users,
                 )
             else:
                 raise ValueError(f"Unsupported prior distribution '{prior_cfg.distribution}'")
 
             w_cfg = self.planner_config.weights
             weights = UtilityWeights(
+                objective_mode=w_cfg.objective_mode,
+                data=w_cfg.data,
                 clipping=w_cfg.clipping,
                 noise=w_cfg.noise,
                 aggregation=w_cfg.aggregation,
@@ -243,6 +247,11 @@ class SmallNReleasePlanner:
             )
 
         self._plan_cache: Dict[str, ReleasePlanResult] = {}
+
+    @property
+    def config_fingerprint(self) -> str:
+        """Deterministic fingerprint of planner configuration."""
+        return compute_planner_config_fingerprint(self.app_config)
 
     def plan(
         self,

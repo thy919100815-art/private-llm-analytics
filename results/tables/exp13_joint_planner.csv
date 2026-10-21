@@ -1,7 +1,7 @@
-population_n,epsilon_cap,status,planner_candidate,oracle_candidate,oracle_true_utility,planner_true_utility,planner_rel_regret,minimum_projected_epsilon,feasible_candidate_count,base_a_feasible,base_b_feasible,oracle_stderr,oracle_ci_95,planner_stderr,planner_ci_95,planner_abs_regret
-500,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,2.2657,0,False,False,,,,,
-500,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C20_Gfull_9_cell_W30_F14,0.1841,0.3644,0.9796,,200,False,True,0.0011,"[0.1820, 0.1862]",0.0042,"[0.3562, 0.3727]",0.1803
-1000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,2.2657,0,False,False,,,,,
-1000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C20_Gfull_9_cell_W30_F14,0.1561,0.2409,0.5436,,200,False,True,0.0005,"[0.1550, 0.1571]",0.0021,"[0.2368, 0.2450]",0.0848
-5000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,2.2657,0,False,False,,,,,
-5000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C40_Gfull_9_cell_W30_F14,0.1291,0.1415,0.0963,,200,False,True,0.0002,"[0.1287, 0.1295]",0.0004,"[0.1407, 0.1424]",0.0124
+population_n,epsilon_cap,status,planner_candidate,oracle_candidate,oracle_true_utility,planner_true_utility,planner_rel_regret,empirical_mean_user_volume,public_expected_mean_user_volume,relative_volume_model_error,minimum_projected_epsilon,feasible_candidate_count,base_a_feasible,base_b_feasible,oracle_stderr,oracle_ci_95,planner_stderr,planner_ci_95,planner_abs_regret
+500,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,,,,2.2657,0,False,False,,,,,
+500,4.0,SUCCESS,C40_Gfull_9_cell_W30_F14,C40_Gfull_9_cell_W30_F14,0.1821,0.1821,0.0,60.17,60.3035,0.0022,,200,False,True,0.0007,"[0.1807, 0.1835]",0.0007,"[0.1807, 0.1835]",0.0
+1000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,,,,2.2657,0,False,False,,,,,
+1000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C80_Gfull_9_cell_W30_F14,0.1582,0.1582,0.0,59.954,60.3035,0.0058,,200,False,True,0.0007,"[0.1568, 0.1595]",0.0007,"[0.1568, 0.1595]",0.0
+5000,2.0,NO_FEASIBLE_POLICY,NULL,NULL,,,,,,,2.2657,0,False,False,,,,,
+5000,4.0,SUCCESS,C80_Gfull_9_cell_W30_F14,C80_Gfull_9_cell_W30_F14,0.125,0.125,0.0,59.751,60.3035,0.0092,,200,False,True,0.0001,"[0.1247, 0.1253]",0.0001,"[0.1247, 0.1253]",0.0

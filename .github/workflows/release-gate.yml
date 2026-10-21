@@ -106,6 +106,10 @@ jobs:
         run: |
           python experiments/exp14_prior_misspecification.py
 
+      - name: Generate Key Results Summary JSON
+        run: |
+          python experiments/generate_key_results_summary.py
+
       - name: Generate Experiment Manifest
         run: |
           python -c "

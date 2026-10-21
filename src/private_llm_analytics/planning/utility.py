@@ -10,10 +10,11 @@ Provides model-based, data-independent estimation of:
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import hashlib
 import math
 from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
-from scipy import integrate
+from scipy import integrate, special
 from scipy.stats import norm, lognorm
 
 from private_llm_analytics.mechanisms.gaussian import calibrate_analytic_gaussian
@@ -43,30 +44,31 @@ DEFAULT_GRANULARITY_PENALTIES: Dict[str, float] = {
 class UtilityWeights:
     """Non-negative weights for multi-objective normalized utility loss formulation."""
 
+    objective_mode: str = "EXPECTED_RELEASE_L1"
+    data: float = 1.0
+    staleness: float = 0.5
+    window: float = 0.2
     clipping: float = 1.0
     noise: float = 1.0
     aggregation: float = 1.0
-    staleness: float = 0.5
-    window: float = 0.2
 
     def __post_init__(self):
         for name, val in [
+            ("data", self.data),
+            ("staleness", self.staleness),
+            ("window", self.window),
             ("clipping", self.clipping),
             ("noise", self.noise),
             ("aggregation", self.aggregation),
-            ("staleness", self.staleness),
-            ("window", self.window),
         ]:
             if val < 0:
                 raise ValueError(f"Utility weight '{name}' must be >= 0, got {val}")
-        if (
-            self.clipping == 0
-            and self.noise == 0
-            and self.aggregation == 0
-            and self.staleness == 0
-            and self.window == 0
-        ):
-            raise ValueError("At least one utility weight must be strictly positive.")
+        if self.objective_mode == "EXPECTED_RELEASE_L1":
+            total = self.data + self.staleness + self.window
+        else:
+            total = self.clipping + self.noise + self.aggregation + self.staleness + self.window
+        if total <= 0:
+            raise ValueError("At least one active utility weight must be strictly positive.")
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,7 @@ class UtilityComponents:
     staleness_error: float
     window_error: float
     total_error: float
+    data_error: float = 0.0
 
     # Normalized dimensionless losses in [0, inf)
     norm_clipping_loss: float = 0.0
@@ -91,6 +94,7 @@ class UtilityComponents:
     norm_aggregation_loss: float = 0.0
     norm_staleness_loss: float = 0.0
     norm_window_loss: float = 0.0
+    norm_data_loss: float = 0.0
 
     def to_dict(self) -> Dict[str, float]:
         return {
@@ -100,11 +104,13 @@ class UtilityComponents:
             "staleness": self.staleness_error,
             "window": self.window_error,
             "total": self.total_error,
+            "data": self.data_error,
             "norm_clipping": self.norm_clipping_loss,
             "norm_noise": self.norm_noise_loss,
             "norm_aggregation": self.norm_aggregation_loss,
             "norm_staleness": self.norm_staleness_loss,
             "norm_window": self.norm_window_loss,
+            "norm_data": self.norm_data_loss,
         }
 
 
@@ -118,6 +124,16 @@ class PublicPriorDistribution(ABC):
     def expected_excess(self, threshold: float) -> float:
         """Compute E[(R - C)_+] under the prior distribution."""
         pass
+
+    def expected_folded_normal_release_l1(
+        self,
+        metric: str,
+        candidate: ReleasePolicyCandidate,
+        population_size: int,
+        granularity: str = "full_9_cell",
+        window_days: Optional[int] = None,
+    ) -> Tuple[float, float]:
+        return 0.0, 0.0
 
     @abstractmethod
     def to_dict(self) -> Dict[str, Any]:
@@ -215,13 +231,15 @@ class PublicContributionPrior(PublicPriorDistribution):
     """Public generative contribution prior modeling target-space user norm distributions.
 
     Models the joint 9-cell interaction vector m_u under public reference parameters:
-      - Total interactions T ~ TruncatedNormal(mean, std, min_val, max_val)
+      - Total interactions T ~ TruncatedNormal(mean, std, min_val, max_val) (or LogNormal)
       - Category distribution: provider preferences conditional on tasks (via sample_user_profiles)
+        with cell shape control modulated by provider_shares and task_shares
       - Target-space linear aggregation A_G:
           R_G = ||A_G m_u||_2
       - User total count T = ||A_G m_u||_1
       - Expected target-space clipping excess:
           E[ T * max(0, 1 - C / R_G) ]
+      - Expected end-to-end L1 release error via exact folded-normal closed form on 9-cell workload
 
     Evaluated via deterministic public Monte Carlo with a fixed public seed (default 900001).
     Strictly isolated from private runtime data.
@@ -234,6 +252,8 @@ class PublicContributionPrior(PublicPriorDistribution):
         min_val: float = 5.0,
         max_val: float = 150.0,
         distribution: str = "truncated_normal",
+        mean_scaling: str = "linear",
+        std_scaling: str = "sqrt_time",
         reference_days: int = 30,
         window_days: int = 30,
         providers: Optional[List[str]] = None,
@@ -255,42 +275,79 @@ class PublicContributionPrior(PublicPriorDistribution):
         self.min_val = float(min_val)
         self.max_val = float(max_val)
         self.distribution = str(distribution).lower().strip()
+        self.mean_scaling = str(mean_scaling).lower().strip()
+        self.std_scaling = str(std_scaling).lower().strip()
         self.reference_days = int(reference_days)
         self.window_days = int(window_days)
         self.providers = list(providers or ["provider_a", "provider_b", "provider_c"])
         self.tasks = list(tasks or ["technical", "document", "analysis"])
-        self.provider_shares = dict(provider_shares or {"provider_a": 0.5, "provider_b": 0.3, "provider_c": 0.2})
-        self.task_shares = dict(task_shares or {"technical": 0.4, "document": 0.35, "analysis": 0.25})
+        self.provider_shares = dict(provider_shares) if provider_shares is not None else {p: 1.0 / len(self.providers) for p in self.providers}
+        self.task_shares = dict(task_shares) if task_shares is not None else {t: 1.0 / len(self.tasks) for t in self.tasks}
         self.public_seed = int(public_seed)
         self.num_reference_users = int(num_reference_users)
 
         self._generate_reference_sample()
 
     def _generate_reference_sample(self):
-        rng = np.random.default_rng(self.public_seed)
+        # 1. Compute window scaling factors
+        rho = float(self.window_days) / float(self.reference_days)
+        if self.mean_scaling == "sublinear":
+            mu_scale = rho ** 0.75
+        else:
+            mu_scale = rho
+
+        if self.std_scaling == "linear":
+            std_scale = rho
+        else:
+            std_scale = math.sqrt(rho)
+
+        scaled_mean = self.mean * mu_scale
+        scaled_std = self.std * std_scale
+        scaled_min = max(1.0, self.min_val * mu_scale)
+        scaled_max = max(scaled_min + 1.0, self.max_val * mu_scale)
+
+        # 2. Derive deterministic window-specific public seed
+        shape_repr = f"{sorted(self.provider_shares.items())}_{sorted(self.task_shares.items())}"
+        seed_raw = f"{self.public_seed}_{self.window_days}_{self.mean}_{self.std}_{self.min_val}_{self.max_val}_{self.distribution}_{self.mean_scaling}_{self.std_scaling}_{shape_repr}"
+        seed_int = int(hashlib.sha256(seed_raw.encode("utf-8")).hexdigest()[:8], 16)
+        rng = np.random.default_rng(seed_int)
+
+        # 3. Sample window-specific user interaction counts
         if self.distribution == "lognormal":
-            var = self.std**2
-            sigma_ln = math.sqrt(math.log(1.0 + var / (self.mean**2)))
-            mu_ln = math.log(self.mean) - 0.5 * (sigma_ln**2)
+            var = scaled_std ** 2
+            sigma_ln = math.sqrt(math.log(1.0 + var / (scaled_mean ** 2)))
+            mu_ln = math.log(scaled_mean) - 0.5 * (sigma_ln ** 2)
             raw = rng.lognormal(mean=mu_ln, sigma=sigma_ln, size=self.num_reference_users)
         else:
-            a = (self.min_val - self.mean) / self.std
-            b = (self.max_val - self.mean) / self.std
+            a = (scaled_min - scaled_mean) / scaled_std
+            b = (scaled_max - scaled_mean) / scaled_std
             from scipy.stats import truncnorm
-            raw = truncnorm.rvs(a, b, loc=self.mean, scale=self.std, size=self.num_reference_users, random_state=rng)
-        counts = np.clip(np.rint(raw).astype(np.int64), int(self.min_val), int(self.max_val))
+            raw = truncnorm.rvs(a, b, loc=scaled_mean, scale=scaled_std, size=self.num_reference_users, random_state=rng)
 
+        counts = np.clip(np.rint(raw).astype(np.int64), int(scaled_min), int(scaled_max))
+
+        # 4. Sample profiles and apply provider_shares / task_shares shape control (Section I)
         from private_llm_analytics.simulator.users import sample_user_profiles
         _, joint_probs = sample_user_profiles(self.num_reference_users, counts, self.providers, self.tasks, rng)
+
+        cell_weights = np.array([
+            self.provider_shares.get(p, 1.0 / len(self.providers)) * self.task_shares.get(t, 1.0 / len(self.tasks))
+            for p in self.providers
+            for t in self.tasks
+        ], dtype=np.float64)
+        cell_weights = cell_weights / np.sum(cell_weights)
+        joint_probs = joint_probs * cell_weights
+        joint_probs = joint_probs / np.sum(joint_probs, axis=1, keepdims=True)
+
+        # 5. Direct window counts matrix (NO simple scalar matrix multiplication!)
         base_mat = np.zeros((self.num_reference_users, 9), dtype=np.float64)
         for u in range(self.num_reference_users):
             base_mat[u] = rng.multinomial(counts[u], joint_probs[u])
 
-        # Scale by window ratio
-        win_scale = float(self.window_days) / float(self.reference_days)
-        self.ref_matrix = base_mat * win_scale
+        self.ref_matrix = base_mat
         self.ref_totals = np.sum(self.ref_matrix, axis=1)
         self.expected_user_volume = float(np.mean(self.ref_totals))
+        self.expected_raw_vector = np.mean(self.ref_matrix, axis=0)
 
         # Precompute target-space norms for each granularity
         self._norms: Dict[str, np.ndarray] = {}
@@ -312,8 +369,9 @@ class PublicContributionPrior(PublicPriorDistribution):
         # 4. overall_1_cell
         self._norms["overall_1_cell"] = self.ref_totals.copy()
 
-        # Cache for expected excess
+        # Cache for expected excess and folded normal
         self._excess_cache: Dict[Tuple[float, str], float] = {}
+        self._folded_normal_cache: Dict[Tuple[float, str, int, float, float], Tuple[float, float]] = {}
 
     def expected_excess(
         self,
@@ -351,14 +409,132 @@ class PublicContributionPrior(PublicPriorDistribution):
         denom = max(1.0, self.expected_user_volume)
         return float(excess / denom)
 
+    def expected_folded_normal_release_l1(
+        self,
+        metric: str,
+        candidate: ReleasePolicyCandidate,
+        population_size: int,
+        granularity: str = "full_9_cell",
+        window_days: Optional[int] = None,
+    ) -> Tuple[float, float]:
+        """Compute public-model expected end-to-end L1 release error via folded-normal closed form."""
+        if window_days is not None and window_days != self.window_days:
+            scaled = self.with_window(window_days)
+            return scaled.expected_folded_normal_release_l1(
+                metric=metric,
+                candidate=candidate,
+                population_size=population_size,
+                granularity=granularity,
+            )
+
+        n_pop = max(1, population_size)
+        c = float(candidate.contribution_bound) if candidate.contribution_bound is not None else 20.0
+        g = granularity or candidate.granularity or "full_9_cell"
+        eps = float(candidate.epsilon_per_release)
+        delta = float(candidate.delta_per_release)
+        cache_key = (c, g, n_pop, eps, delta)
+        if cache_key in self._folded_normal_cache:
+            return self._folded_normal_cache[cache_key]
+
+        # 1. Target sensitivity and noise std
+        sens = get_direct_granularity_sensitivity(metric, g, c)
+        if candidate.mechanism == "gaussian":
+            sigma = calibrate_analytic_gaussian(eps, delta, sens)
+        elif candidate.mechanism == "laplace":
+            sigma = sens / eps
+        else:
+            raise ValueError(f"Unsupported mechanism '{candidate.mechanism}'")
+
+        # 2. Reconstructed clipped vectors and reconstruction operator row norms
+        norms = self._norms.get(g, self._norms["full_9_cell"])
+        clip_scale = np.minimum(1.0, c / np.maximum(norms, 1e-9))
+
+        if g == "full_9_cell":
+            recon_mat = self.ref_matrix * clip_scale[:, np.newaxis]
+            row_norms = np.ones(9, dtype=np.float64)
+
+        elif g == "provider_3_cell":
+            prov_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
+            for p in range(3):
+                prov_mat[:, p] = np.sum(self.ref_matrix[:, p * 3 : (p + 1) * 3], axis=1)
+            clipped_prov = prov_mat * clip_scale[:, np.newaxis]
+
+            t_shares = np.array([self.task_shares.get(t, 1.0 / 3.0) for t in self.tasks], dtype=np.float64)
+            t_shares = t_shares / np.sum(t_shares)
+            recon_mat = np.zeros((self.num_reference_users, 9), dtype=np.float64)
+            row_norms = np.zeros(9, dtype=np.float64)
+            for p in range(3):
+                for t in range(3):
+                    j = p * 3 + t
+                    recon_mat[:, j] = clipped_prov[:, p] * t_shares[t]
+                    row_norms[j] = t_shares[t]
+
+        elif g == "task_3_cell":
+            task_mat = np.zeros((self.num_reference_users, 3), dtype=np.float64)
+            for t in range(3):
+                task_mat[:, t] = np.sum(self.ref_matrix[:, t::3], axis=1)
+            clipped_task = task_mat * clip_scale[:, np.newaxis]
+
+            p_shares = np.array([self.provider_shares.get(p, 1.0 / 3.0) for p in self.providers], dtype=np.float64)
+            p_shares = p_shares / np.sum(p_shares)
+            recon_mat = np.zeros((self.num_reference_users, 9), dtype=np.float64)
+            row_norms = np.zeros(9, dtype=np.float64)
+            for p in range(3):
+                for t in range(3):
+                    j = p * 3 + t
+                    recon_mat[:, j] = clipped_task[:, t] * p_shares[p]
+                    row_norms[j] = p_shares[p]
+
+        elif g == "overall_1_cell":
+            clipped_tot = self.ref_totals * clip_scale
+            cell_w = np.array([
+                self.provider_shares.get(p, 1.0 / 3.0) * self.task_shares.get(t, 1.0 / 3.0)
+                for p in self.providers
+                for t in self.tasks
+            ], dtype=np.float64)
+            cell_w = cell_w / np.sum(cell_w)
+            recon_mat = clipped_tot[:, np.newaxis] * cell_w[np.newaxis, :]
+            row_norms = cell_w
+
+        else:
+            raise ValueError(f"Unsupported granularity '{g}'")
+
+        # 3. Population bias vector: b_j = N * (E[recon]_j - E[raw]_j)
+        e_recon = np.mean(recon_mat, axis=0)
+        b = float(n_pop) * (e_recon - self.expected_raw_vector)
+
+        # 4. Folded normal expectation per cell
+        total_data_error = 0.0
+        for j in range(9):
+            bj = float(abs(b[j]))
+            sig_j = float(sigma * row_norms[j])
+            if sig_j <= 1e-12:
+                e_abs = bj
+            else:
+                z = bj / (math.sqrt(2.0) * sig_j)
+                e_abs = sig_j * math.sqrt(2.0 / math.pi) * math.exp(-(bj**2) / (2.0 * sig_j**2)) + bj * float(special.erf(z))
+            total_data_error += e_abs
+
+        # 5. Normalized loss
+        expected_pop_vol = max(1.0, float(n_pop * self.expected_user_volume))
+        norm_data_loss = float(total_data_error / expected_pop_vol)
+
+        res = (float(total_data_error), float(norm_data_loss))
+        self._folded_normal_cache[cache_key] = res
+        return res
+
     def with_window(self, window_days: int, reference_days: Optional[int] = None) -> "PublicContributionPrior":
         ref_days = reference_days if reference_days is not None else self.reference_days
+        if window_days == self.window_days and ref_days == self.reference_days:
+            return self
         return PublicContributionPrior(
             mean=self.mean,
             std=self.std,
             min_val=self.min_val,
             max_val=self.max_val,
             distribution=self.distribution,
+            mean_scaling=self.mean_scaling,
+            std_scaling=self.std_scaling,
             reference_days=ref_days,
             window_days=window_days,
             providers=self.providers,
@@ -377,6 +553,8 @@ class PublicContributionPrior(PublicPriorDistribution):
             "std": self.std,
             "min_val": self.min_val,
             "max_val": self.max_val,
+            "mean_scaling": self.mean_scaling,
+            "std_scaling": self.std_scaling,
             "reference_days": self.reference_days,
             "window_days": self.window_days,
             "public_seed": self.public_seed,
@@ -695,14 +873,33 @@ class UtilityEstimator:
         )
         raw_win = float(abs(w_days - self.reference_days))
 
+        # 6. End-to-end data error via folded-normal expectation
+        data_error = 0.0
+        norm_data_loss = 0.0
+        if hasattr(window_prior, "expected_folded_normal_release_l1"):
+            data_error, norm_data_loss = window_prior.expected_folded_normal_release_l1(
+                metric=metric,
+                candidate=candidate,
+                population_size=n_pop,
+                granularity=candidate.granularity,
+                window_days=w_days,
+            )
+
         # Unified Dimensionless Objective
-        total_loss = (
-            self.weights.clipping * norm_clip
-            + self.weights.noise * norm_noise
-            + self.weights.aggregation * norm_agg
-            + self.weights.staleness * norm_stale
-            + self.weights.window * norm_win
-        )
+        if self.weights.objective_mode == "EXPECTED_RELEASE_L1" and (norm_data_loss > 0.0 or data_error > 0.0 or (norm_clip == 0.0 and norm_noise == 0.0)):
+            total_loss = (
+                self.weights.data * norm_data_loss
+                + self.weights.staleness * norm_stale
+                + self.weights.window * norm_win
+            )
+        else:
+            total_loss = (
+                self.weights.clipping * norm_clip
+                + self.weights.noise * norm_noise
+                + self.weights.aggregation * norm_agg
+                + self.weights.staleness * norm_stale
+                + self.weights.window * norm_win
+            )
 
         return UtilityComponents(
             clipping_error=raw_clip,
@@ -711,9 +908,11 @@ class UtilityEstimator:
             staleness_error=raw_stale,
             window_error=raw_win,
             total_error=total_loss,
+            data_error=data_error,
             norm_clipping_loss=norm_clip,
             norm_noise_loss=norm_noise,
             norm_aggregation_loss=norm_agg,
             norm_staleness_loss=norm_stale,
             norm_window_loss=norm_win,
+            norm_data_loss=norm_data_loss,
         )

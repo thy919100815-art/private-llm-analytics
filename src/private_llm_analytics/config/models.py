@@ -126,6 +126,8 @@ class PublicPriorConfig(BaseModel):
 
 
 class UtilityWeightsConfig(BaseModel):
+    objective_mode: Literal["EXPECTED_RELEASE_L1", "COMPONENT_SURROGATE"] = "EXPECTED_RELEASE_L1"
+    data: float = Field(default=1.0, ge=0)
     clipping: float = Field(default=1.0, ge=0)
     noise: float = Field(default=1.0, ge=0)
     aggregation: float = Field(default=1.0, ge=0)
@@ -134,8 +136,17 @@ class UtilityWeightsConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_non_zero_sum(self) -> "UtilityWeightsConfig":
-        total = self.clipping + self.noise + self.aggregation + self.staleness + self.window
-        if total <= 0:
+        if self.objective_mode == "EXPECTED_RELEASE_L1":
+            total = self.data + self.staleness + self.window
+        else:
+            total = self.clipping + self.noise + self.aggregation + self.staleness + self.window
+        if (
+            self.clipping == 0
+            and self.noise == 0
+            and self.aggregation == 0
+            and self.staleness == 0
+            and self.window == 0
+        ) or total <= 0:
             raise ValueError("Sum of utility weights must be strictly positive.")
         return self
 

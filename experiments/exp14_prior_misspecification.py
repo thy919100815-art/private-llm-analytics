@@ -161,6 +161,10 @@ def run_prior_misspecification_experiment(
         t_max = regime_spec["freq_max"]
         candidate_c_values = regime_spec["candidate_c"]
         app_config.privacy.planner.candidate_clipping = candidate_c_values
+        app_config.privacy.planner.candidate_granularities = ["full_9_cell"]
+        app_config.privacy.planner.candidate_windows = [30]
+        app_config.privacy.planner.candidate_frequencies = [30]
+        app_config.privacy.planner.planning_horizon_days = 30
 
         print(f"\n--- Ground Truth Regime: {regime_name.upper()} (mu={t_mean}, sigma={t_std}) ---")
 
@@ -215,7 +219,12 @@ def run_prior_misspecification_experiment(
                 num_reference_users=2000,
             )
 
-            weights = UtilityWeights(clipping=1.0, noise=1.0, aggregation=0.0, staleness=0.0)
+            weights = UtilityWeights(
+                objective_mode="EXPECTED_RELEASE_L1",
+                data=1.0,
+                staleness=0.0,
+                window=0.0,
+            )
             estimator = UtilityEstimator(weights=weights, public_prior=prior)
             planner = SmallNReleasePlanner(app_config=app_config, utility_estimator=estimator)
 
@@ -230,6 +239,13 @@ def run_prior_misspecification_experiment(
             abs_reg, rel_reg = compute_regret(actual_err, oracle_err)
             fixed_rel_reg = (fixed_mid_err - oracle_err) / max(1e-9, oracle_err)
 
+            if selected_c >= max(candidate_c_values):
+                decision_saturation = "PLANNER_DECISION_SATURATED_AT_UPPER_BOUND"
+            elif selected_c <= min(candidate_c_values):
+                decision_saturation = "PLANNER_DECISION_SATURATED_AT_LOWER_BOUND"
+            else:
+                decision_saturation = "NONE"
+
             rec = {
                 "truth_regime": regime_name,
                 "truth_mean": t_mean,
@@ -243,6 +259,7 @@ def run_prior_misspecification_experiment(
                 "oracle_error": round(oracle_err, 2),
                 "selected_c": selected_c,
                 "planner_selected_c": selected_c,
+                "decision_saturation": decision_saturation,
                 "actual_empirical_error": round(actual_err, 2),
                 "relative_regret": round(rel_reg, 4),
                 "planner_regret": round(rel_reg, 4),

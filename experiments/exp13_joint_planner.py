@@ -36,6 +36,40 @@ from private_llm_analytics.simulator.generator import SyntheticDataGenerator
 from private_llm_analytics.simulator.scenario import SimulationScenario
 
 
+def generate_rate_consistent_temporal_truth(
+    n_users: int,
+    horizon_days: int,
+    reference_days: int = 30,
+    reference_mean: float = 60.0,
+    reference_std: float = 20.0,
+    seed: int = 42,
+) -> pd.DataFrame:
+    """Generate longitudinal synthetic interaction log with rate consistency relative to reference window.
+
+    Scales parameters so that slicing any window of size W yields expected per-user volume
+    consistent with daily arrival rate lambda = reference_mean / reference_days.
+    """
+    rho = float(horizon_days) / float(reference_days)
+    scaled_mean = reference_mean * rho
+    scaled_std = reference_std * np.sqrt(rho)
+    scaled_min = max(1, int(5 * rho))
+    scaled_max = int(150 * rho)
+
+    scenario = SimulationScenario(
+        n_users=n_users,
+        n_days=horizon_days,
+        freq_mean=scaled_mean,
+        freq_std=scaled_std,
+        freq_min=scaled_min,
+        freq_max=scaled_max,
+        random_seed=seed,
+    )
+    generator = SyntheticDataGenerator(scenario)
+    df = generator.generate(seed=seed)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    return df
+
+
 def compute_true_candidate_utility(
     candidate: ReleasePolicyCandidate,
     umatrix: Any,
@@ -136,11 +170,15 @@ def run_joint_planner_experiment(
         print(f"\n--- Population N = {n} ---")
         app_config.scenario.population.n_users = n
 
-        # Generate 90-day timestamped synthetic dataset
-        scenario_90 = SimulationScenario(n_users=n, n_days=horizon_days, random_seed=seed)
-        gen_90 = SyntheticDataGenerator(scenario_90)
-        df_90 = gen_90.generate(seed=seed)
-        df_90["timestamp"] = pd.to_datetime(df_90["timestamp"])
+        # Generate rate-consistent 90-day timestamped synthetic dataset
+        df_90 = generate_rate_consistent_temporal_truth(
+            n_users=n,
+            horizon_days=horizon_days,
+            reference_days=ref_days,
+            reference_mean=60.0,
+            reference_std=20.0,
+            seed=seed,
+        )
         t_end = df_90["timestamp"].max()
 
         # Build window-specific user matrices for W in {7, 14, 30, 60, 90}
@@ -182,6 +220,9 @@ def run_joint_planner_experiment(
                     "oracle_true_utility": None,
                     "planner_true_utility": None,
                     "planner_rel_regret": None,
+                    "empirical_mean_user_volume": None,
+                    "public_expected_mean_user_volume": None,
+                    "relative_volume_model_error": None,
                     "minimum_projected_epsilon": round(min_projected, 4),
                     "feasible_candidate_count": 0,
                     "base_a_feasible": False,
@@ -239,6 +280,14 @@ def run_joint_planner_experiment(
             base_a_feas = bool(base_a_rec.get("feasible", False))
             base_b_feas = bool(base_b_rec.get("feasible", False))
 
+            # Volume model consistency
+            cand_w = planner_cand.window_days
+            df_w_sel = df_90[(df_90["timestamp"] > (t_end - pd.Timedelta(days=cand_w))) & (df_90["timestamp"] <= t_end)]
+            emp_mean_vol = float(len(df_w_sel)) / float(n)
+            scaled_prior = planner.utility_estimator.public_prior.with_window(cand_w)
+            pub_exp_vol = float(scaled_prior.expected_user_volume)
+            rel_vol_err = float(abs(emp_mean_vol - pub_exp_vol) / max(1e-9, emp_mean_vol))
+
             rec = {
                 "population_n": n,
                 "epsilon_cap": cap,
@@ -253,6 +302,9 @@ def run_joint_planner_experiment(
                 "planner_ci_95": f"[{planner_ci[0]:.4f}, {planner_ci[1]:.4f}]",
                 "planner_abs_regret": round(abs_reg, 4),
                 "planner_rel_regret": round(rel_reg, 4),
+                "empirical_mean_user_volume": round(emp_mean_vol, 4),
+                "public_expected_mean_user_volume": round(pub_exp_vol, 4),
+                "relative_volume_model_error": round(rel_vol_err, 4),
                 "feasible_candidate_count": len(feasible_candidates),
                 "base_a_feasible": base_a_feas,
                 "base_b_feasible": base_b_feas,

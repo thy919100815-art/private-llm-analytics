@@ -51,6 +51,10 @@ def run_clipping_planner_experiment(
 
     app_config = load_app_config("configs")
     app_config.privacy.planner.candidate_clipping = list(c_candidates)
+    app_config.privacy.planner.candidate_granularities = ["full_9_cell"]
+    app_config.privacy.planner.candidate_windows = [30]
+    app_config.privacy.planner.candidate_frequencies = [30]
+    app_config.privacy.planner.planning_horizon_days = 30
     planner = SmallNReleasePlanner(app_config=app_config)
 
     records: List[Dict] = []
@@ -91,7 +95,10 @@ def run_clipping_planner_experiment(
             recipient="recipient_internal",
             force_recompute=True,
         )
-        selected_c = plan_res.policy.contribution_bound if plan_res.policy else 20.0
+        assert plan_res.policy is not None, "Policy candidate must be planned"
+        assert plan_res.policy.granularity == "full_9_cell", f"Expected full_9_cell, got {plan_res.policy.granularity}"
+        assert plan_res.policy.window_days == 30, f"Expected window_days 30, got {plan_res.policy.window_days}"
+        selected_c = plan_res.policy.contribution_bound
         # If selected_c not directly in empirical_errors, run evaluation
         if selected_c in empirical_errors:
             planner_err = empirical_errors[selected_c]

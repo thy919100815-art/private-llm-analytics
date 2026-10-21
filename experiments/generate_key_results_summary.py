@@ -40,12 +40,19 @@ def generate_key_results_json(
             bias = float(np.mean(pred - emp))
             mae = float(np.mean(np.abs(pred - emp)))
             rel_err = float(mae / max(1e-9, np.mean(emp)))
+            global_rel_mae = float(np.sum(np.abs(pred - emp)) / max(1e-9, np.sum(emp)))
+            condition_rel = np.abs(pred - emp) / np.maximum(1e-4, emp)
+            mean_condition_rel = float(np.mean(condition_rel))
+            worst_condition_rel = float(np.max(condition_rel))
             rho, pval = spearmanr(pred, emp)
             summary["calibration_metrics"] = {
                 "metric_definition": "normalized_total_l1_loss",
                 "calibration_bias": round(bias, 6),
                 "calibration_MAE": round(mae, 6),
                 "relative_calibration_error": round(rel_err, 6),
+                "global_relative_MAE": round(global_rel_mae, 6),
+                "mean_condition_relative_error": round(mean_condition_rel, 6),
+                "worst_condition_relative_error": round(worst_condition_rel, 6),
                 "spearman_rho": round(float(rho), 4),
                 "p_value": float(pval),
                 "sample_count": len(df09),
