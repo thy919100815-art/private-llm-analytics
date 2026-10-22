@@ -25,10 +25,23 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
+    "httpx>=0.24.0",
+]
+web = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.20.0",
+    "python-multipart>=0.0.9",
 ]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+private_llm_analytics = [
+    "web/templates/*.html",
+    "web/static/*.css",
+    "web/static/*.js",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
