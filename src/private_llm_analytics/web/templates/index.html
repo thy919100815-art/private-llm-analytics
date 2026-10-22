@@ -36,6 +36,7 @@
           <span id="dataset-status-badge" class="badge badge-warning">Checking...</span>
         </div>
         <p id="dataset-info" class="card-subtitle">Connecting to local service...</p>
+        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">Dataset Status contains trusted local administrative metadata and is NOT an external DP release.</p>
         <div class="btn-group">
           <button id="btn-load-demo" class="btn btn-secondary">Load Demo Data</button>
           <button id="btn-upload" class="btn btn-secondary">Upload CSV / Parquet</button>
@@ -125,25 +126,24 @@
         </div>
       </div>
 
-      <!-- Granularity and Filters -->
-      <div class="grid-two-col">
-        <div class="form-group">
-          <label class="form-label">Display Granularity</label>
-          <select id="select-granularity" class="form-select"></select>
+      <!-- Display Filters -->
+      <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <span class="card-title" style="font-size: 13px;">Display Filters</span>
+        <p class="card-subtitle" style="margin-bottom: 8px;">Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend.</p>
+        <div class="grid-two-col">
+          <div class="form-group">
+            <label class="form-label">Display providers</label>
+            <div id="provider-checkboxes" class="checkbox-group"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Display tasks</label>
+            <div id="task-checkboxes" class="checkbox-group"></div>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label">Provider Filter</label>
-          <div id="provider-checkboxes" class="checkbox-group"></div>
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">Task Category Filter</label>
-        <div id="task-checkboxes" class="checkbox-group"></div>
       </div>
 
       <!-- Query Actions -->
-      <div class="btn-group" style="margin-top: 8px;">
+      <div class="btn-group" style="margin-top: 12px;">
         <button id="btn-get-recommendation" class="btn btn-secondary">Get Recommendation</button>
         <button id="btn-open-confirm" class="btn btn-primary">Release DP Result</button>
       </div>
@@ -163,8 +163,9 @@
             <span id="plan-clipping" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Granularity</span>
+            <span class="stat-label">Recommended Granularity</span>
             <span id="plan-granularity" class="stat-val">-</span>
+            <span class="badge" style="margin-top: 4px; font-size: 10px;">Planner recommendation only</span>
           </div>
           <div class="stat-item">
             <span class="stat-label">Window</span>
@@ -175,7 +176,8 @@
             <span id="plan-freq" class="stat-val">-</span>
           </div>
         </div>
-        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr);">
+        <p class="card-subtitle" style="margin-top: 4px; font-size: 11px;">Alternate release granularities are not directly executable from the v0.5 Web Console.</p>
+        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-top: 8px;">
           <div class="stat-item">
             <span class="stat-label">Estimated Clipping Loss</span>
             <span id="plan-clip-loss" class="stat-val">-</span>
@@ -263,10 +265,28 @@
     <!-- Continual Observation Card -->
     <section class="card">
       <div class="card-header">
-        <span class="card-title">Continual Observation (Binary Time Tree)</span>
-        <span id="continual-status-badge" class="badge badge-warning">Disabled (Default)</span>
+        <span class="card-title">Continual Observation</span>
+        <span id="continual-status-badge" class="badge badge-warning">Disabled</span>
       </div>
-      <p id="continual-msg" class="card-subtitle">Loading continual status...</p>
+      <p id="continual-msg" class="card-subtitle">Continual observation requires trusted configuration and an authoritative finalized stream state.</p>
+      <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-top: 8px; margin-bottom: 8px;">
+        <div class="stat-item">
+          <span class="stat-label">Supported Metric</span>
+          <span id="cont-metric" class="stat-val">Interaction Volume</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Epoch Days</span>
+          <span id="cont-epoch-days" class="stat-val">90</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Sensitivity (C_day / C_epoch)</span>
+          <span id="cont-bounds" class="stat-val">10.0 / 40.0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Tree Topology</span>
+          <span id="cont-topo" class="stat-val">binary</span>
+        </div>
+      </div>
       <div class="grid-two-col" style="margin-top: 6px;">
         <div class="form-group">
           <label class="form-label">Start Day (1-indexed)</label>

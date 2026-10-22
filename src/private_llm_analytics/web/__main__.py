@@ -29,6 +29,13 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.host not in ("127.0.0.1", "localhost", "::1"):
+        print(
+            "WARNING: The Web Console is intended for trusted local administration. "
+            "Binding to a non-loopback interface may expose sensitive administrative metadata.",
+            file=sys.stderr,
+        )
+
     print("=" * 64)
     print("Private LLM Analytics Console")
     print(f"http://{args.host}:{args.port}")

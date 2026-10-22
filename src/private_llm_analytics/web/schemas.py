@@ -55,6 +55,24 @@ class ReleaseRequest(BaseModel):
                     )
         return data
 
+    @model_validator(mode="after")
+    def validate_window_precedence(self) -> "ReleaseRequest":
+        has_days = self.window_days is not None
+        has_start = self.window_start is not None
+        has_end = self.window_end is not None
+
+        if has_days and (has_start or has_end):
+            raise ValueError(
+                "Cannot specify both 'window_days' and explicit 'window_start'/'window_end'."
+            )
+
+        if (has_start and not has_end) or (has_end and not has_start):
+            raise ValueError(
+                "Both 'window_start' and 'window_end' must be provided for explicit windowing."
+            )
+
+        return self
+
 
 class PlannerRecommendRequest(BaseModel):
     """Request payload for utility planner recommendations."""
@@ -160,6 +178,8 @@ class ReleaseResponse(BaseModel):
     mechanism: str
     cache_hit: bool
     incremental_privacy_cost: float
+    window_start: Optional[str] = None
+    window_end: Optional[str] = None
     results: Dict[str, Any]
     privacy_summary: Dict[str, Any]
 
@@ -183,6 +203,9 @@ class ContinualStatusResponse(BaseModel):
     enabled: bool
     mode: str
     epoch_days: int
+    daily_l2_bound: float
+    epoch_group_l12_bound: float
+    tree_topology: str
     supported_metric: str
     message: str
 

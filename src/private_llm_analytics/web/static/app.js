@@ -35,29 +35,41 @@ async function fetchConfig() {
 function renderConfigOptions(cfg) {
   // 1. Providers checkboxes
   const provContainer = document.getElementById("provider-checkboxes");
-  provContainer.innerHTML = "";
+  provContainer.textContent = "";
   cfg.providers.forEach((p) => {
     const label = document.createElement("label");
     label.className = "checkbox-item";
-    label.innerHTML = `<input type="checkbox" name="provider-filter" value="${p}" checked> ${p}`;
-    label.querySelector("input").addEventListener("change", applyResultFilter);
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "provider-filter";
+    input.value = p;
+    input.checked = true;
+    input.addEventListener("change", applyResultFilter);
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(" " + p));
     provContainer.appendChild(label);
   });
 
   // 2. Tasks checkboxes
   const taskContainer = document.getElementById("task-checkboxes");
-  taskContainer.innerHTML = "";
+  taskContainer.textContent = "";
   cfg.tasks.forEach((t) => {
     const label = document.createElement("label");
     label.className = "checkbox-item";
-    label.innerHTML = `<input type="checkbox" name="task-filter" value="${t}" checked> ${t}`;
-    label.querySelector("input").addEventListener("change", applyResultFilter);
+    const input = document.createElement("input");
+    input.type = "checkbox";
+    input.name = "task-filter";
+    input.value = t;
+    input.checked = true;
+    input.addEventListener("change", applyResultFilter);
+    label.appendChild(input);
+    label.appendChild(document.createTextNode(" " + t));
     taskContainer.appendChild(label);
   });
 
   // 3. Recipients dropdown
   const recipSelect = document.getElementById("select-recipient");
-  recipSelect.innerHTML = "";
+  recipSelect.textContent = "";
   cfg.recipients.forEach((r) => {
     const opt = document.createElement("option");
     opt.value = r;
@@ -74,7 +86,7 @@ function renderConfigOptions(cfg) {
 
   // 5. Candidate Windows
   const windowSelect = document.getElementById("select-window");
-  windowSelect.innerHTML = "";
+  windowSelect.textContent = "";
   cfg.candidate_windows.forEach((w) => {
     const opt = document.createElement("option");
     opt.value = w;
@@ -86,15 +98,6 @@ function renderConfigOptions(cfg) {
   optAll.value = "all";
   optAll.textContent = "All time";
   windowSelect.appendChild(optAll);
-
-  // 6. Granularity options
-  const granSelect = document.getElementById("select-granularity");
-  granSelect.innerHTML = `
-    <option value="full_9_cell" selected>All 9 cells (Provider × Task)</option>
-    <option value="provider_3_cell">By provider (3 cells)</option>
-    <option value="task_3_cell">By task (3 cells)</option>
-    <option value="overall_1_cell">Overall (1 cell)</option>
-  `;
 }
 
 async function refreshDatasetStatus() {
@@ -150,10 +153,17 @@ async function refreshReleaseHistory() {
     const res = await fetch("/api/releases");
     const items = await res.json();
     const tbody = document.getElementById("history-table-body");
-    tbody.innerHTML = "";
+    tbody.textContent = "";
 
     if (!items || items.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: var(--text-light);">No historical releases recorded yet.</td></tr>`;
+      const emptyRow = document.createElement("tr");
+      const emptyCell = document.createElement("td");
+      emptyCell.colSpan = 7;
+      emptyCell.style.textAlign = "center";
+      emptyCell.style.color = "var(--text-light)";
+      emptyCell.textContent = "No historical releases recorded yet.";
+      emptyRow.appendChild(emptyCell);
+      tbody.appendChild(emptyRow);
       return;
     }
 
@@ -161,19 +171,42 @@ async function refreshReleaseHistory() {
       const tr = document.createElement("tr");
       const shortId = item.release_id ? item.release_id.substring(0, 8) + "..." : "-";
       const ts = item.timestamp ? item.timestamp.replace("T", " ").substring(0, 19) : "-";
-      const cacheTag = item.cache_hit
-        ? `<span class="badge badge-success">Reused (0 Cost)</span>`
-        : `<span class="badge badge-primary">Committed</span>`;
 
-      tr.innerHTML = `
-        <td style="font-family: monospace;">${shortId}</td>
-        <td>${ts}</td>
-        <td><strong>${item.metric}</strong></td>
-        <td>${item.recipient}</td>
-        <td>ε = ${item.epsilon}, δ = ${item.delta}</td>
-        <td>${item.mechanism}</td>
-        <td>${cacheTag}</td>
-      `;
+      const tdId = document.createElement("td");
+      tdId.style.fontFamily = "monospace";
+      tdId.textContent = shortId;
+
+      const tdTs = document.createElement("td");
+      tdTs.textContent = ts;
+
+      const tdMetric = document.createElement("td");
+      const strongMetric = document.createElement("strong");
+      strongMetric.textContent = item.metric;
+      tdMetric.appendChild(strongMetric);
+
+      const tdRecipient = document.createElement("td");
+      tdRecipient.textContent = item.recipient;
+
+      const tdBudget = document.createElement("td");
+      tdBudget.textContent = `ε = ${item.epsilon}, δ = ${item.delta}`;
+
+      const tdMech = document.createElement("td");
+      tdMech.textContent = item.mechanism;
+
+      const tdStatus = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = item.cache_hit ? "badge badge-success" : "badge badge-primary";
+      badge.textContent = item.cache_hit ? "Reused (0 Cost)" : "Committed";
+      tdStatus.appendChild(badge);
+
+      tr.appendChild(tdId);
+      tr.appendChild(tdTs);
+      tr.appendChild(tdMetric);
+      tr.appendChild(tdRecipient);
+      tr.appendChild(tdBudget);
+      tr.appendChild(tdMech);
+      tr.appendChild(tdStatus);
+
       tbody.appendChild(tr);
     });
   } catch (err) {
@@ -189,15 +222,22 @@ async function refreshContinualStatus() {
     const msgEl = document.getElementById("continual-msg");
     const queryBtn = document.getElementById("btn-continual-query");
 
+    if (document.getElementById("cont-metric")) {
+      document.getElementById("cont-metric").textContent = data.supported_metric === "interaction_volume" ? "Interaction Volume" : data.supported_metric;
+      document.getElementById("cont-epoch-days").textContent = data.epoch_days ?? 90;
+      document.getElementById("cont-bounds").textContent = `${data.daily_l2_bound ?? 10.0} / ${data.epoch_group_l12_bound ?? 40.0}`;
+      document.getElementById("cont-topo").textContent = data.tree_topology ?? "binary";
+    }
+
     if (data.enabled) {
       statusBadge.className = "badge badge-success";
       statusBadge.textContent = "Enabled";
-      msgEl.textContent = `Mode: ${data.mode} | Epoch Horizon: ${data.epoch_days} days.`;
+      msgEl.textContent = data.message || `Mode: ${data.mode} | Epoch Horizon: ${data.epoch_days} days.`;
       queryBtn.disabled = false;
     } else {
       statusBadge.className = "badge badge-warning";
       statusBadge.textContent = "Disabled (Default)";
-      msgEl.textContent = data.message;
+      msgEl.textContent = data.message || "Continual observation requires trusted configuration and an authoritative finalized stream state.";
       queryBtn.disabled = true;
     }
   } catch (err) {
@@ -252,11 +292,6 @@ function setupEventListeners() {
   // Recipient change
   document.getElementById("select-recipient").addEventListener("change", () => {
     refreshPrivacyStatus();
-  });
-
-  // Granularity change
-  document.getElementById("select-granularity").addEventListener("change", () => {
-    applyResultFilter();
   });
 
   // Planner Recommendation
@@ -424,9 +459,11 @@ function renderReleaseResult(data) {
   document.getElementById("res-recipient").textContent = data.recipient;
   document.getElementById("res-eps-delta").textContent = `ε = ${data.epsilon}, δ = ${data.delta}`;
   document.getElementById("res-noise-scale").textContent = data.noise_scale;
-  document.getElementById("res-cache-status").innerHTML = data.cache_hit
-    ? `<span class="badge badge-success">Reused (0 Cost)</span>`
-    : `<span class="badge badge-primary">New Release Committed</span>`;
+
+  const cacheStatusEl = document.getElementById("res-cache-status");
+  cacheStatusEl.textContent = data.cache_hit ? "Reused (0 Cost)" : "New Release Committed";
+  cacheStatusEl.className = data.cache_hit ? "badge badge-success" : "badge badge-primary";
+
   document.getElementById("res-release-id").textContent = data.release_id || data.release_key;
 
   applyResultFilter();
@@ -436,30 +473,38 @@ function applyResultFilter() {
   if (!lastReleaseData || !lastReleaseData.results) return;
 
   const tbody = document.getElementById("results-table-body");
-  tbody.innerHTML = "";
+  tbody.textContent = "";
 
   const results = lastReleaseData.results;
   let cellEntries = [];
 
   if (results.cell_volumes) {
-    cellEntries = Object.entries(results.cell_volumes).map(([k, v]) => ({ cell: k, value: v.toFixed(2), unit: "interactions" }));
+    cellEntries = Object.entries(results.cell_volumes).map(([k, v]) => ({
+      cell: k,
+      value: Number(v).toFixed(2),
+      unit: "interactions",
+    }));
   } else if (results.cell_shares) {
-    cellEntries = Object.entries(results.cell_shares).map(([k, v]) => ({ cell: k, value: (v * 100).toFixed(2) + "%", unit: "workflow share" }));
+    cellEntries = Object.entries(results.cell_shares).map(([k, v]) => ({
+      cell: k,
+      value: (Number(v) * 100).toFixed(2) + "%",
+      unit: "workflow share",
+    }));
   } else if (results.prevalence_rates) {
-    cellEntries = Object.entries(results.prevalence_rates).map(([k, v]) => ({ cell: k, value: (v * 100).toFixed(2) + "%", unit: "prevalence" }));
+    cellEntries = Object.entries(results.prevalence_rates).map(([k, v]) => ({
+      cell: k,
+      value: (Number(v) * 100).toFixed(2) + "%",
+      unit: "prevalence",
+    }));
   }
 
-  // Filter by selected providers and tasks in UI checkboxes
-  const selectedProviders = Array.from(document.querySelectorAll("input[name='provider-filter']:checked")).map((el) => el.value);
-  const selectedTasks = Array.from(document.querySelectorAll("input[name='task-filter']:checked")).map((el) => el.value);
-  const gran = document.getElementById("select-granularity").value;
-
-  if (gran === "overall_1_cell") {
-    let tot = 0;
-    cellEntries.forEach((e) => { tot += parseFloat(e.value) || 0; });
-    tbody.innerHTML = `<tr><td><strong>Overall Enterprise Usage</strong></td><td><strong>${tot.toFixed(2)}</strong></td><td>aggregated</td></tr>`;
-    return;
-  }
+  // Filter by selected display providers and tasks
+  const selectedProviders = Array.from(
+    document.querySelectorAll("input[name='provider-filter']:checked")
+  ).map((el) => el.value);
+  const selectedTasks = Array.from(
+    document.querySelectorAll("input[name='task-filter']:checked")
+  ).map((el) => el.value);
 
   const filtered = cellEntries.filter((item) => {
     const parts = item.cell.split(":");
@@ -471,17 +516,37 @@ function applyResultFilter() {
   });
 
   if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-light);">No cells match the current filter selection.</td></tr>`;
+    const emptyRow = document.createElement("tr");
+    const emptyCell = document.createElement("td");
+    emptyCell.colSpan = 3;
+    emptyCell.style.textAlign = "center";
+    emptyCell.style.color = "var(--text-light)";
+    emptyCell.textContent = "No cells match the current filter selection.";
+    emptyRow.appendChild(emptyCell);
+    tbody.appendChild(emptyRow);
     return;
   }
 
   filtered.forEach((item) => {
     const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><strong>${item.cell}</strong></td>
-      <td style="font-family: monospace; font-size: 14px;">${item.value}</td>
-      <td style="color: var(--text-light);">${item.unit}</td>
-    `;
+
+    const tdCell = document.createElement("td");
+    const strong = document.createElement("strong");
+    strong.textContent = item.cell;
+    tdCell.appendChild(strong);
+
+    const tdVal = document.createElement("td");
+    tdVal.style.fontFamily = "monospace";
+    tdVal.style.fontSize = "14px";
+    tdVal.textContent = item.value;
+
+    const tdUnit = document.createElement("td");
+    tdUnit.style.color = "var(--text-light)";
+    tdUnit.textContent = item.unit;
+
+    tr.appendChild(tdCell);
+    tr.appendChild(tdVal);
+    tr.appendChild(tdUnit);
     tbody.appendChild(tr);
   });
 }
@@ -497,14 +562,22 @@ function renderContinualResult(data) {
   document.getElementById("cont-new-exposed").textContent = data.newly_exposed_levels.length > 0 ? data.newly_exposed_levels.join(", ") : "None";
 
   const tbody = document.getElementById("continual-table-body");
-  tbody.innerHTML = "";
+  tbody.textContent = "";
   data.cell_names.forEach((name, i) => {
     const tr = document.createElement("tr");
     const val = data.vector[i] !== undefined ? data.vector[i].toFixed(2) : "0.00";
-    tr.innerHTML = `
-      <td><strong>${name}</strong></td>
-      <td style="font-family: monospace;">${val}</td>
-    `;
+
+    const tdName = document.createElement("td");
+    const strongName = document.createElement("strong");
+    strongName.textContent = name;
+    tdName.appendChild(strongName);
+
+    const tdVal = document.createElement("td");
+    tdVal.style.fontFamily = "monospace";
+    tdVal.textContent = val;
+
+    tr.appendChild(tdName);
+    tr.appendChild(tdVal);
     tbody.appendChild(tr);
   });
 }
@@ -515,15 +588,23 @@ function renderContinualResult(data) {
 
 function clearAlerts() {
   const container = document.getElementById("alert-container");
-  container.innerHTML = "";
+  container.textContent = "";
 }
 
 function showError(msg) {
   const container = document.getElementById("alert-container");
-  container.innerHTML = `<div class="alert alert-danger">${msg}</div>`;
+  container.textContent = "";
+  const div = document.createElement("div");
+  div.className = "alert alert-danger";
+  div.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+  container.appendChild(div);
 }
 
 function showSuccess(msg) {
   const container = document.getElementById("alert-container");
-  container.innerHTML = `<div class="alert alert-success">${msg}</div>`;
+  container.textContent = "";
+  const div = document.createElement("div");
+  div.className = "alert alert-success";
+  div.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+  container.appendChild(div);
 }

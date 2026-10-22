@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 import io
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import pandas as pd
 
 from private_llm_analytics.config import load_app_config
@@ -14,7 +14,9 @@ from private_llm_analytics.continual.models import (
     ContinualTreeConfig,
 )
 from private_llm_analytics.continual.query import ContinualQueryEngine
+from private_llm_analytics.ingestion.schema import COL_TIMESTAMP
 from private_llm_analytics.planning.planner import SmallNReleasePlanner
+from private_llm_analytics.privacy.exceptions import ProductionSafetyConfigurationError
 from private_llm_analytics.service.analytics import AnalyticsService
 from private_llm_analytics.web.schemas import (
     ContinualQueryRequest,
@@ -150,6 +152,12 @@ class WebAnalyticsAdapter:
                 f"Configured tasks: {sorted(list(allowed_tasks))}"
             )
 
+        if "timestamp" in df.columns:
+            try:
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+            except Exception:
+                pass
+
         stem = Path(filename).stem
         self.service.set_data(df, dataset_version=f"upload_{stem}_{len(df)}_rows")
         self._dataset_source = "uploaded"
@@ -215,6 +223,46 @@ class WebAnalyticsAdapter:
             "is_recommendation_only": True,
         }
 
+    def resolve_window_bounds(
+        self,
+        window_days: Optional[int] = None,
+        window_start: Optional[str] = None,
+        window_end: Optional[str] = None,
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Resolve authoritative start and end observation bounds according to v0.5 rules."""
+        if window_days is not None and (window_start is not None or window_end is not None):
+            raise ValueError(
+                "Cannot specify both 'window_days' and explicit 'window_start'/'window_end'."
+            )
+
+        if (window_start is not None and window_end is None) or (window_start is None and window_end is not None):
+            raise ValueError(
+                "Both 'window_start' and 'window_end' must be provided for explicit windowing."
+            )
+
+        if window_start is not None and window_end is not None:
+            return str(window_start), str(window_end)
+
+        if window_days is not None:
+            df = self.service._raw_dataframe
+            if df is None or df.empty:
+                raise ValueError(
+                    "No telemetry data loaded. Please load demo data or upload a dataset first."
+                )
+
+            if COL_TIMESTAMP not in df.columns:
+                raise ValueError("Windowed release requires timestamped telemetry data.")
+
+            valid_ts = pd.to_datetime(df[COL_TIMESTAMP], errors="coerce").dropna()
+            if valid_ts.empty:
+                raise ValueError("Windowed release requires timestamped telemetry data.")
+
+            t_max = valid_ts.max()
+            start_date = t_max.floor("D") - pd.Timedelta(days=window_days - 1)
+            return str(start_date), str(t_max)
+
+        return None, None
+
     def execute_release(self, request: ReleaseRequest) -> Dict[str, Any]:
         """Execute differential privacy release through authoritative AnalyticsService."""
         if self.service._raw_dataframe is None:
@@ -222,11 +270,17 @@ class WebAnalyticsAdapter:
                 "No telemetry data loaded. Please load demo data or upload a dataset first."
             )
 
+        start, end = self.resolve_window_bounds(
+            window_days=request.window_days,
+            window_start=request.window_start,
+            window_end=request.window_end,
+        )
+
         raw_result = self.service.compute(
             metric=request.metric,
             recipient=request.recipient,
-            start=request.window_start,
-            end=request.window_end,
+            start=start,
+            end=end,
             epsilon=request.epsilon,
             delta=request.delta,
             include_exact=False,
@@ -246,6 +300,8 @@ class WebAnalyticsAdapter:
             "mechanism": raw_result.get("mechanism", "gaussian"),
             "cache_hit": bool(raw_result.get("cache_hit", False)),
             "incremental_privacy_cost": float(raw_result.get("incremental_privacy_cost", 0.0)),
+            "window_start": start,
+            "window_end": end,
             "results": results,
             "privacy_summary": {
                 "effective_epsilon_after": round(float(pv.effective_epsilon), 4),
@@ -282,18 +338,25 @@ class WebAnalyticsAdapter:
         enabled = bool(continual_cfg.enabled if continual_cfg else False)
         epoch_days = int(continual_cfg.epoch_days if continual_cfg else 90)
         mode = str(continual_cfg.mode if continual_cfg else "binary_tree")
+        daily_l2 = float(getattr(continual_cfg, "daily_l2_bound", 10.0))
+        epoch_group_l12 = float(
+            getattr(continual_cfg, "epoch_group_l12_bound", getattr(continual_cfg, "epoch_l12_bound", 40.0))
+        )
+        tree_topo = str(getattr(getattr(continual_cfg, "tree", None), "topology", "binary"))
 
         msg = (
             "Continual observation is enabled."
             if enabled
-            else "Continual observation is disabled in the current configuration. "
-            "Enable continual observation explicitly in trusted local configuration."
+            else "Continual observation requires trusted configuration and an authoritative finalized stream state."
         )
 
         return {
             "enabled": enabled,
             "mode": mode,
             "epoch_days": epoch_days,
+            "daily_l2_bound": daily_l2,
+            "epoch_group_l12_bound": epoch_group_l12,
+            "tree_topology": tree_topo,
             "supported_metric": "interaction_volume",
             "message": msg,
         }
@@ -315,46 +378,6 @@ class WebAnalyticsAdapter:
                 "No telemetry data loaded. Please load demo data or upload a dataset first."
             )
 
-        continual_cfg = self.service.config.privacy.continual
-        engine = ContinualQueryEngine.from_app_config(self.service.config)
-
-        tree_cfg = ContinualTreeConfig(
-            topology=getattr(continual_cfg.tree, "topology", "binary"),
-            padding=getattr(continual_cfg.tree, "padding", "next_power_of_two"),
+        raise ProductionSafetyConfigurationError(
+            "Continual interval queries require an authoritative finalized stream configuration and are not initialized by the Web Console."
         )
-        noise_cfg = ContinualNoiseConfig(
-            mechanism=getattr(continual_cfg.noise, "mechanism", "gaussian"),
-            target_epoch_epsilon=getattr(continual_cfg.noise, "target_epoch_epsilon", 2.0),
-            calibration_delta=getattr(continual_cfg.noise, "calibration_delta", 1e-6),
-            equal_sigma_per_level=getattr(continual_cfg.noise, "equal_sigma_per_level", True),
-        )
-
-        epoch_days = getattr(continual_cfg, "epoch_days", 90)
-        daily_l2 = getattr(continual_cfg, "daily_l2_bound", 10.0)
-        epoch_group_l12 = getattr(
-            continual_cfg,
-            "epoch_group_l12_bound",
-            getattr(continual_cfg, "epoch_l12_bound", 40.0),
-        )
-
-        stream_cfg = ContinualStreamConfig(
-            stream_id="web_stream_1",
-            metric=request.metric,
-            epoch_id="web_epoch_1",
-            epoch_start=datetime.now(timezone.utc).strftime("%Y-%m-%d"),
-            epoch_days=epoch_days,
-            daily_l2_bound=daily_l2,
-            epoch_group_l12_bound=epoch_group_l12,
-            tree=tree_cfg,
-            noise=noise_cfg,
-        )
-
-        res = engine.query_interval(
-            stream_config=stream_cfg,
-            start_day=request.start_day,
-            end_day=request.end_day,
-            recipient=request.recipient,
-            interactions=self.service._raw_dataframe,
-        )
-
-        return res.to_dict()

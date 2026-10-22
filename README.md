@@ -168,15 +168,16 @@ python -m private_llm_analytics.web --host 127.0.0.1 --port 8080
 
 Open your browser at `http://127.0.0.1:8000`.
 
-### Key Console Capabilities
+### Key Console Capabilities & Operational Semantics
 
-1. **Dataset Management**: Load bundled enterprise synthetic demo telemetry (50,000 users, 3M+ rows) or upload local CSV/Parquet telemetry datasets.
+1. **Dataset Management**: Load bundled enterprise synthetic demo telemetry (50,000 users, 3M+ rows) or upload local CSV/Parquet telemetry datasets. Dataset Status contains trusted local administrative metadata and is NOT an external DP release.
 2. **Authoritative Privacy Monitor**: Real-time inspection of cumulative lifetime RDP budget spend, current effective $(\epsilon, \delta)$ consumption, and per-recipient scope breakdown.
-3. **Query Configuration**: Interactive selection across configured providers, task categories, analytics metrics, and target privacy parameters $(\epsilon, \delta)$.
-4. **Utility-Aware Planner Preview**: Preview recommended clipping bounds and utility loss decompositions (noise variance, bias, total loss) before spending privacy budget (zero budget spend for preview).
-5. **Execution & Concurrency Confirmation**: Explicit two-step confirmation modal before budget expenditure; automatic detection and notification for memoized releases (cache hit with 0 incremental spend).
-6. **Release History**: Audit trail of completed releases with sanitization of internal user identities.
-7. **Continual Observation**: Status inspection of binary time-tree continual observation and interval queries for Interaction Volume.
+3. **Query Configuration & Trailing Data Windows**: Selection across analytics metrics and target privacy parameters $(\epsilon, \delta)$. Window selection performs a real trailing calendar-day filter derived from the maximum timestamp in the loaded dataset.
+4. **Display Filters**: Provider and task category checkboxes operate as client-side display filters over the already released DP result cells; they do not trigger new privacy releases or additional privacy spend.
+5. **Utility-Aware Planner Preview**: Preview recommended clipping bounds and utility loss decompositions before spending privacy budget (zero budget spend for preview). Planner recommendations do not automatically modify releases, and alternate release granularities are recommendation-only in v0.5.
+6. **Execution & Concurrency Confirmation**: Explicit two-step confirmation modal before budget expenditure; automatic detection and notification for memoized releases (cache hit with 0 incremental spend).
+7. **Release History**: Audit trail of completed releases with sanitization of internal user identities.
+8. **Continual Observation**: Status inspection of binary time-tree continual observation. Continual observation remains disabled by default, and interval queries fail closed without an authoritative finalized stream configuration.
 
 ---
 
@@ -259,7 +260,7 @@ private-llm-analytics/
 │       ├── privacy/    # Differential privacy mechanisms, state manager, and RDP accounting
 │       ├── service/    # High-level analytics service API
 │       └── web/        # Local Web Analytics Console (FastAPI, zero external egress)
-└── tests/              # Comprehensive pytest verification suite (439 tests)
+└── tests/              # Comprehensive pytest verification suite (448 tests)
 ```
 
 ---

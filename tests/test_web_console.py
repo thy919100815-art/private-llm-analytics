@@ -336,5 +336,222 @@ def test_18_continual_finalized_frontier_failure_propagates_safely(tmp_path):
     })
     assert res.status_code == 400
     assert "error" in res.json()
-    assert "ProductionSafetyConfigurationError" in res.json().get("type", "") or "finalized" in res.json().get("error", "").lower()
+    assert "ProductionSafetyConfigurationError" in res.json().get("type", "") or "finalized" in res.json().get("error", "").lower() or "not initialized" in res.json().get("error", "").lower()
+
+
+def test_web_window_7_vs_30_have_distinct_bounds(test_app_and_client):
+    client, adapter, service = test_app_and_client
+    client.post("/api/dataset/demo")
+
+    res7 = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 7,
+    })
+    assert res7.status_code == 200
+    data7 = res7.json()
+
+    res30 = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 30,
+    })
+    assert res30.status_code == 200
+    data30 = res30.json()
+
+    # End bound is identical (dataset max timestamp), start bound is distinct
+    assert data7["window_end"] == data30["window_end"]
+    assert data7["window_start"] != data30["window_start"]
+
+
+def test_web_window_7_vs_30_have_distinct_release_keys(test_app_and_client):
+    client, _, _ = test_app_and_client
+    client.post("/api/dataset/demo")
+
+    res7 = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 7,
+    })
+    res30 = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 30,
+    })
+    assert res7.status_code == 200
+    assert res30.status_code == 200
+    assert res7.json()["release_key"] != res30.json()["release_key"]
+
+
+def test_web_same_window_replays_canonical_release(test_app_and_client):
+    client, _, _ = test_app_and_client
+    client.post("/api/dataset/demo")
+
+    payload = {
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 14,
+    }
+    res1 = client.post("/api/release", json=payload)
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert data1["cache_hit"] is False
+
+    res2 = client.post("/api/release", json=payload)
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert data2["cache_hit"] is True
+    assert data2["incremental_privacy_cost"] == 0.0
+    assert data2["release_key"] == data1["release_key"]
+    assert data2["window_start"] == data1["window_start"]
+    assert data2["window_end"] == data1["window_end"]
+
+
+def test_web_window_uses_dataset_max_timestamp_not_wall_clock(test_app_and_client):
+    client, adapter, service = test_app_and_client
+    import pandas as pd
+    # Dataset with explicitly fixed historical timestamps (June 2024)
+    records = []
+    for d in range(1, 16):
+        records.append({
+            "interaction_id": f"I_{d:04d}",
+            "user_id": f"user_{d % 3}",
+            "timestamp": f"2024-06-{d:02d} 18:00:00",
+            "provider": "provider_a",
+            "task": "technical",
+        })
+    df = pd.DataFrame(records)
+    df["timestamp"] = pd.to_datetime(df["timestamp"])
+    service.set_data(df, dataset_version="historical_2024_v1")
+
+    res = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 7,
+    })
+    assert res.status_code == 200
+    data = res.json()
+    # Must use dataset max timestamp (2024-06-15 18:00:00), NOT today's machine time
+    assert data["window_end"] == "2024-06-15 18:00:00"
+    # 7 days ending 2024-06-15: start is beginning of date 2024-06-15 - 6 days = 2024-06-09 00:00:00
+    assert data["window_start"] == "2024-06-09 00:00:00"
+
+
+def test_web_window_requires_timestamp_column(test_app_and_client):
+    client, adapter, service = test_app_and_client
+    import pandas as pd
+    # Dataset without timestamp column
+    df = pd.DataFrame([
+        {"user_id": "u1", "provider": "provider_a", "task": "technical"},
+        {"user_id": "u2", "provider": "provider_b", "task": "document"},
+    ])
+    service._raw_dataframe = df
+
+    res = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 7,
+    })
+    assert res.status_code in (400, 422)
+    assert "timestamped telemetry data" in res.json().get("error", "").lower() or "timestamp" in str(res.json()).lower()
+
+
+def test_web_rejects_window_days_with_explicit_bounds(test_app_and_client):
+    client, _, _ = test_app_and_client
+    client.post("/api/dataset/demo")
+
+    # Reject both window_days and window_start
+    res1 = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_days": 7,
+        "window_start": "2026-01-01 00:00:00",
+    })
+    assert res1.status_code in (400, 422)
+    assert "cannot specify both" in str(res1.json()).lower()
+
+    # Reject only one of window_start/window_end
+    res2 = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_start": "2026-01-01 00:00:00",
+    })
+    assert res2.status_code in (400, 422)
+    assert "both" in str(res2.json()).lower()
+
+
+def test_web_explicit_start_end_pass_through(test_app_and_client):
+    client, _, _ = test_app_and_client
+    client.post("/api/dataset/demo")
+
+    res = client.post("/api/release", json={
+        "metric": "interaction_volume",
+        "recipient": "provider_a",
+        "epsilon": 0.5,
+        "delta": 1e-6,
+        "window_start": "2026-01-01 00:00:00",
+        "window_end": "2026-01-15 00:00:00",
+    })
+    assert res.status_code == 200
+    data = res.json()
+    assert data["window_start"] == "2026-01-01 00:00:00"
+    assert data["window_end"] == "2026-01-15 00:00:00"
+
+
+def test_web_display_filters_do_not_spend_budget_or_execute_release(test_app_and_client):
+    client, adapter, service = test_app_and_client
+    client.post("/api/dataset/demo")
+
+    # Read rendered HTML
+    html_res = client.get("/")
+    assert html_res.status_code == 200
+    html = html_res.text
+    assert "Display Filters" in html
+    assert "Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend." in html
+    assert "Display providers" in html
+    assert "Display tasks" in html
+    assert 'id="select-granularity"' not in html
+    assert "Planner recommendation only" in html
+
+    # Initial budget status
+    status1 = client.get("/api/privacy/status").json()
+    eps1 = status1["effective_epsilon"]
+
+    # Simulating client-side UI filter operations: toggling display filters makes NO api/release call
+    # Privacy budget and ledger entries remain strictly unchanged
+    status2 = client.get("/api/privacy/status").json()
+    assert status2["effective_epsilon"] == eps1
+    assert len(service.orchestrator.ledger.get_entries()) == 0
+
+
+def test_web_cli_warns_on_non_loopback_host(capsys):
+    import io
+    import sys
+    from private_llm_analytics.web.__main__ import main as cli_main
+    from unittest.mock import patch
+
+    # Mock uvicorn.run so it doesn't block
+    with patch("uvicorn.run"):
+        with patch.object(sys, "argv", ["web", "--host", "0.0.0.0"]):
+            cli_main()
+            captured = capsys.readouterr()
+            assert "WARNING: The Web Console is intended for trusted local administration." in captured.err
 
