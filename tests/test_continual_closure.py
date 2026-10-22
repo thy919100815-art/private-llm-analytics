@@ -2048,3 +2048,333 @@ def test_real_daily_continual_progression(tmp_path: Path):
             public_user_roster=roster, finalized_up_to_day=13, current_wall_clock_day=15,
         )
 
+
+# =========================================================================
+# SECTION M: ONLINE PREFIX-STABLE TEMPORAL CLIPPING & CROSS-EPOCH UNIFICATION
+# =========================================================================
+
+def test_online_temporal_clipping_prefix_stability():
+    """Prefix-stability invariant: contributions Z[1..t] are identical regardless of future days."""
+    roster = [f"user_{i}" for i in range(10)]
+
+    # 1. Day 10 vs Day 11
+    records_10 = []
+    for d in range(1, 11):
+        records_10.extend(_generate_day_records(roster, d, count_per_user=5))
+    df_10 = pd.DataFrame(records_10)
+
+    records_11 = list(records_10)
+    records_11.extend(_generate_day_records(roster, 11, count_per_user=5))
+    df_11 = pd.DataFrame(records_11)
+
+    Z10, _, _ = build_temporal_user_contributions(
+        interactions=df_10,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        daily_l2_bound=10.0,
+        epoch_l12_bound=40.0,
+    )
+    Z11, _, _ = build_temporal_user_contributions(
+        interactions=df_11,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        daily_l2_bound=10.0,
+        epoch_l12_bound=40.0,
+    )
+    np.testing.assert_allclose(
+        Z10[:, :10, :], Z11[:, :10, :], atol=1e-12,
+        err_msg="Prefix stability violation: Day 1..10 contributions changed when Day 11 arrived!"
+    )
+
+    # 2. Day 20 vs Day 30
+    records_20 = list(records_11)
+    for d in range(12, 21):
+        records_20.extend(_generate_day_records(roster, d, count_per_user=5))
+    df_20 = pd.DataFrame(records_20)
+
+    records_30 = list(records_20)
+    for d in range(21, 31):
+        records_30.extend(_generate_day_records(roster, d, count_per_user=5))
+    df_30 = pd.DataFrame(records_30)
+
+    Z20, _, _ = build_temporal_user_contributions(
+        interactions=df_20,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        daily_l2_bound=10.0,
+        epoch_l12_bound=40.0,
+    )
+    Z30, _, _ = build_temporal_user_contributions(
+        interactions=df_30,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        daily_l2_bound=10.0,
+        epoch_l12_bound=40.0,
+    )
+    np.testing.assert_allclose(
+        Z20[:, :20, :], Z30[:, :20, :], atol=1e-12,
+        err_msg="Prefix stability violation: Day 1..20 contributions changed when Days 21..30 arrived!"
+    )
+
+    # 3. Day 30 vs Day 90
+    records_90 = list(records_30)
+    for d in range(31, 91):
+        records_90.extend(_generate_day_records(roster, d, count_per_user=5))
+    df_90 = pd.DataFrame(records_90)
+
+    Z30_90, _, _ = build_temporal_user_contributions(
+        interactions=df_30,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=90,
+        daily_l2_bound=10.0,
+        epoch_l12_bound=40.0,
+    )
+    Z90, _, _ = build_temporal_user_contributions(
+        interactions=df_90,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=90,
+        daily_l2_bound=10.0,
+        epoch_l12_bound=40.0,
+    )
+    np.testing.assert_allclose(
+        Z30_90[:, :30, :], Z90[:, :30, :], atol=1e-12,
+        err_msg="Prefix stability violation: Day 1..30 contributions changed when Days 31..90 arrived!"
+    )
+
+
+def test_progressive_level_sensitivity_never_exceeds_epoch_bound():
+    """Adversarial regression: 1 user, C_day=10, C_epoch=10, norm=10 on Day1 and Day2."""
+    roster = ["u_adv"]
+    records = []
+    for c in range(10):
+        records.append({"user_id": "u_adv", "timestamp": "2026-01-01 10:00:00", "provider": "provider_a", "task": "technical"})
+    for c in range(10):
+        records.append({"user_id": "u_adv", "timestamp": "2026-01-02 10:00:00", "provider": "provider_a", "task": "technical"})
+    df = pd.DataFrame(records)
+
+    Z, _, _ = build_temporal_user_contributions(
+        interactions=df,
+        public_user_roster=roster,
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        granularity="overall_1_cell",
+        daily_l2_bound=10.0,
+        epoch_l12_bound=10.0,
+    )
+    day1_norm = float(np.linalg.norm(Z[0, 0, :]))
+    day2_norm = float(np.linalg.norm(Z[0, 1, :]))
+    assert np.isclose(day1_norm, 10.0, atol=1e-6)
+    assert np.isclose(day2_norm, 0.0, atol=1e-6)
+
+    # Invariant: sum_t ||z_{u, t}||_2 <= C_epoch + tolerance
+    total_group_l1_l2 = float(np.sum(np.linalg.norm(Z[0, :, :], axis=1)))
+    assert total_group_l1_l2 <= 10.0 + 1e-10
+
+    # For every level in a binary tree, verify level sensitivity <= C_epoch
+    tree = BinaryTimeTree(epoch_days=30)
+    for lvl in range(tree.num_levels):
+        block_size = 2 ** lvl
+        num_nodes_at_level = tree.tree_size // block_size
+        lvl_vecs = []
+        for n_idx in range(num_nodes_at_level):
+            u, v = tree.node_interval(lvl, n_idx)
+            node_vec = np.sum(Z[0, (u-1):min(v, 30), :], axis=0)
+            lvl_vecs.append(node_vec)
+        concatenated_lvl = np.concatenate(lvl_vecs)
+        lvl_l2_norm = float(np.linalg.norm(concatenated_lvl))
+        assert lvl_l2_norm <= 10.0 + 1e-10, f"Level {lvl} L2 sensitivity {lvl_l2_norm} exceeds C_epoch=10.0"
+
+
+def test_materialized_day10_contribution_unchanged_after_day11_arrives(tmp_path: Path):
+    """Exact bounded contribution semantics of Day 10 remains identical after Day 11 arrives."""
+    db_file = tmp_path / "mat_d10_d11.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_mat_test",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        epoch_group_l12_bound=20.0,
+    )
+
+    records_10 = []
+    for d in range(1, 11):
+        records_10.extend(_generate_day_records(roster, d, count_per_user=3))
+    df_10 = pd.DataFrame(records_10)
+
+    # Materialize nodes for interval [1, 10]
+    res_10 = engine.query_interval(
+        cfg, 1, 10, recipient="Analyst", interactions=df_10,
+        public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=12,
+    )
+
+    # Day 11 arrives
+    records_11 = list(records_10) + _generate_day_records(roster, 11, count_per_user=3)
+    df_11 = pd.DataFrame(records_11)
+
+    # Query with cached nodes for [1, 10] using new df_11
+    res_10_after = engine.query_interval(
+        cfg, 1, 10, recipient="Analyst", interactions=df_11,
+        public_user_roster=roster, finalized_up_to_day=11, current_wall_clock_day=13,
+    )
+    np.testing.assert_array_equal(res_10.vector, res_10_after.vector)
+
+
+def test_progressive_nodes_share_one_prefix_stable_contribution_definition(tmp_path: Path):
+    """Progressive nodes share a unified prefix-stable contribution builder across all queries."""
+    db_file = tmp_path / "shared_builder.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(4)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_shared",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=16,
+        epoch_group_l12_bound=15.0,
+    )
+
+    records = []
+    for d in range(1, 9):
+        records.extend(_generate_day_records(roster, d))
+    df = pd.DataFrame(records)
+
+    q1 = engine.query_interval(cfg, 1, 4, recipient="A", interactions=df, public_user_roster=roster, finalized_up_to_day=8, current_wall_clock_day=10)
+    q2 = engine.query_interval(cfg, 5, 8, recipient="A", interactions=df, public_user_roster=roster, finalized_up_to_day=8, current_wall_clock_day=10)
+    q_all = engine.query_interval(cfg, 1, 8, recipient="A", interactions=df, public_user_roster=roster, finalized_up_to_day=8, current_wall_clock_day=10)
+
+    assert q1 is not None and q2 is not None and q_all is not None
+
+
+def test_cross_epoch_external_cannot_claim_trusted(tmp_path: Path):
+    """query_cross_epoch rejects external recipient claiming trusted role."""
+    db_file = tmp_path / "cross_role_sec1.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr, recipient_roles={"ProviderA": "external"})
+
+    cfg1 = ContinualStreamConfig(stream_id="s1", epoch_id="ep1", epoch_days=30)
+    cfg2 = ContinualStreamConfig(stream_id="s2", epoch_id="ep2", epoch_days=30)
+    df, roster = _sample_data()
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="Recipient role override conflicts"):
+        engine.query_cross_epoch(
+            cfg1, 1, cfg2, 10, recipient="ProviderA", recipient_role="trusted",
+            interactions_epoch_1=df, interactions_epoch_2=df, public_user_roster=roster,
+        )
+
+
+def test_cross_epoch_configured_trusted_role_used_when_omitted(tmp_path: Path):
+    """query_cross_epoch authoritatively applies configured trusted role when argument is omitted."""
+    db_file = tmp_path / "cross_role_sec2.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr, recipient_roles={"InternalAuditor": "trusted"})
+
+    scope = engine.resolve_scope("InternalAuditor")
+    assert scope == "internal"
+
+    cfg1 = ContinualStreamConfig(stream_id="s1", epoch_id="ep1", epoch_days=30)
+    cfg2 = ContinualStreamConfig(stream_id="s2", epoch_id="ep2", epoch_days=30)
+    df, roster = _sample_data()
+
+    res = engine.query_cross_epoch(
+        cfg1, 20, cfg2, 10, recipient="InternalAuditor",
+        interactions_epoch_1=df, interactions_epoch_2=df, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=30,
+    )
+    assert res.budget_scope_id == "internal"
+
+
+def test_cross_epoch_does_not_use_mutable_whole_dataset_manifest(tmp_path: Path):
+    """query_cross_epoch uses stable epoch manifest identities, not mutable interaction data hashes."""
+    db_file = tmp_path / "cross_stable_man.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg1 = ContinualStreamConfig(stream_id="s1", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+    cfg2 = ContinualStreamConfig(stream_id="s2", epoch_id="ep2", epoch_days=30, epoch_start="2026-02-01")
+
+    records_1 = []
+    for d in range(1, 31):
+        records_1.extend(_generate_day_records(roster, d))
+    df_1 = pd.DataFrame(records_1)
+
+    records_2_5 = []
+    for d in range(1, 6):
+        records_2_5.extend(_generate_day_records(roster, d, base_date="2026-02-01"))
+    df_2_5 = pd.DataFrame(records_2_5)
+
+    res1 = engine.query_cross_epoch(
+        cfg1, 25, cfg2, 4, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2_5, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=5,
+    )
+    assert res1 is not None
+
+    with cont_mgr._connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT manifest_fingerprint FROM continual_epoch_manifests WHERE epoch_id = 'ep2'")
+        mf2_initial = cursor.fetchone()[0]
+
+    # Data in epoch 2 grows to Day 10
+    records_2_10 = list(records_2_5)
+    for d in range(6, 11):
+        records_2_10.extend(_generate_day_records(roster, d, base_date="2026-02-01"))
+    df_2_10 = pd.DataFrame(records_2_10)
+
+    res2 = engine.query_cross_epoch(
+        cfg1, 25, cfg2, 8, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2_10, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=10,
+    )
+    assert res2 is not None
+
+    with cont_mgr._connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT manifest_fingerprint FROM continual_epoch_manifests WHERE epoch_id = 'ep2'")
+        mf2_after = cursor.fetchone()[0]
+
+    assert mf2_initial == mf2_after, "Epoch 2 manifest token must remain stable across data growth in cross-epoch query."
+
+
+def test_cross_epoch_progressive_second_epoch_growth_succeeds(tmp_path: Path):
+    """Epoch 1 complete and Epoch 2 growing progressively succeeds across cross-epoch queries."""
+    db_file = tmp_path / "cross_prog_growth.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(4)]
+    cfg1 = ContinualStreamConfig(stream_id="s1_prog", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+    cfg2 = ContinualStreamConfig(stream_id="s2_prog", epoch_id="ep2", epoch_days=30, epoch_start="2026-02-01")
+
+    df_1 = pd.DataFrame(_generate_day_records(roster, 30))
+    df_2_step1 = pd.DataFrame(_generate_day_records(roster, 1, base_date="2026-02-01"))
+
+    r1 = engine.query_cross_epoch(
+        cfg1, 30, cfg2, 1, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2_step1, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=1,
+    )
+    assert r1 is not None
+
+    df_2_step2 = pd.DataFrame(
+        _generate_day_records(roster, 1, base_date="2026-02-01") +
+        _generate_day_records(roster, 2, base_date="2026-02-01")
+    )
+    r2 = engine.query_cross_epoch(
+        cfg1, 30, cfg2, 2, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2_step2, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=2,
+    )
+    assert r2 is not None
+

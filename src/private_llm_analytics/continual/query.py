@@ -141,24 +141,200 @@ class ContinualQueryEngine:
         sm = state_manager or ContinualStateManager(db_path=app_config.privacy.release.state_db_path)
         return cls(state_manager=sm, app_config=app_config)
 
-    def resolve_scope(self, recipient: str, recipient_role: Optional[str] = None) -> str:
-        """Resolve budget scope ID according to active recipient composition policy."""
+    def _resolve_authoritative_recipient_role(self, recipient: str, recipient_role: Optional[str] = None) -> str:
+        """Resolve authoritative recipient role, enforcing strict conflict detection with configuration."""
         configured_role = self.recipient_roles.get(recipient)
         if configured_role is not None:
             if recipient_role is not None and recipient_role != configured_role:
                 raise ProductionSafetyConfigurationError(
                     "Recipient role override conflicts with authoritative configuration."
                 )
-            effective_role = configured_role
-        else:
-            effective_role = recipient_role or "external"
+            return configured_role
+        return recipient_role or "external"
 
+    def resolve_scope(self, recipient: str, recipient_role: Optional[str] = None) -> str:
+        """Resolve budget scope ID according to active recipient composition policy."""
+        effective_role = self._resolve_authoritative_recipient_role(recipient, recipient_role)
         return resolve_budget_scope_id(
             recipient=recipient,
             recipient_role=effective_role,
             mode=self.composition_mode,
             groups=self.collusion_groups,
         )
+
+    def _resolve_stable_epoch_manifest(
+        self,
+        stream_config: ContinualStreamConfig,
+        manifest_fingerprint: Optional[str] = None,
+        public_roster_fingerprint: Optional[str] = None,
+        public_user_roster: Optional[Sequence[str]] = None,
+    ) -> Tuple[str, str]:
+        """Resolve stable epoch manifest identity and public roster fingerprint without using mutable data hashes."""
+        mf = manifest_fingerprint or stream_config.dataset_fingerprint
+        rf = public_roster_fingerprint or stream_config.public_roster_fingerprint
+        if not mf or not rf:
+            with self.state_manager._connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT manifest_fingerprint, public_roster_fingerprint FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                    (stream_config.stream_fingerprint, stream_config.epoch_id),
+                )
+                m_row = cursor.fetchone()
+                if m_row:
+                    mf = mf or m_row[0]
+                    rf = rf or m_row[1]
+
+        if not mf:
+            # Derive stable epoch manifest identity from immutable stream metadata
+            mf = f"epoch_manifest:{stream_config.stream_fingerprint}:{stream_config.epoch_id}"
+
+        if not rf and public_user_roster is not None:
+            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
+            rf = hashlib.sha256(roster_bytes).hexdigest()
+
+        return mf, rf or f"roster:{stream_config.stream_fingerprint}"
+
+    def _build_finalized_partition_fingerprints(
+        self,
+        stream_config: ContinualStreamConfig,
+        interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]],
+        effective_fin: int,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
+    ) -> Optional[Dict[str, str]]:
+        """Compute or filter partition fingerprints strictly up to authoritative finalized frontier."""
+        if partition_fingerprints is None and interactions is not None:
+            return compute_partition_fingerprints(
+                interactions=interactions,
+                epoch_start=stream_config.epoch_start,
+                start_day=1,
+                end_day=effective_fin,
+                timezone_name=stream_config.timezone,
+            )
+        elif partition_fingerprints is not None:
+            return {
+                str(k): str(v)
+                for k, v in partition_fingerprints.items()
+                if int(k) <= effective_fin
+            }
+        return None
+
+    def _verify_dataset_and_partitions(
+        self,
+        stream_config: ContinualStreamConfig,
+        mf: str,
+        rf: str,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
+    ):
+        """Verify that epoch manifest token and already finalized partition fingerprints are immutable."""
+        with self.state_manager._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT manifest_fingerprint, public_roster_fingerprint FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                (stream_config.stream_fingerprint, stream_config.epoch_id),
+            )
+            m_row = cursor.fetchone()
+            if m_row is not None:
+                persisted_mf, persisted_rf = m_row[0], m_row[1]
+                if mf and persisted_mf and persisted_mf != mf:
+                    raise ProductionSafetyConfigurationError(
+                        f"DATASET_MANIFEST_MISMATCH: stream_fingerprint={stream_config.stream_fingerprint}, epoch_id={stream_config.epoch_id} "
+                        f"has sealed manifest {persisted_mf}, but current request provided {mf}. Modifying epoch manifest is strictly forbidden."
+                    )
+                if rf and persisted_rf and persisted_rf != rf:
+                    raise ProductionSafetyConfigurationError(
+                        f"DATASET_MANIFEST_MISMATCH: public roster fingerprint mismatch for stream={stream_config.stream_fingerprint}, epoch={stream_config.epoch_id} "
+                        f"(sealed={persisted_rf}, provided={rf})."
+                    )
+            if partition_fingerprints:
+                for day_str, pfp in partition_fingerprints.items():
+                    cursor.execute(
+                        "SELECT partition_fingerprint FROM continual_epoch_partitions WHERE stream_fingerprint = ? AND epoch_id = ? AND day = ?",
+                        (stream_config.stream_fingerprint, stream_config.epoch_id, int(day_str)),
+                    )
+                    p_row = cursor.fetchone()
+                    if p_row is not None and p_row[0] != pfp:
+                        raise ProductionSafetyConfigurationError(
+                            f"DATASET_MANIFEST_MISMATCH: already finalized partition for day {day_str} cannot be mutated "
+                            f"(sealed={p_row[0]}, provided={pfp})."
+                        )
+
+    def _build_prefix_stable_contributions(
+        self,
+        stream_config: ContinualStreamConfig,
+        interactions: Union[pd.DataFrame, Sequence[Dict[str, Any]]],
+        public_user_roster: Sequence[str],
+    ) -> np.ndarray:
+        """Build prefix-stable bounded temporal user contributions."""
+        tensor, _, _ = build_temporal_user_contributions(
+            interactions=interactions,
+            public_user_roster=public_user_roster,
+            epoch_start=stream_config.epoch_start,
+            epoch_days=stream_config.epoch_days,
+            granularity=stream_config.granularity,
+            daily_l2_bound=stream_config.daily_l2_bound,
+            epoch_l12_bound=stream_config.epoch_group_l12_bound,
+            metric=stream_config.metric,
+            timezone_name=stream_config.timezone,
+        )
+        return tensor
+
+    def _materialize_epoch_nodes(
+        self,
+        stream_config: ContinualStreamConfig,
+        nodes: Sequence[Tuple[int, int]],
+        sigma: float,
+        interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]],
+        public_user_roster: Optional[Sequence[str]],
+        finalized_up_to_day: Optional[int],
+        manifest_fingerprint: str,
+        public_roster_fingerprint: str,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
+        precomputed_contributions: Optional[np.ndarray] = None,
+        current_wall_clock_day: Optional[int] = None,
+    ) -> List[np.ndarray]:
+        """Materialize or retrieve canonical noisy nodes with prefix-stable contribution builder."""
+        tree = BinaryTimeTree(epoch_days=stream_config.epoch_days)
+        tensor_holder: List[Optional[np.ndarray]] = [precomputed_contributions]
+
+        def _get_contributions():
+            if tensor_holder[0] is None:
+                if interactions is None or public_user_roster is None:
+                    raise ValueError(
+                        f"Cannot materialize un-cached tree nodes: raw interactions and public_user_roster required."
+                    )
+                tensor_holder[0] = self._build_prefix_stable_contributions(
+                    stream_config=stream_config,
+                    interactions=interactions,
+                    public_user_roster=public_user_roster,
+                )
+            return tensor_holder[0]
+
+        noisy_nodes = []
+        for level, node_idx in nodes:
+            u, v = tree.node_interval(level, node_idx)
+
+            def _materialize_node_exact(start_idx_u=u, end_idx_v=v):
+                contribs = _get_contributions()
+                start_idx = start_idx_u - 1
+                end_idx = min(end_idx_v, stream_config.epoch_days)
+                node_slice = contribs[:, start_idx:end_idx, :]
+                return np.sum(node_slice, axis=(0, 1))
+
+            noisy_node = self.state_manager.get_or_create_noisy_node(
+                stream_config=stream_config,
+                level=level,
+                node_index=node_idx,
+                sigma=sigma,
+                materialize_fn=_materialize_node_exact,
+                finalized_up_to_day=finalized_up_to_day,
+                manifest_fingerprint=manifest_fingerprint,
+                public_roster_fingerprint=public_roster_fingerprint,
+                current_wall_clock_day=current_wall_clock_day,
+                partition_fingerprints=partition_fingerprints,
+            )
+            noisy_nodes.append(noisy_node)
+
+        return noisy_nodes
 
     def get_privacy_view(self, recipient: str = "global_external", recipient_role: Optional[str] = None) -> PrivacyView:
         """Authoritative reconstructed PrivacyView for recipient or budget scope."""
@@ -265,76 +441,28 @@ class ContinualQueryEngine:
         sigma = self._get_calibrated_sigma(stream_config)
 
         # 5b. Resolve dataset manifest and public roster fingerprints
-        mf = manifest_fingerprint or stream_config.dataset_fingerprint
-        rf = public_roster_fingerprint or stream_config.public_roster_fingerprint
-        if not mf or not rf:
-            with self.state_manager._connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT manifest_fingerprint, public_roster_fingerprint FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
-                    (stream_config.stream_fingerprint, stream_config.epoch_id),
-                )
-                m_row = cursor.fetchone()
-                if m_row:
-                    mf = mf or m_row[0]
-                    rf = rf or m_row[1]
-
-        if not mf:
-            # Derive stable epoch manifest identity from immutable stream metadata
-            mf = f"epoch_manifest:{stream_config.stream_fingerprint}:{stream_config.epoch_id}"
-
-        if not rf and public_user_roster is not None:
-            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
-            rf = hashlib.sha256(roster_bytes).hexdigest()
+        mf, rf = self._resolve_stable_epoch_manifest(
+            stream_config=stream_config,
+            manifest_fingerprint=manifest_fingerprint,
+            public_roster_fingerprint=public_roster_fingerprint,
+            public_user_roster=public_user_roster,
+        )
 
         # 5c. Bind partition fingerprints from interactions if available
-        if partition_fingerprints is None and interactions is not None:
-            partition_fingerprints = compute_partition_fingerprints(
-                interactions=interactions,
-                epoch_start=stream_config.epoch_start,
-                start_day=1,
-                end_day=effective_fin,
-                timezone_name=stream_config.timezone,
-            )
-        elif partition_fingerprints is not None:
-            partition_fingerprints = {
-                str(k): str(v)
-                for k, v in partition_fingerprints.items()
-                if int(k) <= effective_fin
-            }
+        partition_fingerprints = self._build_finalized_partition_fingerprints(
+            stream_config=stream_config,
+            interactions=interactions,
+            effective_fin=effective_fin,
+            partition_fingerprints=partition_fingerprints,
+        )
 
         # 5d. Verify dataset manifest and partition fingerprints against sealed manifest in DB
-        with self.state_manager._connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT manifest_fingerprint, public_roster_fingerprint FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
-                (stream_config.stream_fingerprint, stream_config.epoch_id),
-            )
-            m_row = cursor.fetchone()
-            if m_row is not None:
-                persisted_mf, persisted_rf = m_row[0], m_row[1]
-                if mf and persisted_mf and persisted_mf != mf:
-                    raise ProductionSafetyConfigurationError(
-                        f"DATASET_MANIFEST_MISMATCH: stream_fingerprint={stream_config.stream_fingerprint}, epoch_id={stream_config.epoch_id} "
-                        f"has sealed manifest {persisted_mf}, but current request provided {mf}. Modifying epoch manifest is strictly forbidden."
-                    )
-                if rf and persisted_rf and persisted_rf != rf:
-                    raise ProductionSafetyConfigurationError(
-                        f"DATASET_MANIFEST_MISMATCH: public roster fingerprint mismatch for stream={stream_config.stream_fingerprint}, epoch={stream_config.epoch_id} "
-                        f"(sealed={persisted_rf}, provided={rf})."
-                    )
-            if partition_fingerprints:
-                for day_str, pfp in partition_fingerprints.items():
-                    cursor.execute(
-                        "SELECT partition_fingerprint FROM continual_epoch_partitions WHERE stream_fingerprint = ? AND epoch_id = ? AND day = ?",
-                        (stream_config.stream_fingerprint, stream_config.epoch_id, int(day_str)),
-                    )
-                    p_row = cursor.fetchone()
-                    if p_row is not None and p_row[0] != pfp:
-                        raise ProductionSafetyConfigurationError(
-                            f"DATASET_MANIFEST_MISMATCH: already finalized partition for day {day_str} cannot be mutated "
-                            f"(sealed={p_row[0]}, provided={pfp})."
-                        )
+        self._verify_dataset_and_partitions(
+            stream_config=stream_config,
+            mf=mf,
+            rf=rf,
+            partition_fingerprints=partition_fingerprints,
+        )
 
         # 6. Resolve scope
         budget_scope_id = self.resolve_scope(recipient, recipient_role=recipient_role)
@@ -363,53 +491,20 @@ class ContinualQueryEngine:
             )
 
         # 9. Materialize / Retrieve Canonical Noisy Nodes with rollback protection
-        contrib_tensor_holder: List[Optional[np.ndarray]] = [precomputed_contributions]
-
-        def _get_contributions():
-            if contrib_tensor_holder[0] is None:
-                if interactions is None or public_user_roster is None:
-                    raise ValueError(
-                        "Cannot materialize un-cached tree nodes: raw interactions and public_user_roster required."
-                    )
-                tensor, _, _ = build_temporal_user_contributions(
-                    interactions=interactions,
-                    public_user_roster=public_user_roster,
-                    epoch_start=stream_config.epoch_start,
-                    epoch_days=stream_config.epoch_days,
-                    granularity=stream_config.granularity,
-                    daily_l2_bound=stream_config.daily_l2_bound,
-                    epoch_l12_bound=stream_config.epoch_group_l12_bound,
-                    metric=stream_config.metric,
-                    timezone_name=stream_config.timezone,
-                )
-                contrib_tensor_holder[0] = tensor
-            return contrib_tensor_holder[0]
-
         try:
-            node_noisy_vectors: List[np.ndarray] = []
-            for level, node_idx in nodes_used:
-                u, v = tree.node_interval(level, node_idx)
-                def _materialize_node_exact():
-                    contribs = _get_contributions()
-                    start_idx = u - 1
-                    end_idx = min(v, stream_config.epoch_days)
-                    node_slice = contribs[:, start_idx:end_idx, :]
-                    exact_node = np.sum(node_slice, axis=(0, 1))
-                    return exact_node
-
-                noisy_node = self.state_manager.get_or_create_noisy_node(
-                    stream_config=stream_config,
-                    level=level,
-                    node_index=node_idx,
-                    sigma=sigma,
-                    materialize_fn=_materialize_node_exact,
-                    finalized_up_to_day=effective_fin,
-                    manifest_fingerprint=mf,
-                    public_roster_fingerprint=rf,
-                    current_wall_clock_day=current_wall_clock_day,
-                    partition_fingerprints=partition_fingerprints,
-                )
-                node_noisy_vectors.append(noisy_node)
+            node_noisy_vectors = self._materialize_epoch_nodes(
+                stream_config=stream_config,
+                nodes=nodes_used,
+                sigma=sigma,
+                interactions=interactions,
+                public_user_roster=public_user_roster,
+                finalized_up_to_day=effective_fin,
+                manifest_fingerprint=mf,
+                public_roster_fingerprint=rf,
+                partition_fingerprints=partition_fingerprints,
+                precomputed_contributions=precomputed_contributions,
+                current_wall_clock_day=current_wall_clock_day,
+            )
 
             # 10. Commit level exposures
             if reservations:
@@ -570,9 +665,11 @@ class ContinualQueryEngine:
         interactions_epoch_1: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         interactions_epoch_2: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         public_user_roster: Optional[Sequence[str]] = None,
-        recipient_role: str = "external",
+        recipient_role: Optional[str] = None,
         finalized_up_to_day_epoch_1: Optional[int] = None,
         finalized_up_to_day_epoch_2: Optional[int] = None,
+        current_wall_clock_day_epoch_1: Optional[int] = None,
+        current_wall_clock_day_epoch_2: Optional[int] = None,
     ) -> ContinualQueryResult:
         """Cross-epoch interval query decomposing across epoch boundaries with atomic reservation (Section 103)."""
         if not self.enabled:
@@ -637,112 +734,58 @@ class ContinualQueryEngine:
                 recipient_roles=self.recipient_roles,
             )
 
-        mf_1 = epoch_1_config.dataset_fingerprint
-        if not mf_1 and interactions_epoch_1 is not None:
-            if isinstance(interactions_epoch_1, pd.DataFrame):
-                data_bytes = str(interactions_epoch_1.to_dict(orient="records")).encode("utf-8")
-            else:
-                data_bytes = json.dumps(interactions_epoch_1, sort_keys=True).encode("utf-8")
-            mf_1 = hashlib.sha256(data_bytes).hexdigest()
+        eff_fin_1 = finalized_up_to_day_epoch_1 if finalized_up_to_day_epoch_1 is not None else epoch_1_config.epoch_days
+        eff_fin_2 = finalized_up_to_day_epoch_2 if finalized_up_to_day_epoch_2 is not None else epoch_2_config.epoch_days
 
-        rf_1 = epoch_1_config.public_roster_fingerprint
-        if not rf_1 and public_user_roster is not None:
-            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
-            rf_1 = hashlib.sha256(roster_bytes).hexdigest()
+        mf_1, rf_1 = self._resolve_stable_epoch_manifest(
+            epoch_1_config,
+            public_user_roster=public_user_roster,
+        )
+        mf_2, rf_2 = self._resolve_stable_epoch_manifest(
+            epoch_2_config,
+            public_user_roster=public_user_roster,
+        )
 
-        mf_2 = epoch_2_config.dataset_fingerprint
-        if not mf_2 and interactions_epoch_2 is not None:
-            if isinstance(interactions_epoch_2, pd.DataFrame):
-                data_bytes = str(interactions_epoch_2.to_dict(orient="records")).encode("utf-8")
-            else:
-                data_bytes = json.dumps(interactions_epoch_2, sort_keys=True).encode("utf-8")
-            mf_2 = hashlib.sha256(data_bytes).hexdigest()
+        pfp_1 = self._build_finalized_partition_fingerprints(
+            epoch_1_config,
+            interactions_epoch_1,
+            eff_fin_1,
+        )
+        pfp_2 = self._build_finalized_partition_fingerprints(
+            epoch_2_config,
+            interactions_epoch_2,
+            eff_fin_2,
+        )
 
-        rf_2 = epoch_2_config.public_roster_fingerprint
-        if not rf_2 and public_user_roster is not None:
-            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
-            rf_2 = hashlib.sha256(roster_bytes).hexdigest()
+        self._verify_dataset_and_partitions(epoch_1_config, mf_1, rf_1, pfp_1)
+        self._verify_dataset_and_partitions(epoch_2_config, mf_2, rf_2, pfp_2)
 
         # 4. Materialize nodes with rollback on error
         try:
-            def _contribs_1():
-                if interactions_epoch_1 is None or public_user_roster is None:
-                    raise ValueError("Cannot materialize epoch 1 nodes: interactions and roster required.")
-                tensor, _, _ = build_temporal_user_contributions(
-                    interactions=interactions_epoch_1,
-                    public_user_roster=public_user_roster,
-                    epoch_start=epoch_1_config.epoch_start,
-                    epoch_days=epoch_1_config.epoch_days,
-                    granularity=epoch_1_config.granularity,
-                    daily_l2_bound=epoch_1_config.daily_l2_bound,
-                    epoch_l12_bound=epoch_1_config.epoch_group_l12_bound,
-                    metric=epoch_1_config.metric,
-                    timezone_name=epoch_1_config.timezone,
-                )
-                return tensor
-
-            def _contribs_2():
-                if interactions_epoch_2 is None or public_user_roster is None:
-                    raise ValueError("Cannot materialize epoch 2 nodes: interactions and roster required.")
-                tensor, _, _ = build_temporal_user_contributions(
-                    interactions=interactions_epoch_2,
-                    public_user_roster=public_user_roster,
-                    epoch_start=epoch_2_config.epoch_start,
-                    epoch_days=epoch_2_config.epoch_days,
-                    granularity=epoch_2_config.granularity,
-                    daily_l2_bound=epoch_2_config.daily_l2_bound,
-                    epoch_l12_bound=epoch_2_config.epoch_group_l12_bound,
-                    metric=epoch_2_config.metric,
-                    timezone_name=epoch_2_config.timezone,
-                )
-                return tensor
-
-            tensor_1_holder: List[Optional[np.ndarray]] = [None]
-            tensor_2_holder: List[Optional[np.ndarray]] = [None]
-
-            node_vectors_1 = []
-            for lvl, n_idx in nodes_used_1:
-                u, v = tree_1.node_interval(lvl, n_idx)
-                def _mat_1():
-                    if tensor_1_holder[0] is None:
-                        tensor_1_holder[0] = _contribs_1()
-                    s_idx = u - 1
-                    e_idx = min(v, epoch_1_config.epoch_days)
-                    return np.sum(tensor_1_holder[0][:, s_idx:e_idx, :], axis=(0, 1))
-
-                noisy = self.state_manager.get_or_create_noisy_node(
-                    stream_config=epoch_1_config,
-                    level=lvl,
-                    node_index=n_idx,
-                    sigma=sigma_1,
-                    materialize_fn=_mat_1,
-                    finalized_up_to_day=finalized_up_to_day_epoch_1,
-                    manifest_fingerprint=mf_1,
-                    public_roster_fingerprint=rf_1,
-                )
-                node_vectors_1.append(noisy)
-
-            node_vectors_2 = []
-            for lvl, n_idx in nodes_used_2:
-                u, v = tree_2.node_interval(lvl, n_idx)
-                def _mat_2():
-                    if tensor_2_holder[0] is None:
-                        tensor_2_holder[0] = _contribs_2()
-                    s_idx = u - 1
-                    e_idx = min(v, epoch_2_config.epoch_days)
-                    return np.sum(tensor_2_holder[0][:, s_idx:e_idx, :], axis=(0, 1))
-
-                noisy = self.state_manager.get_or_create_noisy_node(
-                    stream_config=epoch_2_config,
-                    level=lvl,
-                    node_index=n_idx,
-                    sigma=sigma_2,
-                    materialize_fn=_mat_2,
-                    finalized_up_to_day=finalized_up_to_day_epoch_2,
-                    manifest_fingerprint=mf_2,
-                    public_roster_fingerprint=rf_2,
-                )
-                node_vectors_2.append(noisy)
+            node_vectors_1 = self._materialize_epoch_nodes(
+                stream_config=epoch_1_config,
+                nodes=nodes_used_1,
+                sigma=sigma_1,
+                interactions=interactions_epoch_1,
+                public_user_roster=public_user_roster,
+                finalized_up_to_day=eff_fin_1,
+                manifest_fingerprint=mf_1,
+                public_roster_fingerprint=rf_1,
+                partition_fingerprints=pfp_1,
+                current_wall_clock_day=current_wall_clock_day_epoch_1,
+            )
+            node_vectors_2 = self._materialize_epoch_nodes(
+                stream_config=epoch_2_config,
+                nodes=nodes_used_2,
+                sigma=sigma_2,
+                interactions=interactions_epoch_2,
+                public_user_roster=public_user_roster,
+                finalized_up_to_day=eff_fin_2,
+                manifest_fingerprint=mf_2,
+                public_roster_fingerprint=rf_2,
+                partition_fingerprints=pfp_2,
+                current_wall_clock_day=current_wall_clock_day_epoch_2,
+            )
 
             # 5. Commit all reservations across both epochs
             if all_reservations:

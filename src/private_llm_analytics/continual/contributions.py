@@ -162,17 +162,29 @@ def build_temporal_user_contributions(
 
     daily_clipped_tensor = raw_target_tensor * daily_clip_factors[:, :, np.newaxis]
 
-    # 2. Epoch Group-L1-of-L2 Clipping:
-    # S_u = sum_t ||y_{u, t}||_2
-    # z_{u, t} = y_{u, t} * min(1, C_epoch / S_u)
-    clipped_daily_norms = np.linalg.norm(daily_clipped_tensor, axis=2)  # (n_users, epoch_days)
-    epoch_group_norms = np.sum(clipped_daily_norms, axis=1)  # (n_users,)
+    # 2. Prefix-Stable Online Group Bounding (Chronological remaining-budget filter)
+    # R_{u, 0} = C_epoch
+    # For t = 0 .. epoch_days - 1:
+    #   if ||y_{u, t}||_2 == 0:
+    #       z_{u, t} = 0, R_{u, t} = R_{u, t-1}
+    #   else:
+    #       a_{u, t} = min(1.0, R_{u, t-1} / ||y_{u, t}||_2)
+    #       z_{u, t} = a_{u, t} * y_{u, t}
+    #       R_{u, t} = max(0.0, R_{u, t-1} - ||z_{u, t}||_2)
+    final_contributions = np.zeros_like(daily_clipped_tensor)
+    remaining_budget = np.full(n_users, float(epoch_l12_bound), dtype=np.float64)
 
-    epoch_clip_factors = np.ones_like(epoch_group_norms)
-    active_users = epoch_group_norms > 1e-12
-    epoch_clip_factors[active_users] = np.minimum(1.0, epoch_l12_bound / epoch_group_norms[active_users])
-
-    final_contributions = daily_clipped_tensor * epoch_clip_factors[:, np.newaxis, np.newaxis]
+    for t in range(epoch_days):
+        y_t = daily_clipped_tensor[:, t, :]  # (n_users, dim_target)
+        norms_t = np.linalg.norm(y_t, axis=1)  # (n_users,)
+        active_t = norms_t > 1e-12
+        if np.any(active_t):
+            alpha_t = np.zeros(n_users, dtype=np.float64)
+            alpha_t[active_t] = np.minimum(1.0, np.maximum(0.0, remaining_budget[active_t]) / norms_t[active_t])
+            z_t = y_t * alpha_t[:, np.newaxis]
+            z_norms_t = np.linalg.norm(z_t, axis=1)
+            remaining_budget = np.maximum(0.0, remaining_budget - z_norms_t)
+            final_contributions[:, t, :] = z_t
 
     # Diagnostics calculation
     raw_total = float(np.sum(raw_target_tensor))
@@ -181,6 +193,10 @@ def build_temporal_user_contributions(
 
     daily_bias = raw_total - daily_clipped_total
     temporal_bias = daily_clipped_total - epoch_clipped_total
+
+    clipped_daily_norms = np.linalg.norm(daily_clipped_tensor, axis=2)  # (n_users, epoch_days)
+    epoch_group_norms = np.sum(clipped_daily_norms, axis=1)  # (n_users,)
+    active_users = epoch_group_norms > 1e-12
 
     n_active_daily = int(np.sum(active_daily))
     n_clipped_daily = int(np.sum(active_daily & (daily_norms > daily_l2_bound + 1e-10)))

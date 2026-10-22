@@ -429,18 +429,25 @@ In literature, continual observation is often presented under **event-level DP**
 - A user may participate actively on every single day, or concentrate their activity in bursts.
 - Treating daily events as independent would lead to a catastrophic privacy violation.
 
-### 3. Group-$L_1$-of-$L_2$ Temporal Contribution Bounding
-To provide rigorous user-level differential privacy across continuous temporal queries, v0.4 establishes a two-stage hierarchical contribution bounding operator:
+### 3. Prefix-Stable Online Group-$L_1$-of-$L_2$ Temporal Contribution Bounding
+To provide rigorous user-level differential privacy across progressive continual observation and avoid sensitivity overshoot from retrospective rescaling, v0.4 implements an **online remaining-budget chronological filter**:
 
 1. **Target-Space Projection**: Raw daily 9-cell interaction vectors are first projected into the target granularity space $\mathbb{R}^d$ via linear operator $A_G$:
    $$x_{u, t} = A_G m_{u, t}$$
 2. **Daily $L_2$ Clipping**: Daily contributions are clipped to bound $C_{\text{day}}$:
    $$y_{u, t} = x_{u, t} \cdot \min\left(1, \frac{C_{\text{day}}}{\max(\|x_{u, t}\|_2, 10^{-12})}\right)$$
-3. **Epoch Group-$L_1$-of-$L_2$ Clipping**: The user's total temporal activity across the epoch $T$ is bounded by evaluating the sum of daily $L_2$ norms $S_u = \sum_{t=1}^T \|y_{u, t}\|_2$, and scaling all daily vectors by:
-   $$z_{u, t} = y_{u, t} \cdot \min\left(1, \frac{C_{\text{epoch}}}{\max(S_u, 10^{-12})}\right)$$
+3. **Prefix-Stable Chronological Remaining-Budget Filter**: Let $R_{u, 0} = C_{\text{epoch}}$. For each chronological day $t = 1 \dots T$:
+   - If $\|y_{u, t}\|_2 = 0$: $z_{u, t} = 0$ and $R_{u, t} = R_{u, t-1}$.
+   - Else:
+     $$\alpha_{u, t} = \min\left(1, \frac{R_{u, t-1}}{\|y_{u, t}\|_2}\right)$$
+     $$z_{u, t} = \alpha_{u, t} \cdot y_{u, t}$$
+     $$R_{u, t} = \max\left(0, R_{u, t-1} - \|z_{u, t}\|_2\right)$$
 
-This mathematical construction guarantees two simultaneous invariants for every user $u$ and day $t$:
-$$\|z_{u, t}\|_2 \le C_{\text{day}} \quad \text{and} \quad \sum_{t=1}^T \|z_{u, t}\|_2 \le C_{\text{epoch}}$$
+**Mathematical Invariants & Prefix Stability**:
+- **Prefix Stability**: $z_{u, 1:t}$ depends strictly on $y_{u, 1:t}$ and never changes when subsequent days $t+1 \dots T$ arrive.
+- **Bounded Sum**: By construction, $\sum_{t=1}^T \|z_{u, t}\|_2 = \sum_{t=1}^T (R_{u, t-1} - R_{u, t}) = R_{u, 0} - R_{u, T} \le C_{\text{epoch}}$.
+- **Simultaneous Invariants**: For every user $u$ and day $t$:
+  $$\|z_{u, t}\|_2 \le C_{\text{day}} \quad \text{and} \quad \sum_{t=1}^T \|z_{u, t}\|_2 \le C_{\text{epoch}}$$
 
 ### 4. Per-Level Sensitivity Proof for Binary Time Trees
 A binary time tree decomposes an epoch of $T$ days (padded to $\text{tree\_size} = 2^{\lceil \log_2(T) \rceil}$) into $L = \lceil \log_2(T) \rceil + 1$ dyadic levels:
@@ -525,5 +532,5 @@ The v0.4 Continual Observation implementation is subject to the following explic
 | **Exp 15: Noise Reduction** | Noise Reduction Factor (Fixed $\epsilon=2.0$) | At fixed lifetime $\epsilon=2.0$, tree achieves **up to 4.14x lower query noise MAE** for 30-day queries over a 1-year horizon. |
 | **Exp 16: Prefix Tracking** | Cumulative Noise Growth | Prefix query noise grows as $O(\log t)$ in binary tree vs. $O(t)$ linear variance growth in independent daily sums (**up to 3.98x noise reduction** at $t=90$). |
 | **Exp 17: Sliding-Window DP** | Lifetime Privacy Savings | Over a 365-day horizon, daily 7-day sliding-window releases accumulate $\epsilon=952.76$ under independent releases vs. $\epsilon=53.82$ under binary tree (**17.7x lifetime privacy savings**). |
-| **Exp 18: Temporal Clipping Tradeoff** | Bias-Variance Pareto Frontier | As $C_{\text{epoch}}$ increases from 10 to 160 (at $C_{\text{day}}=10$), relative clipping bias drops from $91.5\%$ to $2.7\%$, while relative DP noise increases from $0.6\%$ to $9.8\%$. Minimum total relative error is achieved at $C_{\text{epoch}}=160$. |
-| **Exp 19: Long-Horizon System Scaling** | Query Latency & Storage Footprint | Cached query latency remained below approximately 75 ms p95 through $T=730$ in this experiment ($\approx 26.3$ ms avg at $T=30$ to $\approx 56.2$ ms avg at $T=730$). SQLite footprint reached approximately 460 KB at $T=730$. First materialization cost rises materially with horizon and reached about 59.7 s at $T=730$ in this Python/SQLite prototype. |
+| **Exp 18: Temporal Clipping Tradeoff** | Bias-Variance Pareto Frontier | As $C_{\text{epoch}}$ increases from 10 to 160 (at $C_{\text{day}}=10$), relative clipping bias drops from $91.7\%$ to $2.7\%$, while relative DP noise increases from $0.6\%$ to $9.8\%$. Minimum total relative error is achieved at $C_{\text{epoch}}=160$. |
+| **Exp 19: Long-Horizon System Scaling** | Query Latency & Storage Footprint | Cached query latency remained below approximately 63 ms p95 through $T=730$ in this experiment ($\approx 27.5$ ms avg at $T=30$ to $\approx 52.4$ ms avg at $T=730$; p95 $32.9$ ms at $T=30$ to $57.5$ ms at $T=730$). SQLite footprint reached 460 KB at $T=730$ (144 KB at $T=30$). First materialization cost rises with horizon from 310.4 ms at $T=30$ to approximately 65.7 s at $T=730$ in this Python/SQLite prototype. |
