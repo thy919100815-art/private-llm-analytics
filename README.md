@@ -1,23 +1,33 @@
 # Private LLM Analytics
 
-User-level differential privacy analytics for enterprise LLM usage.
+**Protect enterprise LLM usage analytics at the user level—even across repeated reports over time.**
+
+User-level DP · Lifetime RDP Accounting · Multi-Recipient Composition · Continual Observation · Sliding-Window Releases
 
 [![CI](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/ci.yml)
 [![Release Gate](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/release-gate.yml/badge.svg?branch=main)](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/release-gate.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
+[![Latest Release](https://img.shields.io/github/v/release/thy919100815-art/private-llm-analytics?color=orange)](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.4.0)
+
+Private LLM Analytics is a privacy layer for organizations that need to analyze employee usage of multiple LLM providers without exposing individual user behavior to external vendors or analysts.
+
+Current stable release: [`v0.4.0`](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.4.0)
 
 ---
 
-## Why
+## Why This Exists
 
-Enterprises increasingly deploy multiple frontier Large Language Models across diverse internal business units. IT, procurement, and AI governance teams need accurate empirical telemetry to monitor workforce adoption, task migration, and provider utilization.
+**How can an organization share LLM usage statistics with external model vendors without exposing individual employee behavior—even after repeated reports over time?**
 
-However, releasing aggregated usage summaries to external model providers, market evaluators, or public benchmarking dashboards introduces critical privacy vulnerabilities:
-- In sparse task categories or small organizations, exact interaction counts can expose individual employee workflows, sensitive project initiatives, or anomalous behavioral patterns.
-- Repeated longitudinal reporting on recurring cadences enables reconstruction and noise-averaging attacks against employees.
+Enterprises increasingly deploy multiple frontier LLM providers across internal business units. IT, procurement, and AI governance teams need empirical telemetry to monitor adoption patterns, capability migration, and provider utilization.
 
-**Private LLM Analytics** provides a production-grade, mathematically verified Differential Privacy layer that operates between enterprise raw telemetry logs and external analytics consumers.
+However, sharing telemetry with external model vendors or analysts introduces critical privacy risks:
+- In sparse task categories or specialized teams, exact interaction counts can expose individual employee workflows, sensitive internal initiatives, or anomalous behavioral patterns.
+- Repeated longitudinal reports on recurring cadences accumulate privacy loss, enabling noise-averaging or reconstruction attacks.
+- External vendors may retain released reports indefinitely, requiring non-replenishing lifetime privacy accounting.
+
+Private LLM Analytics provides a security-hardened user-level differential privacy analytics layer with persistent privacy accounting, tested security invariants, and reproducible evaluation.
 
 ---
 
@@ -47,38 +57,25 @@ Statistical aggregates are computed across a standard $3 \times 3$ Provider $\ti
 
 ## Architecture
 
-```text
- +------------------------------------------------------------------+
- |                     Enterprise Telemetry Logs                    |
- +------------------------------------------------------------------+
-                                  |
-                                  v
- +------------------------------------------------------------------+
- |               Private LLM Analytics (Trusted Curator)            |
- |                                                                  |
- |  [User Grouping & Prefix-Stable Contribution Bounding]           |
- |  [Binary Time Tree / Dyadic Node Decomposer]                     |
- |  [Release Orchestrator & Utility Planner]                        |
- |                                                                  |
- |  +------------------------------------------------------------+  |
- |  |            Authoritative Privacy State Manager             |  |
- |  |  - Atomic Reservations (SQLite CAS / Fencing)             |  |
- |  |  - Lifetime RDP Accumulator (Order-wise sum)               |  |
- |  |  - Multi-Recipient Scope Resolver                          |  |
- |  |  - Canonical Node Memoization Cache                        |  |
- |  +------------------------------------------------------------+  |
- |                                |                                 |
- |                                v                                 |
- |  [Calibrated DP Noise Addition (Gaussian / Laplace)]             |
- +------------------------------------------------------------------+
-                                  |
-         +------------------------+------------------------+
-         |                                                 |
-         v                                                 v
-+------------------+                              +------------------+
-| External Model   |                              | Public / Partner |
-| Providers (A, B) |                              | Dashboards       |
-+------------------+                              +------------------+
+```mermaid
+flowchart LR
+    A[Enterprise LLM Telemetry]
+    B[User-Level Contribution Bounding]
+    C[DP Release Engine]
+    D[Lifetime RDP Accountant]
+    E[Persistent Privacy State]
+    F[Provider / External Recipient]
+    G[Continual Observation Tree]
+    H[Sliding / Prefix / Interval Queries]
+
+    A --> B
+    B --> C
+    C --> D
+    D --> E
+    C --> F
+    B --> G
+    G --> H
+    H --> F
 ```
 
 ---
@@ -107,7 +104,7 @@ Statistical aggregates are computed across a standard $3 \times 3$ Provider $\ti
 git clone https://github.com/thy919100815-art/private-llm-analytics.git
 cd private-llm-analytics
 pip install -e ".[dev]"
-pytest tests/ -q
+python -m pytest tests/ -q
 ```
 
 ### Minimal Usage Example
@@ -235,7 +232,7 @@ Please see [`SECURITY.md`](SECURITY.md) for security policies, vulnerability rep
 ## Limitations
 
 - **Central Differential Privacy**: Assumes a trusted curator operating within the enterprise security boundary; does not support local DP (LDP) or shuffle/federated models.
-- **Continual Metric Scope**: The production continual observation tree mechanism is currently verified for Interaction Volume with the Gaussian mechanism. Continual prevalence and normalized share mechanisms remain subjects for future releases.
+- **Continual Metric Scope**: The continual observation tree mechanism is verified for Interaction Volume with the Gaussian mechanism. Continual prevalence and normalized share mechanisms remain subjects for future releases.
 - **Fixed Public Topology**: Tree structure and interval partitions are public, fixed, and data-independent. Dynamic or data-dependent tree topologies are not supported.
 - **Temporal Clipping Bias**: Prefix-stable online clipping introduces deterministic clipping bias for high-frequency users across long horizons, which must be balanced against additive DP noise variance.
 
