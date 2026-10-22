@@ -194,14 +194,68 @@ class ContinualQueryEngine:
 
         return mf, rf or f"roster:{stream_config.stream_fingerprint}"
 
+    def _resolve_effective_finalized_frontier(
+        self,
+        stream_config: ContinualStreamConfig,
+        nodes_needed: Sequence[Tuple[int, int]],
+        requested_finalized_up_to_day: Optional[int],
+    ) -> Tuple[Optional[int], bool]:
+        """Resolve effective finalized frontier with fail-closed production safety.
+
+        Semantics:
+        A. If requested boundary is supplied: use it.
+        B. If omitted: read persisted continual_epoch_manifests.finalized_up_to_day.
+           If a persisted frontier exists: use it.
+        C. If no persisted frontier exists:
+           - if every required node is already COMMITTED: cached query may proceed without raw rematerialization;
+           - otherwise: FAIL CLOSED with ProductionSafetyConfigurationError.
+        """
+        all_nodes_committed = True
+        with self.state_manager._connection() as conn:
+            cursor = conn.cursor()
+            for lvl, n_idx in nodes_needed:
+                nid = compute_continual_node_id(stream_config.stream_fingerprint, stream_config.epoch_id, lvl, n_idx)
+                cursor.execute("SELECT 1 FROM continual_nodes WHERE node_id = ? AND status = 'COMMITTED'", (nid,))
+                if cursor.fetchone() is None:
+                    all_nodes_committed = False
+                    break
+
+        persisted_fin = None
+        with self.state_manager._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT finalized_up_to_day FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                (stream_config.stream_fingerprint, stream_config.epoch_id),
+            )
+            m_row = cursor.fetchone()
+            if m_row is not None:
+                persisted_fin = m_row[0]
+
+        if requested_finalized_up_to_day is not None:
+            effective_fin = requested_finalized_up_to_day
+        elif persisted_fin is not None:
+            effective_fin = persisted_fin
+        else:
+            if all_nodes_committed:
+                effective_fin = None
+            else:
+                raise ProductionSafetyConfigurationError(
+                    "Fail-closed: finalized_up_to_day REQUIRED in production: "
+                    "no authoritative finalized boundary exists to materialize new continual tree nodes."
+                )
+
+        return effective_fin, all_nodes_committed
+
     def _build_finalized_partition_fingerprints(
         self,
         stream_config: ContinualStreamConfig,
         interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]],
-        effective_fin: int,
+        effective_fin: Optional[int],
         partition_fingerprints: Optional[Dict[str, str]] = None,
     ) -> Optional[Dict[str, str]]:
         """Compute or filter partition fingerprints strictly up to authoritative finalized frontier."""
+        if effective_fin is None:
+            return partition_fingerprints
         if partition_fingerprints is None and interactions is not None:
             return compute_partition_fingerprints(
                 interactions=interactions,
@@ -392,44 +446,18 @@ class ContinualQueryEngine:
         levels_used = sorted(list({lvl for lvl, _ in nodes_used}))
 
         # 3. Finalized day guard (Section 36, 101)
-        all_nodes_committed = True
-        with self.state_manager._connection() as conn:
-            cursor = conn.cursor()
-            for lvl, n_idx in nodes_used:
-                nid = compute_continual_node_id(stream_config.stream_fingerprint, stream_config.epoch_id, lvl, n_idx)
-                cursor.execute("SELECT 1 FROM continual_nodes WHERE node_id = ? AND status = 'COMMITTED'", (nid,))
-                if cursor.fetchone() is None:
-                    all_nodes_committed = False
-                    break
+        effective_fin, all_nodes_committed = self._resolve_effective_finalized_frontier(
+            stream_config=stream_config,
+            nodes_needed=nodes_used,
+            requested_finalized_up_to_day=finalized_up_to_day,
+        )
 
         if not all_nodes_committed:
-            with self.state_manager._connection() as conn:
-                cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT finalized_up_to_day FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
-                    (stream_config.stream_fingerprint, stream_config.epoch_id),
-                )
-                m_row = cursor.fetchone()
-                persisted_fin = m_row[0] if m_row is not None else None
-
-            if finalized_up_to_day is None:
-                if persisted_fin is not None:
-                    effective_fin = persisted_fin
-                else:
-                    raise ProductionSafetyConfigurationError(
-                        "Fail-closed: finalized_up_to_day REQUIRED in production: "
-                        "no authoritative finalized boundary exists to materialize new continual tree nodes."
-                    )
-            else:
-                effective_fin = finalized_up_to_day
-
-            if end_day > effective_fin:
+            if effective_fin is None or end_day > effective_fin:
                 raise ProductionSafetyConfigurationError(
                     f"DATA_NOT_FINALIZED: Requested interval [{start_day}, {end_day}] "
                     f"exceeds finalized day {effective_fin}."
                 )
-        else:
-            effective_fin = finalized_up_to_day
 
         # 4. Validate interval
         if not (1 <= start_day <= end_day <= stream_config.epoch_days):
@@ -734,34 +762,58 @@ class ContinualQueryEngine:
                 recipient_roles=self.recipient_roles,
             )
 
-        eff_fin_1 = finalized_up_to_day_epoch_1 if finalized_up_to_day_epoch_1 is not None else epoch_1_config.epoch_days
-        eff_fin_2 = finalized_up_to_day_epoch_2 if finalized_up_to_day_epoch_2 is not None else epoch_2_config.epoch_days
-
-        mf_1, rf_1 = self._resolve_stable_epoch_manifest(
-            epoch_1_config,
-            public_user_roster=public_user_roster,
-        )
-        mf_2, rf_2 = self._resolve_stable_epoch_manifest(
-            epoch_2_config,
-            public_user_roster=public_user_roster,
-        )
-
-        pfp_1 = self._build_finalized_partition_fingerprints(
-            epoch_1_config,
-            interactions_epoch_1,
-            eff_fin_1,
-        )
-        pfp_2 = self._build_finalized_partition_fingerprints(
-            epoch_2_config,
-            interactions_epoch_2,
-            eff_fin_2,
-        )
-
-        self._verify_dataset_and_partitions(epoch_1_config, mf_1, rf_1, pfp_1)
-        self._verify_dataset_and_partitions(epoch_2_config, mf_2, rf_2, pfp_2)
-
         # 4. Materialize nodes with rollback on error
         try:
+            # 4a. Finalized frontier resolution and range checks (Sections 2, 3)
+            eff_fin_1, all_committed_1 = self._resolve_effective_finalized_frontier(
+                stream_config=epoch_1_config,
+                nodes_needed=nodes_used_1,
+                requested_finalized_up_to_day=finalized_up_to_day_epoch_1,
+            )
+            eff_fin_2, all_committed_2 = self._resolve_effective_finalized_frontier(
+                stream_config=epoch_2_config,
+                nodes_needed=nodes_used_2,
+                requested_finalized_up_to_day=finalized_up_to_day_epoch_2,
+            )
+
+            # Cross-epoch range check (Section 3)
+            if not all_committed_1:
+                if eff_fin_1 is None or epoch_1_config.epoch_days > eff_fin_1:
+                    raise ProductionSafetyConfigurationError(
+                        f"DATA_NOT_FINALIZED: Cross-epoch Part 1 requires finalized up to day {epoch_1_config.epoch_days}, "
+                        f"but effective finalized day is {eff_fin_1}."
+                    )
+
+            if not all_committed_2:
+                if eff_fin_2 is None or epoch_2_end_day > eff_fin_2:
+                    raise ProductionSafetyConfigurationError(
+                        f"DATA_NOT_FINALIZED: Cross-epoch Part 2 requires finalized up to day {epoch_2_end_day}, "
+                        f"but effective finalized day is {eff_fin_2}."
+                    )
+
+            mf_1, rf_1 = self._resolve_stable_epoch_manifest(
+                epoch_1_config,
+                public_user_roster=public_user_roster,
+            )
+            mf_2, rf_2 = self._resolve_stable_epoch_manifest(
+                epoch_2_config,
+                public_user_roster=public_user_roster,
+            )
+
+            pfp_1 = self._build_finalized_partition_fingerprints(
+                epoch_1_config,
+                interactions_epoch_1,
+                eff_fin_1,
+            )
+            pfp_2 = self._build_finalized_partition_fingerprints(
+                epoch_2_config,
+                interactions_epoch_2,
+                eff_fin_2,
+            )
+
+            self._verify_dataset_and_partitions(epoch_1_config, mf_1, rf_1, pfp_1)
+            self._verify_dataset_and_partitions(epoch_2_config, mf_2, rf_2, pfp_2)
+
             node_vectors_1 = self._materialize_epoch_nodes(
                 stream_config=epoch_1_config,
                 nodes=nodes_used_1,

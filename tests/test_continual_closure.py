@@ -2378,3 +2378,179 @@ def test_cross_epoch_progressive_second_epoch_growth_succeeds(tmp_path: Path):
     )
     assert r2 is not None
 
+
+# ============================================================
+# Section N: Cross-Epoch Authoritative Finalized Frontier Tests
+# ============================================================
+
+def test_cross_epoch_omitted_frontier_does_not_assume_full_epoch(tmp_path: Path):
+    """When finalized frontier is omitted and no persisted manifest exists, cross-epoch query must fail closed."""
+    db_file = tmp_path / "cross_no_assume_full.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(4)]
+    cfg1 = ContinualStreamConfig(stream_id="s1_omitted", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+    cfg2 = ContinualStreamConfig(stream_id="s2_omitted", epoch_id="ep2", epoch_days=30, epoch_start="2026-02-01")
+
+    df_1 = pd.DataFrame(_generate_day_records(roster, 30))
+    df_2_10 = pd.DataFrame(
+        [rec for d in range(1, 11) for rec in _generate_day_records(roster, d, base_date="2026-02-01")]
+    )
+
+    # Calling query_cross_epoch without finalized_up_to_day_epoch_2 must FAIL CLOSED
+    with pytest.raises(ProductionSafetyConfigurationError) as exc_info:
+        engine.query_cross_epoch(
+            cfg1, 25, cfg2, 8, recipient="Analyst",
+            interactions_epoch_1=df_1, interactions_epoch_2=df_2_10, public_user_roster=roster,
+            finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=None,
+        )
+    assert "Fail-closed: finalized_up_to_day REQUIRED" in str(exc_info.value)
+
+
+def test_cross_epoch_uses_persisted_finalized_frontier_when_argument_omitted(tmp_path: Path):
+    """When frontier argument is omitted, query_cross_epoch uses persisted finalized frontier from manifest."""
+    db_file = tmp_path / "cross_persisted_frontier.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(4)]
+    cfg1 = ContinualStreamConfig(stream_id="s1_persisted", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+    cfg2 = ContinualStreamConfig(stream_id="s2_persisted", epoch_id="ep2", epoch_days=30, epoch_start="2026-02-01")
+
+    df_1 = pd.DataFrame(_generate_day_records(roster, 30))
+    df_2_10 = pd.DataFrame(
+        [rec for d in range(1, 11) for rec in _generate_day_records(roster, d, base_date="2026-02-01")]
+    )
+
+    # Pre-register / persist manifest with finalized_up_to_day=10 for epoch 2
+    cont_mgr.register_stream(cfg2)
+    cont_mgr.state_manager.register_or_verify_epoch_manifest(
+        stream_fingerprint=cfg2.stream_fingerprint,
+        epoch_id=cfg2.epoch_id,
+        manifest_fingerprint="mf_ep2_10",
+        public_roster_fingerprint="rf_ep2",
+        finalized_up_to_day=10,
+    )
+
+    # Pre-register manifest for epoch 1
+    cont_mgr.register_stream(cfg1)
+    cont_mgr.state_manager.register_or_verify_epoch_manifest(
+        stream_fingerprint=cfg1.stream_fingerprint,
+        epoch_id=cfg1.epoch_id,
+        manifest_fingerprint="mf_ep1_30",
+        public_roster_fingerprint="rf_ep1",
+        finalized_up_to_day=30,
+    )
+
+    # Query Epoch 2 [1, 10] without passing boundary -> MUST PASS
+    res = engine.query_cross_epoch(
+        cfg1, 25, cfg2, 10, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2_10, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=None, finalized_up_to_day_epoch_2=None,
+    )
+    assert res is not None
+
+    # Query Epoch 2 [1, 11] without passing boundary -> MUST FAIL with DATA_NOT_FINALIZED
+    with pytest.raises(ProductionSafetyConfigurationError) as exc_info:
+        engine.query_cross_epoch(
+            cfg1, 25, cfg2, 11, recipient="Analyst",
+            interactions_epoch_1=df_1, interactions_epoch_2=df_2_10, public_user_roster=roster,
+            finalized_up_to_day_epoch_1=None, finalized_up_to_day_epoch_2=None,
+        )
+    assert "DATA_NOT_FINALIZED" in str(exc_info.value)
+
+
+def test_cross_epoch_omitted_frontier_does_not_preseal_future_days(tmp_path: Path):
+    """Querying at persisted frontier 10 without argument must not pre-seal days 11..30 in partitions table."""
+    db_file = tmp_path / "cross_no_preseal.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(4)]
+    cfg1 = ContinualStreamConfig(stream_id="s1_preseal", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+    cfg2 = ContinualStreamConfig(stream_id="s2_preseal", epoch_id="ep2", epoch_days=30, epoch_start="2026-02-01")
+
+    df_1 = pd.DataFrame(_generate_day_records(roster, 30))
+    df_2_10 = pd.DataFrame(
+        [rec for d in range(1, 11) for rec in _generate_day_records(roster, d, base_date="2026-02-01")]
+    )
+
+    cont_mgr.register_stream(cfg1)
+    cont_mgr.state_manager.register_or_verify_epoch_manifest(
+        stream_fingerprint=cfg1.stream_fingerprint,
+        epoch_id=cfg1.epoch_id,
+        manifest_fingerprint="mf1",
+        public_roster_fingerprint="rf1",
+        finalized_up_to_day=30,
+    )
+    cont_mgr.register_stream(cfg2)
+    cont_mgr.state_manager.register_or_verify_epoch_manifest(
+        stream_fingerprint=cfg2.stream_fingerprint,
+        epoch_id=cfg2.epoch_id,
+        manifest_fingerprint="mf2",
+        public_roster_fingerprint="rf2",
+        finalized_up_to_day=10,
+    )
+
+    res = engine.query_cross_epoch(
+        cfg1, 28, cfg2, 8, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2_10, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=None, finalized_up_to_day_epoch_2=None,
+    )
+    assert res is not None
+
+    with cont_mgr._connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT day FROM continual_epoch_partitions WHERE stream_fingerprint = ? AND epoch_id = ? ORDER BY day",
+            (cfg2.stream_fingerprint, cfg2.epoch_id),
+        )
+        sealed_days = [row[0] for row in cursor.fetchall()]
+
+    # Must NOT contain any days > 10
+    future_sealed = [d for d in sealed_days if d > 10]
+    assert len(future_sealed) == 0, f"Future days incorrectly pre-sealed: {future_sealed}"
+
+
+def test_cross_epoch_cached_nodes_can_replay_without_frontier(tmp_path: Path):
+    """If all required nodes across both epochs are committed, replay succeeds with no raw data and no frontier."""
+    db_file = tmp_path / "cross_replay.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(4)]
+    cfg1 = ContinualStreamConfig(stream_id="s1_replay", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+    cfg2 = ContinualStreamConfig(stream_id="s2_replay", epoch_id="ep2", epoch_days=30, epoch_start="2026-02-01")
+
+    df_1 = pd.DataFrame(_generate_day_records(roster, 30))
+    df_2 = pd.DataFrame(
+        [rec for d in range(1, 11) for rec in _generate_day_records(roster, d, base_date="2026-02-01")]
+    )
+
+    # Initial query materializes the required nodes
+    res1 = engine.query_cross_epoch(
+        cfg1, 25, cfg2, 8, recipient="Analyst",
+        interactions_epoch_1=df_1, interactions_epoch_2=df_2, public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30, finalized_up_to_day_epoch_2=10,
+    )
+    assert res1 is not None
+
+    view_before = engine.get_privacy_view("Analyst")
+    spent_before = view_before.effective_epsilon
+
+    # Replay identical query with NO raw data, NO public_user_roster, and NO finalized_up_to_day
+    res2 = engine.query_cross_epoch(
+        cfg1, 25, cfg2, 8, recipient="Analyst",
+        interactions_epoch_1=None, interactions_epoch_2=None, public_user_roster=None,
+        finalized_up_to_day_epoch_1=None, finalized_up_to_day_epoch_2=None,
+    )
+    assert res2 is not None
+    assert np.allclose(res1.vector, res2.vector)
+
+    view_after = engine.get_privacy_view("Analyst")
+    spent_after = view_after.effective_epsilon
+
+    assert abs(spent_after - spent_before) < 1e-12, "Replay of cached cross-epoch query must cost 0 new privacy budget."
+
+
