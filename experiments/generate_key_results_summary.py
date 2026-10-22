@@ -186,6 +186,90 @@ def generate_key_results_json(
         json.dump(summary, f, indent=2, ensure_ascii=False)
 
     print(f"[SUCCESS] v03_key_results.json successfully generated at: {out_path}")
+
+    # Also generate v0.4 Key Results JSON
+    v04_out_path = tables_path / "v04_key_results.json"
+    generate_v04_key_results_json(tables_dir=tables_dir, output_file=str(v04_out_path))
+
+    return summary
+
+
+def generate_v04_key_results_json(
+    tables_dir: str = "results/tables",
+    output_file: str = "results/tables/v04_key_results.json",
+) -> Dict[str, Any]:
+    tables_path = Path(tables_dir)
+    out_path = Path(output_file)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+
+    summary: Dict[str, Any] = {
+        "metadata": {
+            "version": "v0.4",
+            "theme": "User-Level Continual Observation and Sliding-Window Differential Privacy",
+            "source_tables_dir": str(tables_path),
+        }
+    }
+
+    # 1. Exp15: Tree Privacy Scaling
+    exp15_path = tables_path / "exp15_tree_privacy_scaling.csv"
+    if exp15_path.exists():
+        df15 = pd.read_csv(exp15_path)
+        summary["tree_privacy_scaling"] = {
+            "max_epsilon_reduction_factor": float(df15["epsilon_reduction_factor"].max()),
+            "mean_epsilon_reduction_factor": float(round(df15["epsilon_reduction_factor"].mean(), 2)),
+            "max_noise_reduction_factor": float(df15["noise_reduction_factor"].max()),
+            "mean_noise_reduction_factor": float(round(df15["noise_reduction_factor"].mean(), 2)),
+            "max_empirical_mae_reduction_factor": float(df15["empirical_mae_reduction_factor"].max()) if "empirical_mae_reduction_factor" in df15.columns else None,
+            "records": df15.to_dict(orient="records"),
+        }
+
+    # 2. Exp16: Prefix Tracking
+    exp16_path = tables_path / "exp16_prefix_queries.csv"
+    if exp16_path.exists():
+        df16 = pd.read_csv(exp16_path)
+        summary["prefix_tracking"] = {
+            "max_noise_reduction_factor": float(df16["noise_reduction_factor"].max()),
+            "max_empirical_error_reduction_factor": float(df16["empirical_error_reduction_factor"].max()) if "empirical_error_reduction_factor" in df16.columns else None,
+            "records": df16.to_dict(orient="records"),
+        }
+
+    # 3. Exp17: Sliding Window
+    exp17_path = tables_path / "exp17_sliding_window.csv"
+    if exp17_path.exists():
+        df17 = pd.read_csv(exp17_path)
+        summary["sliding_window"] = {
+            "max_epsilon_savings_ratio": float(df17["epsilon_savings_ratio"].max()),
+            "mean_epsilon_savings_ratio": float(round(df17["epsilon_savings_ratio"].mean(), 2)),
+            "max_fixed_budget_utility_ratio": float(df17["fixed_budget_utility_ratio"].max()) if "fixed_budget_utility_ratio" in df17.columns else None,
+            "records": df17.to_dict(orient="records"),
+        }
+
+    # 4. Exp18: Temporal Clipping
+    exp18_path = tables_path / "exp18_temporal_clipping.csv"
+    if exp18_path.exists():
+        df18 = pd.read_csv(exp18_path)
+        c10_df = df18[df18["C_day"] == 10.0]
+        optimal_c = float(c10_df.sort_values("rel_total_error").iloc[0]["C_epoch"]) if len(c10_df) > 0 else None
+        summary["temporal_clipping_tradeoff"] = {
+            "min_total_error": float(round(df18["rel_total_error"].min(), 6)),
+            "optimal_C_epoch_for_C_day_10": optimal_c,
+            "records": df18.to_dict(orient="records"),
+        }
+
+    # 5. Exp19: System Scaling
+    exp19_path = tables_path / "exp19_system_scaling.csv"
+    if exp19_path.exists():
+        df19 = pd.read_csv(exp19_path)
+        summary["system_scaling"] = {
+            "max_cached_query_latency_ms": float(df19["cached_query_latency_ms_avg"].max()),
+            "max_db_size_kb": float(df19["db_size_kb"].max()),
+            "records": df19.to_dict(orient="records"),
+        }
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(summary, f, indent=2, ensure_ascii=False)
+
+    print(f"[SUCCESS] v04_key_results.json successfully generated at: {out_path}")
     return summary
 
 

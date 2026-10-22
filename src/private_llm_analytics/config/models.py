@@ -90,6 +90,7 @@ class PrivacyHistoryConfig(BaseModel):
 class RecipientCompositionConfig(BaseModel):
     mode: Literal["per_recipient", "collusion_group", "global_external"] = "global_external"
     groups: Dict[str, List[str]] = Field(default_factory=dict)
+    recipient_roles: Dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_no_overlapping_groups(self) -> "RecipientCompositionConfig":
@@ -216,6 +217,30 @@ class PrivacyReleaseConfig(BaseModel):
     lease_timeout: float = 300.0
 
 
+class ContinualTreeConfigModel(BaseModel):
+    topology: Literal["binary"] = "binary"
+    padding: Literal["next_power_of_two"] = "next_power_of_two"
+
+
+class ContinualNoiseConfigModel(BaseModel):
+    mechanism: Literal["gaussian"] = "gaussian"
+    target_epoch_epsilon: float = 2.0
+    calibration_delta: float = 1e-6
+    equal_sigma_per_level: bool = True
+
+
+class ContinualConfigModel(BaseModel):
+    enabled: bool = False
+    mode: Literal["binary_tree"] = "binary_tree"
+    epoch_days: int = 90
+    timezone: str = "UTC"
+    daily_l2_bound: float = 10.0
+    epoch_l12_bound: float = 40.0
+    lateness_grace_days: int = 1
+    tree: ContinualTreeConfigModel = Field(default_factory=ContinualTreeConfigModel)
+    noise: ContinualNoiseConfigModel = Field(default_factory=ContinualNoiseConfigModel)
+
+
 class PrivacyConfig(BaseModel):
     privacy_unit: Literal["user"] = "user"
     adjacency: Literal["add_remove"] = "add_remove"
@@ -230,6 +255,7 @@ class PrivacyConfig(BaseModel):
     default_mechanism: DefaultMechanismConfig = Field(default_factory=DefaultMechanismConfig)
     release: PrivacyReleaseConfig = Field(default_factory=PrivacyReleaseConfig)
     planner: PlannerConfig = Field(default_factory=PlannerConfig)
+    continual: ContinualConfigModel = Field(default_factory=ContinualConfigModel)
 
 
 class ContributionConfig(BaseModel):

@@ -1,0 +1,6 @@
+horizon_T,tree_size,num_levels,total_tree_nodes_capacity,db_size_kb,materialization_latency_ms,cached_query_latency_ms_avg,cached_query_latency_ms_p95
+30,32,6,63,144.0,310.41,27.466,32.949
+90,128,8,255,176.0,929.35,26.534,29.269
+180,256,9,511,216.0,2618.6,26.769,30.176
+365,512,10,1023,300.0,17601.75,50.374,62.955
+730,1024,11,2047,460.0,65716.66,52.38,57.517
