@@ -22,6 +22,7 @@ import numpy as np
 from private_llm_analytics.continual.mechanism import compute_level_rdp_vector, evaluate_rdp_epsilon
 from private_llm_analytics.continual.models import ContinualStreamConfig
 from private_llm_analytics.continual.tree import BinaryTimeTree, compute_continual_node_id
+from private_llm_analytics.privacy.composition import PrivacyView
 from private_llm_analytics.privacy.exceptions import (
     CommitIrreversibleError,
     PrivacyBudgetExceededError,
@@ -290,6 +291,23 @@ class ContinualStateManager:
         """Abort lingering RESERVED exposures older than max_age_seconds."""
         return self.state_manager.recover_stale_continual_reservations(max_age_seconds=max_age_seconds)
 
+    def get_privacy_view(
+        self,
+        budget_scope_id: str = "global_external",
+        delta_global: Optional[Union[float, Decimal]] = None,
+        orders: Optional[Sequence[Union[float, Decimal]]] = None,
+        epsilon_cap: Optional[Union[float, Decimal]] = None,
+        accountant_mode: Optional[str] = None,
+    ) -> PrivacyView:
+        """Authoritative reconstructed PrivacyView covering both standard releases and continual level exposures."""
+        return self.state_manager.get_privacy_view(
+            budget_scope_id=budget_scope_id,
+            delta_global=delta_global,
+            orders=orders,
+            epsilon_cap=epsilon_cap,
+            accountant_mode=accountant_mode,
+        )
+
     def get_or_create_noisy_node(
         self,
         stream_config: ContinualStreamConfig,
@@ -318,10 +336,43 @@ class ContinualStateManager:
         # 0. Ensure stream definition is registered
         self.register_stream(stream_config)
 
-        # 1. Verify or seal immutable epoch dataset manifest
+        # 0b. Cached already-materialized node may be read without raw data
+        node_id = compute_continual_node_id(fp, epoch_id, level, node_index)
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT status, noisy_value_json FROM continual_nodes WHERE node_id = ?",
+                (node_id,),
+            )
+            c_row = cursor.fetchone()
+            if c_row is not None and c_row[0] == "COMMITTED":
+                return np.array(json.loads(c_row[1]), dtype=np.float64)
+
+        # 1. Authoritative finalized boundary is mandatory to materialize new nodes
+        persisted_fin = None
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT finalized_up_to_day FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                (fp, epoch_id),
+            )
+            m_row = cursor.fetchone()
+            if m_row is not None:
+                persisted_fin = m_row[0]
+
+        if finalized_up_to_day is None:
+            if persisted_fin is not None:
+                fin_day = persisted_fin
+            else:
+                raise ProductionSafetyConfigurationError(
+                    "Fail-closed: finalized_up_to_day REQUIRED in production: "
+                    "no authoritative finalized boundary exists to materialize new continual tree nodes."
+                )
+        else:
+            fin_day = finalized_up_to_day
+
         mf = manifest_fingerprint or stream_config.dataset_fingerprint
         rf = public_roster_fingerprint or stream_config.public_roster_fingerprint
-        fin_day = finalized_up_to_day if finalized_up_to_day is not None else stream_config.epoch_days
 
         manifest_record = self.state_manager.register_or_verify_epoch_manifest(
             stream_fingerprint=fp,
@@ -334,7 +385,6 @@ class ContinualStateManager:
             current_wall_clock_day=current_wall_clock_day,
         )
 
-        node_id = compute_continual_node_id(fp, epoch_id, level, node_index)
         tree = BinaryTimeTree(epoch_days=stream_config.epoch_days)
         start_day, end_day = tree.node_interval(level, node_index)
 
@@ -344,6 +394,24 @@ class ContinualStateManager:
                 f"Cannot materialize unfinalized node [{start_day}, {end_day}]: "
                 f"epoch finalized_up_to_day={manifest_record['finalized_up_to_day']}."
             )
+
+        # 2b. Partition identity verification across node interval [start_day, end_day]
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            for day_idx in range(start_day, min(end_day, stream_config.epoch_days) + 1):
+                cursor.execute(
+                    "SELECT partition_fingerprint FROM continual_epoch_partitions WHERE stream_fingerprint = ? AND epoch_id = ? AND day = ?",
+                    (fp, epoch_id, day_idx),
+                )
+                p_row = cursor.fetchone()
+                if p_row is not None and partition_fingerprints:
+                    sealed_pfp = p_row[0]
+                    provided_pfp = partition_fingerprints.get(str(day_idx)) or partition_fingerprints.get(day_idx)
+                    if provided_pfp is not None and provided_pfp != sealed_pfp:
+                        raise ProductionSafetyConfigurationError(
+                            f"DATASET_PARTITION_MISMATCH: Partition for day {day_idx} does not match sealed fingerprint "
+                            f"(sealed={sealed_pfp}, provided={provided_pfp})."
+                        )
 
         worker_owner_id = f"worker_{uuid.uuid4().hex[:8]}"
 

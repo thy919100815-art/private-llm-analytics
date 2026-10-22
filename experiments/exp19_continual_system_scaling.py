@@ -88,6 +88,8 @@ def run_exp19(smoke: bool = False, output_dir: Optional[Path] = None):
                 recipient="Benchmarker",
                 interactions=df,
                 public_user_roster=roster,
+                finalized_up_to_day=T,
+                current_wall_clock_day=T + 1,
             )
             t1 = time.perf_counter()
             mat_latency_ms = (t1 - t0) * 1000.0

@@ -118,7 +118,15 @@ def run_exp16(smoke: bool = False, output_dir: Optional[Path] = None):
 
         for t in prefix_days:
             # Tree prefix query [1, t]
-            prefix_res = engine.query_prefix(cfg, end_day=t, recipient="Analyst", interactions=df, public_user_roster=roster)
+            prefix_res = engine.query_prefix(
+                cfg,
+                end_day=t,
+                recipient="Analyst",
+                interactions=df,
+                public_user_roster=roster,
+                finalized_up_to_day=T,
+                current_wall_clock_day=T + 1,
+            )
             nodes_count = len(prefix_res.nodes_used)
 
             # Expected noise std

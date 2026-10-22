@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 import sqlite3
 import time
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 import uuid
 import numpy as np
 
@@ -751,6 +751,16 @@ class PrivacyStateManager:
                 )
             """)
             cursor.execute("""
+                CREATE TABLE IF NOT EXISTS continual_epoch_partitions (
+                    stream_fingerprint TEXT NOT NULL,
+                    epoch_id TEXT NOT NULL,
+                    day INTEGER NOT NULL,
+                    partition_fingerprint TEXT NOT NULL,
+                    finalized_at TEXT NOT NULL,
+                    PRIMARY KEY (stream_fingerprint, epoch_id, day)
+                )
+            """)
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS continual_query_log (
                     query_id TEXT PRIMARY KEY,
                     budget_scope_id TEXT NOT NULL,
@@ -767,6 +777,7 @@ class PrivacyStateManager:
             """)
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cle_scope_state ON continual_level_exposures (budget_scope_id, reservation_state)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cem_stream_epoch ON continual_epoch_manifests (stream_fingerprint, epoch_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_cep_stream_epoch_day ON continual_epoch_partitions (stream_fingerprint, epoch_id, day)")
 
             conn.commit()
 
@@ -1908,7 +1919,12 @@ class PrivacyStateManager:
                 raise
 
     def get_total_spent_decimal(self, budget_scope_id: Optional[str] = None) -> Tuple[Decimal, Decimal]:
-        """Return cumulative (spent_epsilon, spent_delta) committed in persistent storage using exact Decimal summation."""
+        """Return cumulative (spent_epsilon, spent_delta) for legacy standard additive releases.
+
+        NOTE: Scoped strictly to legacy additive standard releases in `privacy_reservations`.
+        For authoritative unified lifetime RDP privacy accounting across standard releases
+        and continual observation level exposures, use `get_privacy_view(budget_scope_id)`.
+        """
         with self._connection() as conn:
             cursor = conn.cursor()
             if budget_scope_id is not None:
@@ -1945,12 +1961,22 @@ class PrivacyStateManager:
             return [dict(row) for row in cursor.fetchall()]
 
     def get_total_spent(self, budget_scope_id: Optional[str] = None) -> Tuple[float, float]:
-        """Return cumulative (spent_epsilon, spent_delta) committed in persistent storage using exact Decimal summation."""
+        """Return cumulative (spent_epsilon, spent_delta) for legacy standard additive releases.
+
+        NOTE: Scoped strictly to legacy additive standard releases in `privacy_reservations`.
+        For authoritative unified lifetime RDP privacy accounting across standard releases
+        and continual observation level exposures, use `get_privacy_view(budget_scope_id)`.
+        """
         eps, delta = self.get_total_spent_decimal(budget_scope_id=budget_scope_id)
         return float(eps), float(delta)
 
     def get_total_reserved_or_spent(self, budget_scope_id: Optional[str] = None) -> Tuple[float, float]:
-        """Return cumulative (epsilon, delta) either committed or actively reserved using exact Decimal summation."""
+        """Return cumulative (epsilon, delta) either committed or actively reserved for legacy additive releases.
+
+        NOTE: Scoped strictly to legacy additive standard releases in `privacy_reservations`.
+        For authoritative unified lifetime RDP privacy accounting across standard releases
+        and continual observation level exposures, use `get_privacy_view(budget_scope_id)`.
+        """
         with self._connection() as conn:
             cursor = conn.cursor()
             if budget_scope_id is not None:
@@ -2429,19 +2455,49 @@ class PrivacyStateManager:
         lateness_grace_days: int = 1,
         current_wall_clock_day: Optional[int] = None,
     ) -> Dict[str, Any]:
-        """Verify or seal immutable epoch dataset manifest (Section 36, 101)."""
+        """Verify or seal immutable epoch dataset manifest with progressive finalization (Section 36, 101)."""
         if not manifest_fingerprint or not str(manifest_fingerprint).strip():
             raise ProductionSafetyConfigurationError("manifest_fingerprint / dataset_fingerprint REQUIRED in production.")
         if not public_roster_fingerprint or not str(public_roster_fingerprint).strip():
             raise ProductionSafetyConfigurationError("public_roster_fingerprint REQUIRED in production.")
 
-        if current_wall_clock_day is not None:
-            max_allowed = int(current_wall_clock_day) - int(lateness_grace_days)
-            if int(finalized_up_to_day) > max_allowed:
-                raise ProductionSafetyConfigurationError(
-                    f"finalized_up_to_day {finalized_up_to_day} violates lateness_grace_days={lateness_grace_days} policy "
-                    f"(current_day={current_wall_clock_day}, max_allowed={max_allowed})."
+        if current_wall_clock_day is None:
+            with self._connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT epoch_start, timezone, lateness_grace_days FROM continual_streams WHERE stream_fingerprint = ?",
+                    (stream_fingerprint,),
                 )
+                s_row = cursor.fetchone()
+                if s_row is not None:
+                    epoch_start_str, tz_str, st_grace = s_row[0], s_row[1], s_row[2]
+                    eff_grace = lateness_grace_days if lateness_grace_days is not None else st_grace
+                    try:
+                        import zoneinfo
+                        tz = zoneinfo.ZoneInfo(tz_str)
+                    except Exception:
+                        tz = timezone.utc
+                    now_dt = datetime.now(tz)
+                    try:
+                        dt_start = datetime.fromisoformat(epoch_start_str.replace("Z", "+00:00"))
+                        if dt_start.tzinfo is None:
+                            dt_start = dt_start.replace(tzinfo=tz)
+                    except Exception:
+                        parts = [int(p) for p in str(epoch_start_str).split("T")[0].split("-")]
+                        dt_start = datetime(parts[0], parts[1], parts[2], tzinfo=tz)
+                    current_wall_clock_day = (now_dt.date() - dt_start.date()).days + 1
+                    lateness_grace_days = eff_grace
+                else:
+                    raise ProductionSafetyConfigurationError(
+                        "Cannot enforce lateness grace: stream is not registered and current_wall_clock_day was omitted."
+                    )
+
+        max_allowed = int(current_wall_clock_day) - int(lateness_grace_days)
+        if int(finalized_up_to_day) > max_allowed:
+            raise ProductionSafetyConfigurationError(
+                f"finalized_up_to_day {finalized_up_to_day} violates lateness_grace_days={lateness_grace_days} policy "
+                f"(current_day={current_wall_clock_day}, max_allowed={max_allowed})."
+            )
 
         now_iso = datetime.now(timezone.utc).isoformat()
         with self._connection() as conn:
@@ -2478,17 +2534,70 @@ class PrivacyStateManager:
                         raise ProductionSafetyConfigurationError(
                             f"finalized_up_to_day cannot be rolled backward from {persisted_fin} to {finalized_up_to_day}."
                         )
+
+                    existing_parts_map = json.loads(row["partition_fingerprints_json"]) if row["partition_fingerprints_json"] else {}
                     if partition_fingerprints:
-                        persisted_parts = json.loads(row["partition_fingerprints_json"])
-                        if persisted_parts and persisted_parts != partition_fingerprints:
-                            raise ProductionSafetyConfigurationError(
-                                "DATASET_MANIFEST_MISMATCH: partition fingerprints mismatch with sealed epoch manifest."
+                        for day_k, pfp_v in partition_fingerprints.items():
+                            day_int = int(day_k)
+                            cursor.execute(
+                                """
+                                SELECT partition_fingerprint
+                                FROM continual_epoch_partitions
+                                WHERE stream_fingerprint = ? AND epoch_id = ? AND day = ?
+                                """,
+                                (stream_fingerprint, epoch_id, day_int),
                             )
+                            part_row = cursor.fetchone()
+                            if part_row is not None:
+                                sealed_pfp = part_row["partition_fingerprint"]
+                                if sealed_pfp != pfp_v:
+                                    raise ProductionSafetyConfigurationError(
+                                        f"DATASET_MANIFEST_MISMATCH: already finalized partition for day {day_int} "
+                                        f"cannot be mutated (sealed={sealed_pfp}, provided={pfp_v})."
+                                    )
+                            else:
+                                cursor.execute(
+                                    """
+                                    INSERT INTO continual_epoch_partitions (
+                                        stream_fingerprint, epoch_id, day, partition_fingerprint, finalized_at
+                                    ) VALUES (?, ?, ?, ?, ?)
+                                    """,
+                                    (stream_fingerprint, epoch_id, day_int, pfp_v, now_iso),
+                                )
+                            existing_parts_map[str(day_int)] = pfp_v
+
+                    new_fin = max(int(persisted_fin), int(finalized_up_to_day))
+                    merged_parts_json = json.dumps(existing_parts_map, sort_keys=True)
+                    if new_fin > int(persisted_fin) or partition_fingerprints:
+                        cursor.execute(
+                            """
+                            UPDATE continual_epoch_manifests
+                            SET finalized_up_to_day = ?, partition_fingerprints_json = ?
+                            WHERE stream_fingerprint = ? AND epoch_id = ?
+                            """,
+                            (new_fin, merged_parts_json, stream_fingerprint, epoch_id),
+                        )
                     cursor.execute("COMMIT")
-                    return dict(row)
+                    ret = dict(row)
+                    ret["finalized_up_to_day"] = new_fin
+                    ret["partition_fingerprints_json"] = merged_parts_json
+                    return ret
 
                 man_id = f"man_{uuid.uuid4().hex[:12]}"
-                parts_json = json.dumps(partition_fingerprints or {}, sort_keys=True)
+                existing_parts_map = {}
+                if partition_fingerprints:
+                    for day_k, pfp_v in partition_fingerprints.items():
+                        day_int = int(day_k)
+                        cursor.execute(
+                            """
+                            INSERT OR REPLACE INTO continual_epoch_partitions (
+                                stream_fingerprint, epoch_id, day, partition_fingerprint, finalized_at
+                            ) VALUES (?, ?, ?, ?, ?)
+                            """,
+                            (stream_fingerprint, epoch_id, day_int, pfp_v, now_iso),
+                        )
+                        existing_parts_map[str(day_int)] = pfp_v
+                parts_json = json.dumps(existing_parts_map, sort_keys=True)
                 cursor.execute("SELECT stream_fingerprint FROM continual_streams WHERE stream_fingerprint = ?", (stream_fingerprint,))
                 if cursor.fetchone() is None:
                     cursor.execute(

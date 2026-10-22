@@ -49,10 +49,10 @@ def main():
         df = pd.DataFrame(records)
 
         # 1. Recipient A queries interval [1, 4]
-        res_a = engine.query_interval(cfg, 1, 4, recipient="ProviderA", interactions=df, public_user_roster=roster)
+        res_a = engine.query_interval(cfg, 1, 4, recipient="ProviderA", interactions=df, public_user_roster=roster, finalized_up_to_day=cfg.epoch_days)
 
         # 2. Recipient B queries the exact same interval [1, 4]
-        res_b = engine.query_interval(cfg, 1, 4, recipient="ProviderB", interactions=df, public_user_roster=roster)
+        res_b = engine.query_interval(cfg, 1, 4, recipient="ProviderB", interactions=df, public_user_roster=roster, finalized_up_to_day=cfg.epoch_days)
 
         # Must have bitwise identical vectors
         np.testing.assert_array_equal(

@@ -9,6 +9,8 @@ the concatenated joint vector V_{u, l} satisfies ||V_{u, l}||_2 <= C_epoch.
 """
 
 from datetime import datetime, timezone
+import hashlib
+import json
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
 import pandas as pd
@@ -202,3 +204,66 @@ def build_temporal_user_contributions(
     )
 
     return final_contributions, diagnostics, target_names
+
+
+def compute_partition_fingerprint(
+    interactions: Union[pd.DataFrame, Sequence[Dict[str, Any]]],
+    epoch_start: Union[str, datetime, pd.Timestamp],
+    day: int,
+    timezone_name: str = "UTC",
+) -> str:
+    """Compute deterministic SHA-256 fingerprint for a single day's interaction partition."""
+    if isinstance(interactions, pd.DataFrame):
+        df = interactions
+    else:
+        df = pd.DataFrame(interactions)
+
+    if df.empty or COL_TIMESTAMP not in df.columns:
+        return hashlib.sha256(f"empty_partition_day_{day}".encode("utf-8")).hexdigest()
+
+    try:
+        dt_start = pd.to_datetime(epoch_start)
+        if dt_start.tzinfo is None:
+            dt_start = dt_start.tz_localize(timezone_name)
+        else:
+            dt_start = dt_start.tz_convert(timezone_name)
+        dt_start = dt_start.floor("D")
+    except Exception as e:
+        raise PrivacyConfigurationError(f"Failed to parse epoch_start '{epoch_start}': {e}")
+
+    ts_series = pd.to_datetime(df[COL_TIMESTAMP])
+    if ts_series.dt.tz is None:
+        ts_series = ts_series.dt.tz_localize(timezone_name)
+    else:
+        ts_series = ts_series.dt.tz_convert(timezone_name)
+
+    target_diff = day - 1
+    day_diffs = (ts_series.dt.floor("D") - dt_start).dt.days.values
+    mask = day_diffs == target_diff
+
+    day_df = df[mask]
+    if day_df.empty:
+        return hashlib.sha256(f"empty_partition_day_{day}".encode("utf-8")).hexdigest()
+
+    sort_cols = [c for c in [COL_TIMESTAMP, COL_USER_ID, COL_PROVIDER, COL_TASK] if c in day_df.columns]
+    if not sort_cols:
+        sort_cols = sorted(list(day_df.columns))
+
+    sorted_df = day_df.sort_values(by=sort_cols).reset_index(drop=True)
+    records = sorted_df.to_dict(orient="records")
+    canonical_repr = json.dumps(records, sort_keys=True, default=str).encode("utf-8")
+    return hashlib.sha256(canonical_repr).hexdigest()
+
+
+def compute_partition_fingerprints(
+    interactions: Union[pd.DataFrame, Sequence[Dict[str, Any]]],
+    epoch_start: Union[str, datetime, pd.Timestamp],
+    epoch_days: int,
+    timezone_name: str = "UTC",
+) -> Dict[str, str]:
+    """Compute partition fingerprints for all days 1..epoch_days in an epoch."""
+    return {
+        str(day): compute_partition_fingerprint(interactions, epoch_start, day, timezone_name)
+        for day in range(1, epoch_days + 1)
+    }
+

@@ -57,7 +57,7 @@ def test_late_data_cannot_mutate_released_node(tmp_path: Path):
     }])
 
     # Query day [1, 2]
-    res1 = engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=df1, public_user_roster=roster)
+    res1 = engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=df1, public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=20)
 
     # Later: attacker injects 10,000 interactions into Day 1 retroactively
     records_late = []
@@ -71,8 +71,8 @@ def test_late_data_cannot_mutate_released_node(tmp_path: Path):
     df_tampered = pd.DataFrame(records_late)
 
     # Attempting to query with tampered interactions on sealed epoch must fail closed
-    with pytest.raises(ProductionSafetyConfigurationError, match="DATASET_MANIFEST_MISMATCH"):
-        engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=df_tampered, public_user_roster=roster)
+    with pytest.raises(ProductionSafetyConfigurationError, match=r"(DATASET_MANIFEST_MISMATCH|already finalized partition|DATASET_PARTITION_MISMATCH)"):
+        engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=df_tampered, public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=20)
 
     # Query same day [1, 2] again using cached nodes
     res2 = engine.query_interval(cfg, 1, 2, recipient="Auditor", interactions=None, public_user_roster=None)

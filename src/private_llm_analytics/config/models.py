@@ -90,6 +90,7 @@ class PrivacyHistoryConfig(BaseModel):
 class RecipientCompositionConfig(BaseModel):
     mode: Literal["per_recipient", "collusion_group", "global_external"] = "global_external"
     groups: Dict[str, List[str]] = Field(default_factory=dict)
+    recipient_roles: Dict[str, str] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def validate_no_overlapping_groups(self) -> "RecipientCompositionConfig":

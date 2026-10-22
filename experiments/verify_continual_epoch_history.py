@@ -48,13 +48,13 @@ def main():
         df2 = pd.DataFrame([{"user_id": "u_0", "timestamp": "2026-01-31 12:00:00", "provider": "provider_a", "task": "technical"}])
 
         # 1. Query in Epoch 1
-        res1 = engine.query_interval(cfg1, 1, 4, recipient="ProviderA", interactions=df1, public_user_roster=roster)
+        res1 = engine.query_interval(cfg1, 1, 4, recipient="ProviderA", interactions=df1, public_user_roster=roster, finalized_up_to_day=30)
         exp1_levels = state_mgr.get_exposed_levels("global_external", cfg1.stream_fingerprint, "epoch_001")
         assert len(exp1_levels) > 0
         print("[1/2] Epoch 1 levels exposed and recorded.")
 
         # 2. Query in Epoch 2
-        res2 = engine.query_interval(cfg2, 1, 4, recipient="ProviderA", interactions=df2, public_user_roster=roster)
+        res2 = engine.query_interval(cfg2, 1, 4, recipient="ProviderA", interactions=df2, public_user_roster=roster, finalized_up_to_day=30)
         exp2_levels = state_mgr.get_exposed_levels("global_external", cfg2.stream_fingerprint, "epoch_002")
         assert len(exp2_levels) > 0
 

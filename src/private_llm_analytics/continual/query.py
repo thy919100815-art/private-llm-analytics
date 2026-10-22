@@ -22,6 +22,7 @@ import pandas as pd
 
 from private_llm_analytics.continual.contributions import (
     build_temporal_user_contributions,
+    compute_partition_fingerprints,
 )
 from private_llm_analytics.continual.mechanism import (
     calibrate_tree_gaussian_sigma,
@@ -30,9 +31,9 @@ from private_llm_analytics.continual.mechanism import (
 )
 from private_llm_analytics.continual.models import ContinualStreamConfig
 from private_llm_analytics.continual.state import ContinualStateManager
-from private_llm_analytics.continual.tree import BinaryTimeTree
+from private_llm_analytics.continual.tree import BinaryTimeTree, compute_continual_node_id
 from private_llm_analytics.planning.policy import build_aggregation_matrix
-from private_llm_analytics.privacy.composition import resolve_budget_scope_id
+from private_llm_analytics.privacy.composition import PrivacyView, resolve_budget_scope_id
 from private_llm_analytics.privacy.exceptions import (
     PrivacyBudgetExceededError,
     PrivacyConfigurationError,
@@ -111,8 +112,16 @@ class ContinualQueryEngine:
             self.epsilon_cap = float(app_config.privacy.accountant.epsilon_cap)
             self.authoritative_orders = tuple(float(x) for x in app_config.privacy.accountant.orders)
             self.composition_mode = str(app_config.privacy.recipient_composition.mode)
-            self.collusion_groups = getattr(app_config.privacy.recipient_composition, "collusion_groups", {}) or {}
-            self.recipient_roles = getattr(app_config.privacy.recipient_composition, "recipient_roles", {}) or {}
+            rc_cfg = app_config.privacy.recipient_composition
+            self.collusion_groups = getattr(rc_cfg, "groups", None) or getattr(rc_cfg, "collusion_groups", {}) or {}
+            roles_from_recipients: Dict[str, str] = {}
+            if hasattr(app_config, "recipients") and hasattr(app_config.recipients, "recipients"):
+                roles_from_recipients = {
+                    name: getattr(r_cfg, "role", "external")
+                    for name, r_cfg in app_config.recipients.recipients.items()
+                }
+            roles_from_rc = getattr(rc_cfg, "recipient_roles", {}) or {}
+            self.recipient_roles = {**roles_from_rc, **roles_from_recipients}
         else:
             self.enabled = True
             self.composition_mode = composition_mode
@@ -132,13 +141,25 @@ class ContinualQueryEngine:
         sm = state_manager or ContinualStateManager(db_path=app_config.privacy.release.state_db_path)
         return cls(state_manager=sm, app_config=app_config)
 
-    def resolve_scope(self, recipient: str, recipient_role: str = "external") -> str:
+    def resolve_scope(self, recipient: str, recipient_role: Optional[str] = None) -> str:
         """Resolve budget scope ID according to active recipient composition policy."""
+        eff_role = recipient_role if recipient_role is not None else self.recipient_roles.get(recipient, "external")
         return resolve_budget_scope_id(
             recipient=recipient,
-            recipient_role=recipient_role,
+            recipient_role=eff_role,
             mode=self.composition_mode,
             groups=self.collusion_groups,
+        )
+
+    def get_privacy_view(self, recipient: str = "global_external", recipient_role: Optional[str] = None) -> PrivacyView:
+        """Authoritative reconstructed PrivacyView for recipient or budget scope."""
+        scope = self.resolve_scope(recipient, recipient_role=recipient_role)
+        return self.state_manager.get_privacy_view(
+            budget_scope_id=scope,
+            delta_global=self.delta_global,
+            orders=self.authoritative_orders,
+            epsilon_cap=self.epsilon_cap,
+            accountant_mode="rdp",
         )
 
     def _get_calibrated_sigma(self, stream_config: ContinualStreamConfig) -> float:
@@ -180,23 +201,56 @@ class ContinualQueryEngine:
         # 1. Register stream configuration
         self.state_manager.register_stream(stream_config)
 
-        # 2. Finalized day guard (Section 36, 101)
-        if finalized_up_to_day is not None and end_day > finalized_up_to_day:
-            raise ValueError(
-                f"DATA_NOT_FINALIZED: Requested interval [{start_day}, {end_day}] "
-                f"exceeds finalized day {finalized_up_to_day}."
-            )
+        # 2. Canonical cover
+        tree = BinaryTimeTree(epoch_days=stream_config.epoch_days)
+        nodes_used = tree.canonical_cover(start_day, end_day)
+        levels_used = sorted(list({lvl for lvl, _ in nodes_used}))
 
-        # 3. Validate interval
+        # 3. Finalized day guard (Section 36, 101)
+        all_nodes_committed = True
+        with self.state_manager._connection() as conn:
+            cursor = conn.cursor()
+            for lvl, n_idx in nodes_used:
+                nid = compute_continual_node_id(stream_config.stream_fingerprint, stream_config.epoch_id, lvl, n_idx)
+                cursor.execute("SELECT 1 FROM continual_nodes WHERE node_id = ? AND status = 'COMMITTED'", (nid,))
+                if cursor.fetchone() is None:
+                    all_nodes_committed = False
+                    break
+
+        if not all_nodes_committed:
+            with self.state_manager._connection() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT finalized_up_to_day FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                    (stream_config.stream_fingerprint, stream_config.epoch_id),
+                )
+                m_row = cursor.fetchone()
+                persisted_fin = m_row[0] if m_row is not None else None
+
+            if finalized_up_to_day is None:
+                if persisted_fin is not None:
+                    effective_fin = persisted_fin
+                else:
+                    raise ProductionSafetyConfigurationError(
+                        "Fail-closed: finalized_up_to_day REQUIRED in production: "
+                        "no authoritative finalized boundary exists to materialize new continual tree nodes."
+                    )
+            else:
+                effective_fin = finalized_up_to_day
+
+            if end_day > effective_fin:
+                raise ProductionSafetyConfigurationError(
+                    f"DATA_NOT_FINALIZED: Requested interval [{start_day}, {end_day}] "
+                    f"exceeds finalized day {effective_fin}."
+                )
+        else:
+            effective_fin = finalized_up_to_day
+
+        # 4. Validate interval
         if not (1 <= start_day <= end_day <= stream_config.epoch_days):
             raise ValueError(
                 f"Requested interval [{start_day}, {end_day}] out of epoch bounds [1, {stream_config.epoch_days}]"
             )
-
-        # 4. Canonical cover
-        tree = BinaryTimeTree(epoch_days=stream_config.epoch_days)
-        nodes_used = tree.canonical_cover(start_day, end_day)
-        levels_used = sorted(list({lvl for lvl, _ in nodes_used}))
 
         # 5. Determine sigma
         sigma = self._get_calibrated_sigma(stream_config)
@@ -226,6 +280,48 @@ class ContinualQueryEngine:
                 if m_row:
                     mf = m_row[0]
                     rf = rf or m_row[1]
+
+        # 5c. Bind partition fingerprints from interactions if available
+        if partition_fingerprints is None and interactions is not None:
+            partition_fingerprints = compute_partition_fingerprints(
+                interactions=interactions,
+                epoch_start=stream_config.epoch_start,
+                epoch_days=stream_config.epoch_days,
+                timezone_name=stream_config.timezone,
+            )
+
+        # 5d. Verify dataset manifest and partition fingerprints against sealed manifest in DB
+        with self.state_manager._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT manifest_fingerprint, public_roster_fingerprint FROM continual_epoch_manifests WHERE stream_fingerprint = ? AND epoch_id = ?",
+                (stream_config.stream_fingerprint, stream_config.epoch_id),
+            )
+            m_row = cursor.fetchone()
+            if m_row is not None:
+                persisted_mf, persisted_rf = m_row[0], m_row[1]
+                if mf and persisted_mf and persisted_mf != mf:
+                    raise ProductionSafetyConfigurationError(
+                        f"DATASET_MANIFEST_MISMATCH: stream_fingerprint={stream_config.stream_fingerprint}, epoch_id={stream_config.epoch_id} "
+                        f"has sealed manifest {persisted_mf}, but current request provided {mf}. Modifying epoch manifest is strictly forbidden."
+                    )
+                if rf and persisted_rf and persisted_rf != rf:
+                    raise ProductionSafetyConfigurationError(
+                        f"DATASET_MANIFEST_MISMATCH: public roster fingerprint mismatch for stream={stream_config.stream_fingerprint}, epoch={stream_config.epoch_id} "
+                        f"(sealed={persisted_rf}, provided={rf})."
+                    )
+            if partition_fingerprints:
+                for day_str, pfp in partition_fingerprints.items():
+                    cursor.execute(
+                        "SELECT partition_fingerprint FROM continual_epoch_partitions WHERE stream_fingerprint = ? AND epoch_id = ? AND day = ?",
+                        (stream_config.stream_fingerprint, stream_config.epoch_id, int(day_str)),
+                    )
+                    p_row = cursor.fetchone()
+                    if p_row is not None and p_row[0] != pfp:
+                        raise ProductionSafetyConfigurationError(
+                            f"DATASET_MANIFEST_MISMATCH: already finalized partition for day {day_str} cannot be mutated "
+                            f"(sealed={p_row[0]}, provided={pfp})."
+                        )
 
         # 6. Resolve scope
         budget_scope_id = self.resolve_scope(recipient, recipient_role=recipient_role)
@@ -294,7 +390,7 @@ class ContinualQueryEngine:
                     node_index=node_idx,
                     sigma=sigma,
                     materialize_fn=_materialize_node_exact,
-                    finalized_up_to_day=finalized_up_to_day,
+                    finalized_up_to_day=effective_fin,
                     manifest_fingerprint=mf,
                     public_roster_fingerprint=rf,
                     current_wall_clock_day=current_wall_clock_day,
@@ -358,6 +454,10 @@ class ContinualQueryEngine:
         recipient_role: str = "external",
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
+        manifest_fingerprint: Optional[str] = None,
+        public_roster_fingerprint: Optional[str] = None,
+        current_wall_clock_day: Optional[int] = None,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
     ) -> ContinualQueryResult:
         """Fixed interval dyadic continual query [start_day, end_day] (Section 20)."""
         return self._execute_tree_query(
@@ -371,6 +471,10 @@ class ContinualQueryEngine:
             recipient_role=recipient_role,
             finalized_up_to_day=finalized_up_to_day,
             precomputed_contributions=precomputed_contributions,
+            manifest_fingerprint=manifest_fingerprint,
+            public_roster_fingerprint=public_roster_fingerprint,
+            current_wall_clock_day=current_wall_clock_day,
+            partition_fingerprints=partition_fingerprints,
         )
 
     def query_prefix(
@@ -383,6 +487,10 @@ class ContinualQueryEngine:
         recipient_role: str = "external",
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
+        manifest_fingerprint: Optional[str] = None,
+        public_roster_fingerprint: Optional[str] = None,
+        current_wall_clock_day: Optional[int] = None,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
     ) -> ContinualQueryResult:
         """Prefix continual query [1, end_day] (Section 19)."""
         return self._execute_tree_query(
@@ -396,6 +504,10 @@ class ContinualQueryEngine:
             recipient_role=recipient_role,
             finalized_up_to_day=finalized_up_to_day,
             precomputed_contributions=precomputed_contributions,
+            manifest_fingerprint=manifest_fingerprint,
+            public_roster_fingerprint=public_roster_fingerprint,
+            current_wall_clock_day=current_wall_clock_day,
+            partition_fingerprints=partition_fingerprints,
         )
 
     def query_sliding_window(
@@ -409,6 +521,10 @@ class ContinualQueryEngine:
         recipient_role: str = "external",
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
+        manifest_fingerprint: Optional[str] = None,
+        public_roster_fingerprint: Optional[str] = None,
+        current_wall_clock_day: Optional[int] = None,
+        partition_fingerprints: Optional[Dict[str, str]] = None,
     ) -> ContinualQueryResult:
         """Sliding-window continual query ending at end_day (Section 21)."""
         if window_days <= 0:
@@ -425,6 +541,10 @@ class ContinualQueryEngine:
             recipient_role=recipient_role,
             finalized_up_to_day=finalized_up_to_day,
             precomputed_contributions=precomputed_contributions,
+            manifest_fingerprint=manifest_fingerprint,
+            public_roster_fingerprint=public_roster_fingerprint,
+            current_wall_clock_day=current_wall_clock_day,
+            partition_fingerprints=partition_fingerprints,
         )
 
     def query_cross_epoch(

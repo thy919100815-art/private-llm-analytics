@@ -109,10 +109,10 @@ def test_same_node_same_noise_across_recipients(tmp_path: Path):
     df, roster = _create_sample_interactions()
 
     # Recipient A queries day [1, 2]
-    res_a = engine.query_interval(cfg, 1, 2, recipient="ProviderA", interactions=df, public_user_roster=roster)
+    res_a = engine.query_interval(cfg, 1, 2, recipient="ProviderA", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
 
     # Recipient B queries day [1, 2]
-    res_b = engine.query_interval(cfg, 1, 2, recipient="ProviderB", interactions=df, public_user_roster=roster)
+    res_b = engine.query_interval(cfg, 1, 2, recipient="ProviderB", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
 
     # Both must use the exact same node (level 1, node 0)
     assert res_a.nodes_used == res_b.nodes_used
@@ -127,17 +127,17 @@ def test_global_external_level_charge_once(tmp_path: Path):
     df, roster = _create_sample_interactions()
 
     # Query 1: Provider A queries days [1, 4] -> uses level 2, node 0
-    res1 = engine.query_interval(cfg, 1, 4, recipient="ProviderA", interactions=df, public_user_roster=roster)
+    res1 = engine.query_interval(cfg, 1, 4, recipient="ProviderA", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res1.newly_exposed_levels == [2]
     assert res1.reused_levels == []
 
     # Query 2: Provider B queries days [1, 4] -> reuses level 2 with zero new level cost!
-    res2 = engine.query_interval(cfg, 1, 4, recipient="ProviderB", interactions=df, public_user_roster=roster)
+    res2 = engine.query_interval(cfg, 1, 4, recipient="ProviderB", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res2.newly_exposed_levels == []
     assert res2.reused_levels == [2]
 
     # Query 3: Provider B queries days [5, 6] -> uses level 1, node 2 (level 1 newly exposed)
-    res3 = engine.query_interval(cfg, 5, 6, recipient="ProviderB", interactions=df, public_user_roster=roster)
+    res3 = engine.query_interval(cfg, 5, 6, recipient="ProviderB", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res3.newly_exposed_levels == [1]
     assert res3.reused_levels == []
 
@@ -149,17 +149,17 @@ def test_per_recipient_level_charge_once_each(tmp_path: Path):
     df, roster = _create_sample_interactions()
 
     # Recipient A queries days [1, 2] -> level 1 newly exposed for A
-    res_a1 = engine.query_interval(cfg, 1, 2, recipient="UserA", interactions=df, public_user_roster=roster)
+    res_a1 = engine.query_interval(cfg, 1, 2, recipient="UserA", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res_a1.budget_scope_id == "recipient:UserA"
     assert res_a1.newly_exposed_levels == [1]
 
     # Recipient A re-queries days [1, 2] -> zero newly exposed
-    res_a2 = engine.query_interval(cfg, 1, 2, recipient="UserA", interactions=df, public_user_roster=roster)
+    res_a2 = engine.query_interval(cfg, 1, 2, recipient="UserA", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res_a2.newly_exposed_levels == []
     assert res_a2.reused_levels == [1]
 
     # Recipient B queries days [1, 2] -> level 1 newly exposed for B
-    res_b = engine.query_interval(cfg, 1, 2, recipient="UserB", interactions=df, public_user_roster=roster)
+    res_b = engine.query_interval(cfg, 1, 2, recipient="UserB", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res_b.budget_scope_id == "recipient:UserB"
     assert res_b.newly_exposed_levels == [1]
 
@@ -179,12 +179,12 @@ def test_collusion_group_level_charge_once(tmp_path: Path):
     df, roster = _create_sample_interactions()
 
     # Member 1 queries days [1, 4]
-    res1 = engine.query_interval(cfg, 1, 4, recipient="Member1", interactions=df, public_user_roster=roster)
+    res1 = engine.query_interval(cfg, 1, 4, recipient="Member1", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res1.budget_scope_id == "collusion:alpha_consortium"
     assert res1.newly_exposed_levels == [2]
 
     # Member 2 queries days [1, 4] -> already exposed to the group!
-    res2 = engine.query_interval(cfg, 1, 4, recipient="Member2", interactions=df, public_user_roster=roster)
+    res2 = engine.query_interval(cfg, 1, 4, recipient="Member2", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
     assert res2.budget_scope_id == "collusion:alpha_consortium"
     assert res2.newly_exposed_levels == []
     assert res2.reused_levels == [2]
@@ -203,7 +203,7 @@ def test_multi_level_atomic_budget_reservation(tmp_path: Path):
 
     # Query days [1, 7] requires multiple levels (e.g. 0, 1, 2)
     with pytest.raises(PrivacyBudgetExceededError):
-        engine.query_interval(cfg, 1, 7, recipient="PoorUser", interactions=df, public_user_roster=roster)
+        engine.query_interval(cfg, 1, 7, recipient="PoorUser", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
 
     # Verify atomic all-or-nothing: NO levels were committed for PoorUser
     exposed = state_mgr.get_exposed_levels("recipient:PoorUser", cfg.stream_fingerprint, cfg.epoch_id)
@@ -217,7 +217,7 @@ def test_query_has_no_rng_and_no_raw_scan_when_materialized(tmp_path: Path):
     df, roster = _create_sample_interactions()
 
     # 1. First query materializes nodes
-    res1 = engine.query_interval(cfg, 1, 7, recipient="ProviderA", interactions=df, public_user_roster=roster)
+    res1 = engine.query_interval(cfg, 1, 7, recipient="ProviderA", interactions=df, public_user_roster=roster, finalized_up_to_day=30)
 
     # 2. Repeated query with interactions=None and public_user_roster=None
     # Must succeed without accessing raw data!
@@ -264,6 +264,8 @@ def test_cross_epoch_query(tmp_path: Path):
         interactions_epoch_1=df1,
         interactions_epoch_2=df2,
         public_user_roster=roster,
+        finalized_up_to_day_epoch_1=30,
+        finalized_up_to_day_epoch_2=30,
     )
 
     assert res.query_type == "CROSS_EPOCH"

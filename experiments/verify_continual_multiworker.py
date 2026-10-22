@@ -57,6 +57,7 @@ def main():
                 node_index=0,
                 sigma=4.0,
                 materialize_fn=_exact_builder,
+                finalized_up_to_day=cfg.epoch_days,
             )
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:

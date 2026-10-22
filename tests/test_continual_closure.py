@@ -11,6 +11,7 @@ Covers all required tests from Section A, B, C, D, E, F, G, and K:
 - Section K: Adversarial Hardening
 """
 
+from datetime import datetime, timezone
 from decimal import Decimal
 import json
 from pathlib import Path
@@ -319,6 +320,89 @@ def test_standard_and_continual_concurrent_reservation_cannot_oversubscribe(tmp_
         )
 
 
+def test_privacy_status_after_standard_continual_standard_matches(tmp_path: Path):
+    """Standard -> Continual -> Standard releases report matching effective lifetime epsilon in get_privacy_view."""
+    db_file = tmp_path / "unified_status.db"
+    state_mgr = PrivacyStateManager(db_path=db_file)
+    cont_mgr = ContinualStateManager(db_path=db_file, state_manager=state_mgr)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+    cfg = ContinualStreamConfig(stream_id="s_stat", epoch_id="ep1", epoch_days=30)
+    df = pd.DataFrame([
+        {"timestamp": "2026-01-01T10:00:00Z", "user_id": "u1", "provider": "OpenAI", "task": "Chat"}
+    ])
+
+    # 1. Standard release 1
+    orders = DEFAULT_RDP_ORDERS
+    rdp_vec1 = compute_gaussian_rdp(sigma=10.0, sensitivity=1.0, orders=orders)
+    r1 = state_mgr.reserve_or_get_release(
+        release_key="rel_1",
+        canonical_semantics={"metric": "vol"},
+        global_budget=PrivacyBudget(epsilon=4.0, delta=1e-6),
+        budget_needed=PrivacyBudget(epsilon=0.5, delta=1e-6),
+        plan_metadata={},
+        accountant_mode="rdp",
+        rdp_orders=orders,
+        rdp_candidate_cost=rdp_vec1,
+        policy_mode="global_external",
+        budget_scope_id="global_external",
+        epsilon_cap=4.0,
+        delta_global=1e-6,
+    )
+    state_mgr.commit_release(
+        reservation_id=r1.reservation_id,
+        release_key="rel_1",
+        release_id=r1.release_id,
+        release_result=DPReleaseResult("vol", np.array([10.0]), {}, 0.5, 1e-6, "gaussian", 10.0, 1.0, ["c1"], 10),
+        recipient="external_a",
+        dataset_version="v1",
+        generation=r1.generation,
+    )
+    v1 = state_mgr.get_privacy_view("global_external")
+    assert v1.effective_epsilon > Decimal("0.0")
+
+    # 2. Continual query
+    engine.query_interval(
+        stream_config=cfg,
+        start_day=1,
+        end_day=2,
+        recipient="external_a",
+        interactions=df,
+        public_user_roster=["u1"],
+        finalized_up_to_day=10,
+        current_wall_clock_day=20,
+    )
+    v2 = engine.get_privacy_view("external_a")
+    assert v2.effective_epsilon > v1.effective_epsilon
+
+    # 3. Standard release 2
+    rdp_vec2 = compute_gaussian_rdp(sigma=12.0, sensitivity=1.0, orders=orders)
+    r2 = state_mgr.reserve_or_get_release(
+        release_key="rel_2",
+        canonical_semantics={"metric": "vol_2"},
+        global_budget=PrivacyBudget(epsilon=4.0, delta=1e-6),
+        budget_needed=PrivacyBudget(epsilon=0.4, delta=1e-6),
+        plan_metadata={},
+        accountant_mode="rdp",
+        rdp_orders=orders,
+        rdp_candidate_cost=rdp_vec2,
+        policy_mode="global_external",
+        budget_scope_id="global_external",
+        epsilon_cap=4.0,
+        delta_global=1e-6,
+    )
+    state_mgr.commit_release(
+        reservation_id=r2.reservation_id,
+        release_key="rel_2",
+        release_id=r2.release_id,
+        release_result=DPReleaseResult("vol_2", np.array([10.0]), {}, 0.4, 1e-6, "gaussian", 12.0, 1.0, ["c1"], 10),
+        recipient="external_a",
+        dataset_version="v1",
+        generation=r2.generation,
+    )
+    v3 = state_mgr.get_privacy_view("global_external")
+    assert v3.effective_epsilon > v2.effective_epsilon
+
+
 # =========================================================================
 # SECTION B: AUTHORITATIVE RDP ORDER GRID
 # =========================================================================
@@ -568,6 +652,69 @@ def test_continual_recipient_role_change_fails_closed(tmp_path: Path):
         )
 
 
+def test_from_app_config_uses_collusion_groups(tmp_path: Path):
+    """ContinualQueryEngine.from_app_config properly binds collusion groups from app_config.privacy.recipient_composition.groups."""
+    db_file = tmp_path / "app_config_groups.db"
+    app_cfg = load_app_config("configs")
+    app_cfg.privacy.release.state_db_path = str(db_file)
+    app_cfg.privacy.accountant.mode = "rdp"
+    app_cfg.privacy.continual.enabled = True
+    app_cfg.privacy.recipient_composition.mode = "collusion_group"
+    app_cfg.privacy.recipient_composition.groups = {
+        "consortium": ["ProviderA", "ProviderB"]
+    }
+
+    engine = ContinualQueryEngine.from_app_config(app_cfg)
+    assert engine.resolve_scope("ProviderA") == "collusion:consortium"
+    assert engine.resolve_scope("ProviderB") == "collusion:consortium"
+
+
+def test_app_config_collusion_group_members_share_budget(tmp_path: Path):
+    """Members of a collusion group share continual level exposure spend and cap."""
+    db_file = tmp_path / "collusion_share.db"
+    app_cfg = load_app_config("configs")
+    app_cfg.privacy.release.state_db_path = str(db_file)
+    app_cfg.privacy.accountant.mode = "rdp"
+    app_cfg.privacy.accountant.epsilon_cap = 4.0
+    app_cfg.privacy.continual.enabled = True
+    app_cfg.privacy.recipient_composition.mode = "collusion_group"
+    app_cfg.privacy.recipient_composition.groups = {
+        "consortium": ["ProviderA", "ProviderB"]
+    }
+
+    engine = ContinualQueryEngine.from_app_config(app_cfg)
+    cfg = ContinualStreamConfig(stream_id="s_col", epoch_id="ep1", epoch_days=30)
+    df = pd.DataFrame([
+        {"timestamp": "2026-01-01T10:00:00Z", "user_id": "u1", "provider": "OpenAI", "task": "Chat"}
+    ])
+
+    res_a = engine.query_interval(
+        stream_config=cfg,
+        start_day=1,
+        end_day=1,
+        recipient="ProviderA",
+        interactions=df,
+        public_user_roster=["u1"],
+        finalized_up_to_day=10,
+        current_wall_clock_day=15,
+    )
+    assert res_a.budget_scope_id == "collusion:consortium"
+
+    # Query by ProviderB reuses the exposed level and shares the same scope
+    res_b = engine.query_interval(
+        stream_config=cfg,
+        start_day=1,
+        end_day=1,
+        recipient="ProviderB",
+        interactions=df,
+        public_user_roster=["u1"],
+        finalized_up_to_day=10,
+        current_wall_clock_day=15,
+    )
+    assert res_b.budget_scope_id == "collusion:consortium"
+    assert len(res_b.reused_levels) > 0
+
+
 # =========================================================================
 # SECTION D: IMMUTABLE FINALIZED DATASET SNAPSHOT
 # =========================================================================
@@ -621,6 +768,7 @@ def test_manifest_mutation_after_first_node_fails_closed(tmp_path: Path):
         materialize_fn=lambda: np.array([10.0]),
         manifest_fingerprint="m_initial",
         public_roster_fingerprint="r_initial",
+        finalized_up_to_day=30,
     )
 
     with pytest.raises(ProductionSafetyConfigurationError, match="DATASET_MANIFEST_MISMATCH"):
@@ -632,6 +780,7 @@ def test_manifest_mutation_after_first_node_fails_closed(tmp_path: Path):
             materialize_fn=lambda: np.array([10.0]),
             manifest_fingerprint="m_altered",
             public_roster_fingerprint="r_initial",
+            finalized_up_to_day=30,
         )
 
 
@@ -649,6 +798,7 @@ def test_public_roster_change_fails_closed(tmp_path: Path):
         materialize_fn=lambda: np.array([10.0]),
         manifest_fingerprint="m_fixed",
         public_roster_fingerprint="r_roster1",
+        finalized_up_to_day=30,
     )
 
     with pytest.raises(ProductionSafetyConfigurationError, match="DATASET_MANIFEST_MISMATCH"):
@@ -660,26 +810,48 @@ def test_public_roster_change_fails_closed(tmp_path: Path):
             materialize_fn=lambda: np.array([10.0]),
             manifest_fingerprint="m_fixed",
             public_roster_fingerprint="r_roster2",
+            finalized_up_to_day=30,
         )
 
 
 def test_finalized_guard_cannot_be_omitted_in_production(tmp_path: Path):
-    """Attempting to materialize node spanning past finalized day fails closed."""
+    """Querying interval with finalized_up_to_day=None without prior manifest fails closed."""
     db_file = tmp_path / "manifest_d4.db"
     cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
     cfg = ContinualStreamConfig(stream_id="s_fin", epoch_id="ep1", epoch_days=30)
+    df = pd.DataFrame([
+        {"timestamp": "2026-01-01T10:00:00Z", "user_id": "u1", "provider": "OpenAI", "task": "Chat"}
+    ])
 
-    # Node spanning [1, 16] (level 4, node 0 in 32-day tree) attempted with finalized_up_to_day=10
-    with pytest.raises(ProductionSafetyConfigurationError, match="Cannot materialize unfinalized node"):
+    with pytest.raises(ProductionSafetyConfigurationError, match="finalized_up_to_day REQUIRED in production"):
+        engine.query_interval(
+            stream_config=cfg,
+            start_day=1,
+            end_day=10,
+            recipient="external",
+            interactions=df,
+            public_user_roster=["u1"],
+            finalized_up_to_day=None,
+        )
+
+
+def test_new_node_requires_authoritative_finalized_boundary(tmp_path: Path):
+    """Direct node materialization without finalized boundary fails closed."""
+    db_file = tmp_path / "new_node_bound.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    cfg = ContinualStreamConfig(stream_id="s_bound", epoch_id="ep1", epoch_days=30)
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="finalized_up_to_day REQUIRED in production"):
         cont_mgr.get_or_create_noisy_node(
             stream_config=cfg,
-            level=4,
+            level=0,
             node_index=0,
             sigma=5.0,
             materialize_fn=lambda: np.array([1.0]),
-            manifest_fingerprint="m_fin",
-            public_roster_fingerprint="r_fin",
-            finalized_up_to_day=10,
+            manifest_fingerprint="m_test",
+            public_roster_fingerprint="r_test",
+            finalized_up_to_day=None,
         )
 
 
@@ -702,6 +874,238 @@ def test_lateness_grace_is_enforced(tmp_path: Path):
         )
 
 
+def test_lateness_grace_cannot_be_bypassed_by_omitting_wall_clock(tmp_path: Path):
+    """Omitting current_wall_clock_day calculates it internally from epoch_start and enforces lateness grace."""
+    db_file = tmp_path / "lateness_bypass.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    today_utc_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cfg = ContinualStreamConfig(
+        stream_id="s_late",
+        epoch_id="ep1",
+        epoch_start=today_utc_str,
+        epoch_days=30,
+        lateness_grace_days=1,
+    )
+    cont_mgr.register_stream(cfg)
+
+    # Caller attempts to finalize through day 1 while omitting current_wall_clock_day
+    with pytest.raises(ProductionSafetyConfigurationError, match="violates lateness_grace_days"):
+        cont_mgr.state_manager.register_or_verify_epoch_manifest(
+            stream_fingerprint=cfg.stream_fingerprint,
+            epoch_id=cfg.epoch_id,
+            manifest_fingerprint="m_test",
+            public_roster_fingerprint="r_test",
+            finalized_up_to_day=1,
+            lateness_grace_days=cfg.lateness_grace_days,
+            current_wall_clock_day=None,
+        )
+
+
+def test_finalized_frontier_advances_monotonically(tmp_path: Path):
+    """Frontier advances monotonically from day 10 to day 11 in continual_epoch_manifests."""
+    db_file = tmp_path / "manifest_mono.db"
+    state_mgr = PrivacyStateManager(db_path=db_file)
+    state_mgr.register_or_verify_epoch_manifest(
+        stream_fingerprint="fp1",
+        epoch_id="ep1",
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=10,
+        current_wall_clock_day=20,
+    )
+
+    rec2 = state_mgr.register_or_verify_epoch_manifest(
+        stream_fingerprint="fp1",
+        epoch_id="ep1",
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=11,
+        current_wall_clock_day=20,
+    )
+    assert rec2["finalized_up_to_day"] == 11
+
+
+def test_finalized_frontier_cannot_move_backward(tmp_path: Path):
+    """Attempting to roll back finalized frontier from day 11 to day 10 raises ProductionSafetyConfigurationError."""
+    db_file = tmp_path / "manifest_noback.db"
+    state_mgr = PrivacyStateManager(db_path=db_file)
+    state_mgr.register_or_verify_epoch_manifest(
+        stream_fingerprint="fp1",
+        epoch_id="ep1",
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=11,
+        current_wall_clock_day=20,
+    )
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="cannot be rolled backward"):
+        state_mgr.register_or_verify_epoch_manifest(
+            stream_fingerprint="fp1",
+            epoch_id="ep1",
+            manifest_fingerprint="m1",
+            public_roster_fingerprint="r1",
+            finalized_up_to_day=10,
+            current_wall_clock_day=20,
+        )
+
+
+def test_already_finalized_partition_cannot_mutate(tmp_path: Path):
+    """Already finalized partition fingerprint in continual_epoch_partitions cannot be altered."""
+    db_file = tmp_path / "partition_mut.db"
+    state_mgr = PrivacyStateManager(db_path=db_file)
+    state_mgr.register_or_verify_epoch_manifest(
+        stream_fingerprint="fp1",
+        epoch_id="ep1",
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=10,
+        partition_fingerprints={"10": "hash_day10_v1"},
+        current_wall_clock_day=20,
+    )
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="already finalized partition for day 10 cannot be mutated"):
+        state_mgr.register_or_verify_epoch_manifest(
+            stream_fingerprint="fp1",
+            epoch_id="ep1",
+            manifest_fingerprint="m1",
+            public_roster_fingerprint="r1",
+            finalized_up_to_day=10,
+            partition_fingerprints={"10": "hash_day10_tampered"},
+            current_wall_clock_day=20,
+        )
+
+
+def test_future_partition_can_be_added_after_prior_days_sealed(tmp_path: Path):
+    """Newly finalized day 11 partition can be sealed after days 1..10 are already sealed."""
+    db_file = tmp_path / "future_part.db"
+    state_mgr = PrivacyStateManager(db_path=db_file)
+    state_mgr.register_or_verify_epoch_manifest(
+        stream_fingerprint="fp1",
+        epoch_id="ep1",
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=10,
+        partition_fingerprints={"10": "hash_day10"},
+        current_wall_clock_day=20,
+    )
+
+    rec = state_mgr.register_or_verify_epoch_manifest(
+        stream_fingerprint="fp1",
+        epoch_id="ep1",
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=11,
+        partition_fingerprints={"11": "hash_day11"},
+        current_wall_clock_day=20,
+    )
+    assert rec["finalized_up_to_day"] == 11
+    parts = json.loads(rec["partition_fingerprints_json"])
+    assert parts["10"] == "hash_day10"
+    assert parts["11"] == "hash_day11"
+
+
+def test_day11_query_succeeds_after_frontier_advances_10_to_11(tmp_path: Path):
+    """Query reaching day 11 fails when frontier is 10, then succeeds when frontier advances to 11."""
+    db_file = tmp_path / "day11_query.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+    cfg = ContinualStreamConfig(stream_id="s_d11", epoch_id="ep1", epoch_days=30)
+    df = pd.DataFrame([
+        {"timestamp": f"2026-01-{d:02d}T10:00:00Z", "user_id": "u1", "provider": "OpenAI", "task": "Chat"}
+        for d in range(1, 12)
+    ])
+
+    # First, register epoch through day 10
+    cont_mgr.state_manager.register_or_verify_epoch_manifest(
+        stream_fingerprint=cfg.stream_fingerprint,
+        epoch_id=cfg.epoch_id,
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        finalized_up_to_day=10,
+        current_wall_clock_day=25,
+    )
+
+    # Query reaching day 11 fails closed with DATA_NOT_FINALIZED
+    with pytest.raises(ProductionSafetyConfigurationError, match="DATA_NOT_FINALIZED"):
+        engine.query_interval(
+            stream_config=cfg,
+            start_day=1,
+            end_day=11,
+            recipient="external",
+            interactions=df,
+            public_user_roster=["u1"],
+            manifest_fingerprint="m1",
+            public_roster_fingerprint="r1",
+            current_wall_clock_day=25,
+        )
+
+    # Advance frontier to 11
+    res = engine.query_interval(
+        stream_config=cfg,
+        start_day=1,
+        end_day=11,
+        recipient="external",
+        interactions=df,
+        public_user_roster=["u1"],
+        finalized_up_to_day=11,
+        manifest_fingerprint="m1",
+        public_roster_fingerprint="r1",
+        current_wall_clock_day=25,
+    )
+    assert res is not None
+    assert res.end_day == 11
+
+
+def test_same_manifest_token_different_finalized_partition_data_fails_closed(tmp_path: Path):
+    """Adversarial test: Supplying the same manifest token with altered underlying event telemetry fails closed."""
+    db_file = tmp_path / "token_tamper.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+    token = "manifest_token_abc"
+    cfg = ContinualStreamConfig(
+        stream_id="s_tamper",
+        epoch_id="ep1",
+        epoch_days=30,
+        dataset_fingerprint=token,
+        public_roster_fingerprint="roster_fixed",
+    )
+
+    df_original = pd.DataFrame([
+        {"timestamp": f"2026-01-{d:02d}T10:00:00Z", "user_id": "u1", "provider": "OpenAI", "task": "Chat"}
+        for d in range(1, 11)
+    ])
+
+    # Day 1..2 query seals partition fingerprints for days 1..10
+    engine.query_interval(
+        stream_config=cfg,
+        start_day=1,
+        end_day=2,
+        recipient="external",
+        interactions=df_original,
+        public_user_roster=["u1"],
+        finalized_up_to_day=10,
+        current_wall_clock_day=20,
+    )
+
+    # Attacker alters events on Day 3 but claims the same manifest token
+    df_tampered = pd.DataFrame([
+        {"timestamp": f"2026-01-{d:02d}T10:00:00Z", "user_id": "u1", "provider": "OpenAI", "task": "Code" if d == 3 else "Chat"}
+        for d in range(1, 11)
+    ])
+
+    with pytest.raises(ProductionSafetyConfigurationError, match=r"(DATASET_PARTITION_MISMATCH|already finalized partition)"):
+        engine.query_interval(
+            stream_config=cfg,
+            start_day=3,
+            end_day=4,
+            recipient="external",
+            interactions=df_tampered,
+            public_user_roster=["u1"],
+            finalized_up_to_day=10,
+            current_wall_clock_day=20,
+        )
+
+
 def test_same_level_mixed_snapshot_attack_rejected(tmp_path: Path):
     """Security invariant: attacking level sensitivity by mixing different dataset snapshots is rejected."""
     db_file = tmp_path / "manifest_d6.db"
@@ -717,6 +1121,7 @@ def test_same_level_mixed_snapshot_attack_rejected(tmp_path: Path):
         materialize_fn=lambda: np.array([1.0]),
         manifest_fingerprint="dataset_A_hash",
         public_roster_fingerprint="roster_A_hash",
+        finalized_up_to_day=30,
     )
 
     # Step 2: Attacker attempts to materialize leaf node 2 from Dataset B
@@ -729,6 +1134,7 @@ def test_same_level_mixed_snapshot_attack_rejected(tmp_path: Path):
             materialize_fn=lambda: np.array([2.0]),
             manifest_fingerprint="dataset_B_hash",
             public_roster_fingerprint="roster_A_hash",
+            finalized_up_to_day=30,
         )
 
 
@@ -849,7 +1255,7 @@ def test_failed_node_materialization_aborts_or_recovers_exposure(tmp_path: Path)
     # Force error during materialization by raising in materializer
     with pytest.raises(ValueError, match="Cannot materialize"):
         engine.query_interval(
-            cfg, 1, 2, recipient="UserA", interactions=None, public_user_roster=None
+            cfg, 1, 2, recipient="UserA", interactions=None, public_user_roster=None, finalized_up_to_day=10, current_wall_clock_day=15
         )
 
     # Exposed levels in DB must be empty (aborted)
@@ -1126,6 +1532,7 @@ def test_adversarial_same_level_mixed_dataset_attack(tmp_path: Path):
         materialize_fn=lambda: np.array([1.0]),
         manifest_fingerprint="ds_A",
         public_roster_fingerprint="ros_A",
+        finalized_up_to_day=30,
     )
 
     # Materialize node 1 with dataset hash B -> rejected!
@@ -1138,6 +1545,7 @@ def test_adversarial_same_level_mixed_dataset_attack(tmp_path: Path):
             materialize_fn=lambda: np.array([1.0]),
             manifest_fingerprint="ds_B",
             public_roster_fingerprint="ros_A",
+            finalized_up_to_day=30,
         )
 
 
