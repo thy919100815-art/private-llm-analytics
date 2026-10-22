@@ -258,12 +258,20 @@ def compute_partition_fingerprint(
 def compute_partition_fingerprints(
     interactions: Union[pd.DataFrame, Sequence[Dict[str, Any]]],
     epoch_start: Union[str, datetime, pd.Timestamp],
-    epoch_days: int,
+    epoch_days: Optional[int] = None,
+    start_day: int = 1,
+    end_day: Optional[int] = None,
     timezone_name: str = "UTC",
 ) -> Dict[str, str]:
-    """Compute partition fingerprints for all days 1..epoch_days in an epoch."""
+    """Compute partition fingerprints for authoritatively finalized days in an epoch."""
+    if end_day is None:
+        if epoch_days is not None:
+            end_day = epoch_days
+        else:
+            raise ValueError("Either end_day or epoch_days must be provided.")
+
     return {
         str(day): compute_partition_fingerprint(interactions, epoch_start, day, timezone_name)
-        for day in range(1, epoch_days + 1)
+        for day in range(start_day, end_day + 1)
     }
 

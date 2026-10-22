@@ -1628,3 +1628,423 @@ def test_adversarial_different_authoritative_rdp_order_grids(tmp_path: Path):
             level_rdp_cost={Decimal("1.5"): Decimal("0.1"), Decimal("3.0"): Decimal("0.2")},
             authoritative_orders=DEFAULT_RDP_ORDERS,
         )
+
+
+# =========================================================================
+# SECTION L: FINAL PROGRESSIVE FINALIZATION & AUTHORITATIVE ROLE CLOSURE
+# =========================================================================
+
+def _generate_day_records(users: Sequence[str], day: int, base_date: str = "2026-01-01", count_per_user: int = 2) -> List[Dict[str, Any]]:
+    dt_base = pd.to_datetime(base_date) + pd.Timedelta(days=day - 1)
+    date_str = dt_base.strftime("%Y-%m-%d")
+    records = []
+    for u in users:
+        for c in range(count_per_user):
+            records.append({
+                "user_id": u,
+                "timestamp": f"{date_str} 10:{c:02d}:00",
+                "provider": "provider_a",
+                "task": "technical",
+            })
+    return records
+
+
+def test_day10_query_does_not_seal_days_11_to_90(tmp_path: Path):
+    """Querying at finalized frontier 10 must NOT record partition fingerprints for days 11..90."""
+    db_file = tmp_path / "day10_no_future.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    records = []
+    for d in range(1, 11):
+        records.extend(_generate_day_records(roster, d))
+    df = pd.DataFrame(records)
+
+    cfg = ContinualStreamConfig(
+        stream_id="stream_d10",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=90,
+        epoch_group_l12_bound=20.0,
+    )
+
+    res = engine.query_interval(
+        cfg,
+        start_day=1,
+        end_day=4,
+        recipient="Analyst",
+        interactions=df,
+        public_user_roster=roster,
+        finalized_up_to_day=10,
+        current_wall_clock_day=12,
+    )
+    assert res is not None
+
+    with cont_mgr._connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT day FROM continual_epoch_partitions WHERE epoch_id = 'ep1'")
+        sealed_days = [row[0] for row in cursor.fetchall()]
+
+    assert len(sealed_days) > 0
+    assert all(d <= 10 for d in sealed_days)
+    assert not any(d > 10 for d in sealed_days), f"Security violation: future unfinalized days sealed: {sealed_days}"
+
+
+def test_real_progressive_engine_query_day10_then_day11(tmp_path: Path):
+    """Engine query at Day 10 followed by Day 11 data growth and frontier advancement succeeds seamlessly."""
+    db_file = tmp_path / "prog_10_11.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_prog",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=90,
+        epoch_group_l12_bound=20.0,
+    )
+
+    # Step 1: Day 1..10
+    records_10 = []
+    for d in range(1, 11):
+        records_10.extend(_generate_day_records(roster, d))
+    df_10 = pd.DataFrame(records_10)
+
+    res1 = engine.query_interval(
+        cfg,
+        start_day=1,
+        end_day=4,
+        recipient="Analyst",
+        interactions=df_10,
+        public_user_roster=roster,
+        finalized_up_to_day=10,
+        current_wall_clock_day=12,
+    )
+    assert res1 is not None
+
+    # Step 2: Add real Day 11 interactions, advance frontier to 11
+    records_11 = list(records_10)
+    records_11.extend(_generate_day_records(roster, 11))
+    df_11 = pd.DataFrame(records_11)
+
+    res2 = engine.query_interval(
+        cfg,
+        start_day=1,
+        end_day=11,
+        recipient="Analyst",
+        interactions=df_11,
+        public_user_roster=roster,
+        finalized_up_to_day=11,
+        current_wall_clock_day=13,
+    )
+    assert res2 is not None
+
+
+def test_future_unfinalized_partition_can_change_before_finalization(tmp_path: Path):
+    """Day 11 telemetry can change while frontier is 10; once Day 11 is finalized, further changes fail closed."""
+    db_file = tmp_path / "fut_change.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_fut",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        epoch_group_l12_bound=20.0,
+    )
+
+    # Day 1..10 + draft Day 11 v1
+    records = []
+    for d in range(1, 11):
+        records.extend(_generate_day_records(roster, d))
+    records_v1 = list(records) + _generate_day_records(roster, 11, count_per_user=1)
+    df_v1 = pd.DataFrame(records_v1)
+
+    # Query with frontier=10
+    engine.query_interval(
+        cfg, 1, 4, recipient="Analyst", interactions=df_v1,
+        public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=12,
+    )
+
+    # Change Day 11 draft data (v2) while frontier is still 10: MUST be allowed!
+    records_v2 = list(records) + _generate_day_records(roster, 11, count_per_user=5)
+    df_v2 = pd.DataFrame(records_v2)
+    engine.query_interval(
+        cfg, 1, 4, recipient="Analyst", interactions=df_v2,
+        public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=12,
+    )
+
+    # Now finalize Day 11 with v2: seals Day 11
+    engine.query_interval(
+        cfg, 1, 11, recipient="Analyst", interactions=df_v2,
+        public_user_roster=roster, finalized_up_to_day=11, current_wall_clock_day=13,
+    )
+
+    # Mutate Day 11 after finalization (v3): MUST fail closed
+    records_v3 = list(records) + _generate_day_records(roster, 11, count_per_user=9)
+    df_v3 = pd.DataFrame(records_v3)
+    with pytest.raises(ProductionSafetyConfigurationError, match="cannot be mutated"):
+        engine.query_interval(
+            cfg, 1, 11, recipient="Analyst", interactions=df_v3,
+            public_user_roster=roster, finalized_up_to_day=11, current_wall_clock_day=13,
+        )
+
+
+def test_progressive_data_growth_does_not_change_epoch_manifest_identity(tmp_path: Path):
+    """Epoch manifest identity remains stable and identical as data grows progressively."""
+    db_file = tmp_path / "stable_man.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_stab",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=60,
+        epoch_group_l12_bound=20.0,
+    )
+
+    records = []
+    for d in range(1, 11):
+        records.extend(_generate_day_records(roster, d))
+    df_10 = pd.DataFrame(records)
+
+    engine.query_interval(
+        cfg, 1, 4, recipient="Analyst", interactions=df_10,
+        public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=12,
+    )
+
+    with cont_mgr._connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT manifest_fingerprint FROM continual_epoch_manifests WHERE epoch_id = 'ep1'")
+        mf_initial = cursor.fetchone()[0]
+
+    # Data grows to Day 15
+    for d in range(11, 16):
+        records.extend(_generate_day_records(roster, d))
+    df_15 = pd.DataFrame(records)
+
+    engine.query_interval(
+        cfg, 1, 8, recipient="Analyst", interactions=df_15,
+        public_user_roster=roster, finalized_up_to_day=15, current_wall_clock_day=17,
+    )
+
+    with cont_mgr._connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT manifest_fingerprint FROM continual_epoch_manifests WHERE epoch_id = 'ep1'")
+        mf_after = cursor.fetchone()[0]
+
+    assert mf_initial == mf_after, "Epoch manifest identity must not change during progressive data growth."
+
+
+def test_whole_dataset_growth_is_valid_when_new_partition_is_not_previously_finalized(tmp_path: Path):
+    """Growing the dataset and advancing frontier is valid when new partitions were not previously finalized."""
+    db_file = tmp_path / "growth_valid.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr)
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_grow",
+        epoch_id="ep1",
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        epoch_group_l12_bound=20.0,
+    )
+
+    records = []
+    for d in range(1, 6):
+        records.extend(_generate_day_records(roster, d))
+    df_5 = pd.DataFrame(records)
+
+    engine.query_interval(
+        cfg, 1, 4, recipient="Analyst", interactions=df_5,
+        public_user_roster=roster, finalized_up_to_day=5, current_wall_clock_day=7,
+    )
+
+    for d in range(6, 9):
+        records.extend(_generate_day_records(roster, d))
+    df_8 = pd.DataFrame(records)
+
+    res = engine.query_interval(
+        cfg, 1, 8, recipient="Analyst", interactions=df_8,
+        public_user_roster=roster, finalized_up_to_day=8, current_wall_clock_day=10,
+    )
+    assert res is not None
+
+
+def test_configured_external_cannot_claim_trusted(tmp_path: Path):
+    """Recipient configured as external cannot claim trusted role to bypass privacy accounting."""
+    db_file = tmp_path / "role_sec1.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(
+        state_manager=cont_mgr,
+        recipient_roles={"ProviderA": "external"},
+    )
+
+    with pytest.raises(ProductionSafetyConfigurationError, match="Recipient role override conflicts with authoritative configuration"):
+        engine.resolve_scope("ProviderA", recipient_role="trusted")
+
+
+def test_configured_trusted_role_used_when_role_argument_omitted(tmp_path: Path):
+    """When recipient_role is omitted, configured trusted role is authoritatively used."""
+    db_file = tmp_path / "role_sec2.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(
+        state_manager=cont_mgr,
+        recipient_roles={"InternalAuditor": "trusted"},
+    )
+
+    scope = engine.resolve_scope("InternalAuditor")
+    assert scope == "internal"
+
+
+def test_configured_external_role_used_when_role_argument_omitted(tmp_path: Path):
+    """When recipient_role is omitted, configured external role is authoritatively used."""
+    db_file = tmp_path / "role_sec3.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(
+        state_manager=cont_mgr,
+        composition_mode="per_recipient",
+        recipient_roles={"ProviderA": "external"},
+    )
+
+    scope = engine.resolve_scope("ProviderA")
+    assert scope == "recipient:ProviderA"
+
+
+def test_recipient_role_override_cannot_change_budget_scope(tmp_path: Path):
+    """Adversarial attempt to change budget scope via recipient_role parameter is rejected."""
+    db_file = tmp_path / "role_sec4.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(
+        state_manager=cont_mgr,
+        recipient_roles={"PartnerX": "external"},
+    )
+
+    with pytest.raises(ProductionSafetyConfigurationError):
+        engine.resolve_scope("PartnerX", recipient_role="trusted")
+
+
+def test_external_to_internal_scope_bypass_rejected(tmp_path: Path):
+    """External to internal scope bypass attempt is rejected before reservation or node disclosure."""
+    db_file = tmp_path / "role_sec5.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(
+        state_manager=cont_mgr,
+        recipient_roles={"ProviderA": "external"},
+    )
+
+    roster = ["u_0"]
+    df = pd.DataFrame([{"user_id": "u_0", "timestamp": "2026-01-01 10:00:00", "provider": "provider_a", "task": "technical"}])
+    cfg = ContinualStreamConfig(stream_id="s_sec", epoch_id="ep1", epoch_days=30, epoch_start="2026-01-01")
+
+    with pytest.raises(ProductionSafetyConfigurationError):
+        engine.query_interval(
+            cfg, 1, 2, recipient="ProviderA", interactions=df,
+            public_user_roster=roster, recipient_role="trusted", finalized_up_to_day=10, current_wall_clock_day=12,
+        )
+
+    # Verify zero level exposures occurred
+    exposed = cont_mgr.get_exposed_levels("internal", cfg.stream_fingerprint, "ep1")
+    assert len(exposed) == 0
+
+
+def test_real_daily_continual_progression(tmp_path: Path):
+    """End-to-end integration test of real daily continual progression across days 1..13."""
+    db_file = tmp_path / "real_daily_prog.db"
+    cont_mgr = ContinualStateManager(db_path=db_file)
+    engine = ContinualQueryEngine(state_manager=cont_mgr, composition_mode="per_recipient")
+
+    roster = [f"u_{i}" for i in range(5)]
+    cfg = ContinualStreamConfig(
+        stream_id="stream_daily",
+        epoch_id="epoch_jan",
+        epoch_start="2026-01-01",
+        epoch_days=30,
+        epoch_group_l12_bound=20.0,
+    )
+
+    # Day 1..10: interactions through Day 10, finalized frontier 10
+    records = []
+    for d in range(1, 11):
+        records.extend(_generate_day_records(roster, d))
+    df = pd.DataFrame(records)
+
+    res_10 = engine.query_prefix(
+        cfg, end_day=10, recipient="AnalystA", interactions=df,
+        public_user_roster=roster, finalized_up_to_day=10, current_wall_clock_day=12,
+    )
+    assert res_10 is not None
+
+    # Day 11: append Day 11 interactions, frontier advances to 11
+    records.extend(_generate_day_records(roster, 11))
+    df = pd.DataFrame(records)
+    res_11 = engine.query_sliding_window(
+        cfg, end_day=11, window_days=7, recipient="AnalystA", interactions=df,
+        public_user_roster=roster, finalized_up_to_day=11, current_wall_clock_day=13,
+    )
+    assert res_11 is not None
+
+    # Day 12: append Day 12 interactions, frontier advances to 12
+    records.extend(_generate_day_records(roster, 12))
+    df = pd.DataFrame(records)
+    res_12 = engine.query_interval(
+        cfg, start_day=1, end_day=12, recipient="AnalystA", interactions=df,
+        public_user_roster=roster, finalized_up_to_day=12, current_wall_clock_day=14,
+    )
+    assert res_12 is not None
+
+    # Then mutate finalized Day 10: MUST fail closed!
+    tampered_records = list(records)
+    tampered_records.append({
+        "user_id": roster[0],
+        "timestamp": "2026-01-10 23:59:59",
+        "provider": "provider_a",
+        "task": "technical",
+    })
+    df_tampered_10 = pd.DataFrame(tampered_records)
+    with pytest.raises(ProductionSafetyConfigurationError, match="already finalized partition for day 10 cannot be mutated"):
+        engine.query_interval(
+            cfg, start_day=1, end_day=12, recipient="AnalystA", interactions=df_tampered_10,
+            public_user_roster=roster, finalized_up_to_day=12, current_wall_clock_day=14,
+        )
+
+    # Mutate not-yet-finalized Day 13 before frontier advances: MUST be allowed
+    draft_13_records = list(records) + _generate_day_records(roster, 13, count_per_user=1)
+    df_draft_13 = pd.DataFrame(draft_13_records)
+    # Query with frontier 12 succeeds
+    res_draft = engine.query_interval(
+        cfg, start_day=1, end_day=12, recipient="AnalystA", interactions=df_draft_13,
+        public_user_roster=roster, finalized_up_to_day=12, current_wall_clock_day=14,
+    )
+    assert res_draft is not None
+
+    # Finalize Day 13: fingerprint sealed
+    real_13_records = list(records) + _generate_day_records(roster, 13, count_per_user=3)
+    df_final_13 = pd.DataFrame(real_13_records)
+    res_final_13 = engine.query_interval(
+        cfg, start_day=1, end_day=13, recipient="AnalystA", interactions=df_final_13,
+        public_user_roster=roster, finalized_up_to_day=13, current_wall_clock_day=15,
+    )
+    assert res_final_13 is not None
+
+    # Mutate Day 13 afterward: MUST fail closed
+    tampered_13_records = list(real_13_records) + [{
+        "user_id": roster[1],
+        "timestamp": "2026-01-13 12:34:56",
+        "provider": "provider_a",
+        "task": "technical",
+    }]
+    df_tampered_13 = pd.DataFrame(tampered_13_records)
+    with pytest.raises(ProductionSafetyConfigurationError, match="already finalized partition for day 13 cannot be mutated"):
+        engine.query_interval(
+            cfg, start_day=1, end_day=13, recipient="AnalystA", interactions=df_tampered_13,
+            public_user_roster=roster, finalized_up_to_day=13, current_wall_clock_day=15,
+        )
+

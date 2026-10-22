@@ -1282,7 +1282,7 @@
     ]
   },
   "system_scaling": {
-    "max_cached_query_latency_ms": 56.211,
+    "max_cached_query_latency_ms": 46.808,
     "max_db_size_kb": 460.0,
     "records": [
       {
@@ -1291,9 +1291,9 @@
         "num_levels": 6,
         "total_tree_nodes_capacity": 63,
         "db_size_kb": 144.0,
-        "materialization_latency_ms": 464.41,
-        "cached_query_latency_ms_avg": 26.31,
-        "cached_query_latency_ms_p95": 28.216
+        "materialization_latency_ms": 262.47,
+        "cached_query_latency_ms_avg": 26.09,
+        "cached_query_latency_ms_p95": 31.761
       },
       {
         "horizon_T": 90,
@@ -1301,9 +1301,9 @@
         "num_levels": 8,
         "total_tree_nodes_capacity": 255,
         "db_size_kb": 176.0,
-        "materialization_latency_ms": 1323.58,
-        "cached_query_latency_ms_avg": 32.763,
-        "cached_query_latency_ms_p95": 47.654
+        "materialization_latency_ms": 772.16,
+        "cached_query_latency_ms_avg": 23.995,
+        "cached_query_latency_ms_p95": 26.015
       },
       {
         "horizon_T": 180,
@@ -1311,9 +1311,9 @@
         "num_levels": 9,
         "total_tree_nodes_capacity": 511,
         "db_size_kb": 216.0,
-        "materialization_latency_ms": 3777.46,
-        "cached_query_latency_ms_avg": 55.43,
-        "cached_query_latency_ms_p95": 64.267
+        "materialization_latency_ms": 1907.85,
+        "cached_query_latency_ms_avg": 24.1,
+        "cached_query_latency_ms_p95": 26.666
       },
       {
         "horizon_T": 365,
@@ -1321,9 +1321,9 @@
         "num_levels": 10,
         "total_tree_nodes_capacity": 1023,
         "db_size_kb": 300.0,
-        "materialization_latency_ms": 20156.31,
-        "cached_query_latency_ms_avg": 54.211,
-        "cached_query_latency_ms_p95": 74.78
+        "materialization_latency_ms": 13245.45,
+        "cached_query_latency_ms_avg": 46.808,
+        "cached_query_latency_ms_p95": 55.259
       },
       {
         "horizon_T": 730,
@@ -1331,9 +1331,9 @@
         "num_levels": 11,
         "total_tree_nodes_capacity": 2047,
         "db_size_kb": 460.0,
-        "materialization_latency_ms": 59712.68,
-        "cached_query_latency_ms_avg": 56.211,
-        "cached_query_latency_ms_p95": 73.385
+        "materialization_latency_ms": 47599.61,
+        "cached_query_latency_ms_avg": 44.596,
+        "cached_query_latency_ms_p95": 47.38
       }
     ]
   }

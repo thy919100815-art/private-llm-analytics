@@ -143,10 +143,19 @@ class ContinualQueryEngine:
 
     def resolve_scope(self, recipient: str, recipient_role: Optional[str] = None) -> str:
         """Resolve budget scope ID according to active recipient composition policy."""
-        eff_role = recipient_role if recipient_role is not None else self.recipient_roles.get(recipient, "external")
+        configured_role = self.recipient_roles.get(recipient)
+        if configured_role is not None:
+            if recipient_role is not None and recipient_role != configured_role:
+                raise ProductionSafetyConfigurationError(
+                    "Recipient role override conflicts with authoritative configuration."
+                )
+            effective_role = configured_role
+        else:
+            effective_role = recipient_role or "external"
+
         return resolve_budget_scope_id(
             recipient=recipient,
-            recipient_role=eff_role,
+            recipient_role=effective_role,
             mode=self.composition_mode,
             groups=self.collusion_groups,
         )
@@ -183,7 +192,7 @@ class ContinualQueryEngine:
         query_type: str,
         interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         public_user_roster: Optional[Sequence[str]] = None,
-        recipient_role: str = "external",
+        recipient_role: Optional[str] = None,
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
         manifest_fingerprint: Optional[str] = None,
@@ -257,19 +266,8 @@ class ContinualQueryEngine:
 
         # 5b. Resolve dataset manifest and public roster fingerprints
         mf = manifest_fingerprint or stream_config.dataset_fingerprint
-        if not mf and interactions is not None:
-            if isinstance(interactions, pd.DataFrame):
-                data_bytes = str(interactions.to_dict(orient="records")).encode("utf-8")
-            else:
-                data_bytes = json.dumps(interactions, sort_keys=True).encode("utf-8")
-            mf = hashlib.sha256(data_bytes).hexdigest()
-
         rf = public_roster_fingerprint or stream_config.public_roster_fingerprint
-        if not rf and public_user_roster is not None:
-            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
-            rf = hashlib.sha256(roster_bytes).hexdigest()
-
-        if not mf:
+        if not mf or not rf:
             with self.state_manager._connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -278,17 +276,32 @@ class ContinualQueryEngine:
                 )
                 m_row = cursor.fetchone()
                 if m_row:
-                    mf = m_row[0]
+                    mf = mf or m_row[0]
                     rf = rf or m_row[1]
+
+        if not mf:
+            # Derive stable epoch manifest identity from immutable stream metadata
+            mf = f"epoch_manifest:{stream_config.stream_fingerprint}:{stream_config.epoch_id}"
+
+        if not rf and public_user_roster is not None:
+            roster_bytes = json.dumps(sorted(list(public_user_roster))).encode("utf-8")
+            rf = hashlib.sha256(roster_bytes).hexdigest()
 
         # 5c. Bind partition fingerprints from interactions if available
         if partition_fingerprints is None and interactions is not None:
             partition_fingerprints = compute_partition_fingerprints(
                 interactions=interactions,
                 epoch_start=stream_config.epoch_start,
-                epoch_days=stream_config.epoch_days,
+                start_day=1,
+                end_day=effective_fin,
                 timezone_name=stream_config.timezone,
             )
+        elif partition_fingerprints is not None:
+            partition_fingerprints = {
+                str(k): str(v)
+                for k, v in partition_fingerprints.items()
+                if int(k) <= effective_fin
+            }
 
         # 5d. Verify dataset manifest and partition fingerprints against sealed manifest in DB
         with self.state_manager._connection() as conn:
@@ -451,7 +464,7 @@ class ContinualQueryEngine:
         recipient: str,
         interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         public_user_roster: Optional[Sequence[str]] = None,
-        recipient_role: str = "external",
+        recipient_role: Optional[str] = None,
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
         manifest_fingerprint: Optional[str] = None,
@@ -484,7 +497,7 @@ class ContinualQueryEngine:
         recipient: str,
         interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         public_user_roster: Optional[Sequence[str]] = None,
-        recipient_role: str = "external",
+        recipient_role: Optional[str] = None,
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
         manifest_fingerprint: Optional[str] = None,
@@ -518,7 +531,7 @@ class ContinualQueryEngine:
         recipient: str,
         interactions: Optional[Union[pd.DataFrame, Sequence[Dict[str, Any]]]] = None,
         public_user_roster: Optional[Sequence[str]] = None,
-        recipient_role: str = "external",
+        recipient_role: Optional[str] = None,
         finalized_up_to_day: Optional[int] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
         manifest_fingerprint: Optional[str] = None,

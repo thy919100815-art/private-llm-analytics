@@ -2539,6 +2539,8 @@ class PrivacyStateManager:
                     if partition_fingerprints:
                         for day_k, pfp_v in partition_fingerprints.items():
                             day_int = int(day_k)
+                            if day_int > int(finalized_up_to_day):
+                                continue
                             cursor.execute(
                                 """
                                 SELECT partition_fingerprint
@@ -2588,6 +2590,8 @@ class PrivacyStateManager:
                 if partition_fingerprints:
                     for day_k, pfp_v in partition_fingerprints.items():
                         day_int = int(day_k)
+                        if day_int > int(finalized_up_to_day):
+                            continue
                         cursor.execute(
                             """
                             INSERT OR REPLACE INTO continual_epoch_partitions (
