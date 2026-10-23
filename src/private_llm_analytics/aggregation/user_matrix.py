@@ -12,6 +12,7 @@ from private_llm_analytics.aggregation.grouping import (
 )
 from private_llm_analytics.ingestion.schema import (
     COL_PROVIDER,
+    COL_SUCCESS,
     COL_TASK,
     COL_USER_ID,
 )
@@ -31,6 +32,7 @@ class UserMatrix:
     cell_names: List[str]          # 9 cell names
     cell_map: Dict[Tuple[str, str], int]
     public_population_size: Optional[int] = None  # Fixed public eligible population denominator
+    success_matrix: Optional[np.ndarray] = None   # shape (n_users, 9), float64 successful interaction counts
 
     def __post_init__(self):
         if self.public_population_size is not None:
@@ -86,6 +88,7 @@ def build_user_matrix(
     user_to_idx = {uid: i for i, uid in enumerate(target_users)}
 
     matrix = np.zeros((n_users, 9), dtype=np.float64)
+    success_matrix: Optional[np.ndarray] = None
 
     if not df.empty:
         # Filter to target users if user_ids was specified
@@ -108,6 +111,13 @@ def build_user_matrix(
         flat_counts = np.bincount(flat_indices, minlength=n_users * 9)
         matrix = flat_counts.reshape((n_users, 9)).astype(np.float64)
 
+        if COL_SUCCESS in sub_df.columns:
+            s_vals = sub_df[COL_SUCCESS].astype(bool).astype(np.float64).to_numpy()
+            flat_success = np.bincount(flat_indices, weights=s_vals, minlength=n_users * 9)
+            success_matrix = flat_success.reshape((n_users, 9)).astype(np.float64)
+    elif COL_SUCCESS in df.columns:
+        success_matrix = np.zeros((n_users, 9), dtype=np.float64)
+
     return UserMatrix(
         matrix=matrix,
         user_ids=target_users,
@@ -116,4 +126,5 @@ def build_user_matrix(
         cell_names=cell_names,
         cell_map=cell_map,
         public_population_size=public_population_size,
+        success_matrix=success_matrix,
     )

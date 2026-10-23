@@ -10,6 +10,7 @@ COL_USER_ID = "user_id"
 COL_TIMESTAMP = "timestamp"
 COL_PROVIDER = "provider"
 COL_TASK = "task"
+COL_SUCCESS = "success"
 
 REQUIRED_COLUMNS: List[str] = [
     COL_INTERACTION_ID,
@@ -27,3 +28,4 @@ class InteractionRecord:
     timestamp: datetime
     provider: str
     task: str
+    success: Optional[bool] = None

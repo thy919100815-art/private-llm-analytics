@@ -259,10 +259,12 @@ class PrivacyConfig(BaseModel):
 
 
 class ContributionConfig(BaseModel):
-    mode: Literal["binary", "l1_normalized", "l2_clip"]
+    mode: Literal["binary", "l1_normalized", "l2_clip", "joint_l2_clip"]
     max_cells_per_user: Optional[int] = 9
     norm_bound: Optional[float] = 1.0
     clip_norm: Optional[float] = 20.0
+    clip_norm_rate: Optional[float] = 10.0
+    min_noisy_denominator: Optional[float] = 5.0
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "ContributionConfig":
@@ -281,6 +283,11 @@ class ContributionConfig(BaseModel):
                 raise ValueError(
                     f"Interaction Volume requires clip_norm > 0, got {self.clip_norm}."
                 )
+        elif self.mode == "joint_l2_clip":
+            if self.clip_norm_rate is None or self.clip_norm_rate <= 0:
+                raise ValueError(
+                    f"Success Rate requires clip_norm_rate > 0, got {self.clip_norm_rate}."
+                )
         return self
 
 
@@ -290,7 +297,7 @@ class MechanismItemConfig(BaseModel):
 
 class MetricDefinition(BaseModel):
     enabled: bool = True
-    type: Literal["prevalence", "normalized_share", "volume"]
+    type: Literal["prevalence", "normalized_share", "volume", "success_rate"]
     version: int = 1
     dimensions: List[str] = Field(default_factory=lambda: ["provider", "task"])
     contribution: ContributionConfig

@@ -34,3 +34,16 @@ metrics:
       clip_norm: 20.0
     mechanism:
       type: gaussian
+
+  success_rate:
+    enabled: true
+    type: success_rate
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: joint_l2_clip
+      clip_norm_rate: 20.0
+      min_noisy_denominator: 1.0
+    mechanism:
+      type: gaussian

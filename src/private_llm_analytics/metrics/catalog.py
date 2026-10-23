@@ -6,6 +6,7 @@ from private_llm_analytics.metrics.base import BaseMetric
 from private_llm_analytics.metrics.interaction_volume import InteractionVolumeMetric
 from private_llm_analytics.metrics.normalized_share import UserNormalizedShareMetric
 from private_llm_analytics.metrics.prevalence import UserPrevalenceMetric
+from private_llm_analytics.metrics.success_rate import SuccessRateMetric
 
 
 class MetricCatalog:
@@ -22,6 +23,7 @@ class MetricCatalog:
         self.register(UserPrevalenceMetric())
         self.register(UserNormalizedShareMetric())
         self.register(InteractionVolumeMetric())
+        self.register(SuccessRateMetric())
 
     def _init_from_config(self, cfg: MetricsConfig):
         for name, m_def in cfg.metrics.items():
@@ -36,6 +38,10 @@ class MetricCatalog:
             elif m_def.type == "volume":
                 c = m_def.contribution.clip_norm or 20.0
                 self.register(InteractionVolumeMetric(name=name, clip_norm=c))
+            elif m_def.type == "success_rate":
+                c_rate = getattr(m_def.contribution, "clip_norm_rate", 10.0) or 10.0
+                min_den = getattr(m_def.contribution, "min_noisy_denominator", 5.0) or 5.0
+                self.register(SuccessRateMetric(name=name, clip_norm_rate=c_rate, min_noisy_denominator=min_den))
             else:
                 raise ValueError(f"Unknown metric type: {m_def.type}")
 
