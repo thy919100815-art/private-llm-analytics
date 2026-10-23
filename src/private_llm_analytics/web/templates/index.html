@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Private LLM Analytics Console</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="header-brand">
+      <span class="header-title">Private LLM Analytics Console</span>
+      <div class="header-badges">
+        <span class="badge badge-primary">v0.5.0-dev</span>
+        <span class="badge">Local Only (127.0.0.1)</span>
+        <span class="badge">Central DP</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="main-container">
+
+    <!-- Alert Notifications -->
+    <div id="alert-container"></div>
+
+    <!-- Top Grid: Dataset & Privacy Budget -->
+    <div class="grid-two-col">
+
+      <!-- Dataset Card -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">Dataset Telemetry</span>
+          <span id="dataset-status-badge" class="badge badge-warning">Checking...</span>
+        </div>
+        <p id="dataset-info" class="card-subtitle">Connecting to local service...</p>
+        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">Dataset Status contains trusted local administrative metadata and is NOT an external DP release.</p>
+        <div class="btn-group">
+          <button id="btn-load-demo" class="btn btn-secondary">Load Demo Data</button>
+          <button id="btn-upload" class="btn btn-secondary">Upload CSV / Parquet</button>
+          <input type="file" id="file-input" accept=".csv,.parquet" style="display: none;">
+        </div>
+      </section>
+
+      <!-- Privacy Budget Card -->
+      <section class="card">
+        <div class="card-header">
+          <span class="card-title">Lifetime Privacy Budget</span>
+          <span id="budget-accountant-mode" class="badge">RDP</span>
+        </div>
+        <div class="budget-meter">
+          <div class="progress-track">
+            <div id="budget-progress-fill" class="progress-fill"></div>
+          </div>
+          <div class="budget-stats">
+            <div class="stat-item">
+              <span class="stat-label">Effective ε Used</span>
+              <span id="budget-eps-used" class="stat-val">0.0000</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Lifetime ε Cap</span>
+              <span id="budget-eps-cap" class="stat-val">4.0000</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Headroom</span>
+              <span id="budget-headroom" class="stat-val">4.0000</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">δ Global</span>
+              <span id="budget-delta" class="stat-val">1.0e-6</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- Query Configuration Card -->
+    <section class="card">
+      <div class="card-header">
+        <span class="card-title">Query Configuration</span>
+        <span class="card-subtitle">Configure release parameters and view planner recommendations</span>
+      </div>
+
+      <!-- Metric Selection -->
+      <div class="form-group">
+        <label class="form-label">Analytics Metric</label>
+        <div class="radio-group">
+          <label class="radio-item">
+            <input type="radio" name="metric-choice" value="interaction_volume" checked>
+            <strong>Interaction Volume</strong> (Total counts, daily L2 bound)
+          </label>
+          <label class="radio-item">
+            <input type="radio" name="metric-choice" value="user_prevalence">
+            <strong>User Prevalence</strong> (Workforce adoption proportion)
+          </label>
+          <label class="radio-item">
+            <input type="radio" name="metric-choice" value="user_normalized_share">
+            <strong>User-Normalized Share</strong> (Workflow distribution on simplex)
+          </label>
+        </div>
+      </div>
+
+      <!-- Recipient & Window & Privacy Parameters -->
+      <div class="grid-two-col">
+        <div class="form-group">
+          <label class="form-label">Authorized Recipient</label>
+          <select id="select-recipient" class="form-select"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reporting Window</label>
+          <select id="select-window" class="form-select"></select>
+        </div>
+      </div>
+
+      <div class="grid-two-col">
+        <div class="form-group">
+          <label class="form-label">Privacy Parameter ε (Epsilon > 0)</label>
+          <input type="number" id="input-epsilon" class="form-input" step="0.1" min="0.01" value="1.0">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Privacy Parameter δ (0 < Delta < 1)</label>
+          <input type="number" id="input-delta" class="form-input" step="1e-7" min="1e-10" max="0.999" value="1e-6">
+        </div>
+      </div>
+
+      <!-- Display Filters -->
+      <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">
+        <span class="card-title" style="font-size: 13px;">Display Filters</span>
+        <p class="card-subtitle" style="margin-bottom: 8px;">Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend.</p>
+        <div class="grid-two-col">
+          <div class="form-group">
+            <label class="form-label">Display providers</label>
+            <div id="provider-checkboxes" class="checkbox-group"></div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Display tasks</label>
+            <div id="task-checkboxes" class="checkbox-group"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Query Actions -->
+      <div class="btn-group" style="margin-top: 12px;">
+        <button id="btn-get-recommendation" class="btn btn-secondary">Get Recommendation</button>
+        <button id="btn-open-confirm" class="btn btn-primary">Release DP Result</button>
+      </div>
+
+      <!-- Planner Recommendation Panel -->
+      <div id="planner-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+          <span style="font-weight: 600; font-size: 13px;">Utility Planner Recommendation</span>
+          <div>
+            <span id="plan-feasible" class="badge badge-success">Feasible</span>
+            <span class="badge">Recommendation Only (0 Budget Spend)</span>
+          </div>
+        </div>
+        <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 8px;">
+          <div class="stat-item">
+            <span class="stat-label">Clipping Bound (C)</span>
+            <span id="plan-clipping" class="stat-val">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Recommended Granularity</span>
+            <span id="plan-granularity" class="stat-val">-</span>
+            <span class="badge" style="margin-top: 4px; font-size: 10px;">Planner recommendation only</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Window</span>
+            <span id="plan-window" class="stat-val">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Frequency</span>
+            <span id="plan-freq" class="stat-val">-</span>
+          </div>
+        </div>
+        <p class="card-subtitle" style="margin-top: 4px; font-size: 11px;">Alternate release granularities are not directly executable from the v0.5 Web Console.</p>
+        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-top: 8px;">
+          <div class="stat-item">
+            <span class="stat-label">Estimated Clipping Loss</span>
+            <span id="plan-clip-loss" class="stat-val">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Estimated DP Noise</span>
+            <span id="plan-noise-loss" class="stat-val">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Total Estimated Loss</span>
+            <span id="plan-total-loss" class="stat-val">-</span>
+          </div>
+        </div>
+        <p id="plan-reason" class="card-subtitle" style="margin-top: 8px;"></p>
+      </div>
+    </section>
+
+    <!-- DP Result Display Panel -->
+    <section id="release-result-panel" class="card" style="display: none;">
+      <div class="card-header">
+        <span class="card-title">Differential Privacy Result</span>
+        <span id="res-cache-status" class="badge badge-primary">Committed</span>
+      </div>
+      <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr);">
+        <div class="stat-item">
+          <span class="stat-label">Metric</span>
+          <span id="res-metric" class="stat-val">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Recipient</span>
+          <span id="res-recipient" class="stat-val">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Privacy Parameters</span>
+          <span id="res-eps-delta" class="stat-val">-</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Noise Scale (σ)</span>
+          <span id="res-noise-scale" class="stat-val">-</span>
+        </div>
+      </div>
+      <p class="card-subtitle">Release ID: <span id="res-release-id" style="font-family: monospace;">-</span></p>
+
+      <!-- DP Cell Values Table -->
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Cell / Domain</th>
+              <th>DP Estimate</th>
+              <th>Unit</th>
+            </tr>
+          </thead>
+          <tbody id="results-table-body"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Release History Card -->
+    <section class="card">
+      <div class="card-header">
+        <span class="card-title">Release & Accounting History</span>
+        <span class="card-subtitle">Persistent SQLite audit ledger</span>
+      </div>
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Release ID</th>
+              <th>Timestamp</th>
+              <th>Metric</th>
+              <th>Recipient</th>
+              <th>Privacy Budget</th>
+              <th>Mechanism</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="history-table-body">
+            <tr><td colspan="7" style="text-align:center; color: var(--text-light);">Loading history...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Continual Observation Card -->
+    <section class="card">
+      <div class="card-header">
+        <span class="card-title">Continual Observation</span>
+        <span id="continual-status-badge" class="badge badge-warning">Disabled</span>
+      </div>
+      <p id="continual-msg" class="card-subtitle">Continual observation requires trusted configuration and an authoritative finalized stream state.</p>
+      <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-top: 8px; margin-bottom: 8px;">
+        <div class="stat-item">
+          <span class="stat-label">Supported Metric</span>
+          <span id="cont-metric" class="stat-val">Interaction Volume</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Epoch Days</span>
+          <span id="cont-epoch-days" class="stat-val">90</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Sensitivity (C_day / C_epoch)</span>
+          <span id="cont-bounds" class="stat-val">10.0 / 40.0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Tree Topology</span>
+          <span id="cont-topo" class="stat-val">binary</span>
+        </div>
+      </div>
+      <div class="grid-two-col" style="margin-top: 6px;">
+        <div class="form-group">
+          <label class="form-label">Start Day (1-indexed)</label>
+          <input type="number" id="continual-start-day" class="form-input" min="1" value="1">
+        </div>
+        <div class="form-group">
+          <label class="form-label">End Day (1-indexed)</label>
+          <input type="number" id="continual-end-day" class="form-input" min="1" value="30">
+        </div>
+      </div>
+      <div>
+        <button id="btn-continual-query" class="btn btn-secondary" disabled>Query Interval</button>
+      </div>
+
+      <!-- Continual Query Result -->
+      <div id="continual-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+        <div class="card-title" style="margin-bottom: 8px;">Continual Interval Query Output</div>
+        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 12px;">
+          <div class="stat-item">
+            <span class="stat-label">Canonical Nodes Used</span>
+            <span id="cont-nodes-used" class="stat-val">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Reused Levels (0 Spend)</span>
+            <span id="cont-reused" class="stat-val">-</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Newly Exposed Levels</span>
+            <span id="cont-new-exposed" class="stat-val">-</span>
+          </div>
+        </div>
+        <p class="card-subtitle" style="margin-bottom: 12px;">Query ID: <span id="cont-query-id" style="font-family: monospace;">-</span> | Tree Levels: <span id="cont-levels">-</span></p>
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Cell Name</th>
+                <th>DP Interaction Volume</th>
+              </tr>
+            </thead>
+            <tbody id="continual-table-body"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Confirmation Modal -->
+  <div id="confirm-modal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">Confirm Differential Privacy Release</div>
+      <p class="modal-desc">This query may consume lifetime privacy budget.</p>
+      <div class="modal-list">
+        <div><strong>Metric:</strong> <span id="confirm-metric"></span></div>
+        <div><strong>Recipient:</strong> <span id="confirm-recipient"></span></div>
+        <div><strong>Epsilon (ε):</strong> <span id="confirm-eps"></span></div>
+        <div><strong>Delta (δ):</strong> <span id="confirm-delta"></span></div>
+        <div><strong>Window:</strong> <span id="confirm-window"></span></div>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-cancel-release" class="btn btn-secondary">Cancel</button>
+        <button id="btn-confirm-release" class="btn btn-primary">Confirm & Release DP Result</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

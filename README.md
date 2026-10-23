@@ -103,7 +103,7 @@ flowchart LR
 ```bash
 git clone https://github.com/thy919100815-art/private-llm-analytics.git
 cd private-llm-analytics
-pip install -e ".[dev]"
+pip install -e ".[dev,web]"
 python -m pytest tests/ -q
 ```
 
@@ -137,6 +137,47 @@ result = service.compute(
 
 print(result["results"]["cell_volumes"])
 ```
+
+---
+
+## Local Web Console
+
+Private LLM Analytics includes a lightweight, secure local web console for trusted internal administrators to configure queries, inspect lifetime privacy consumption, review small-$n$ planner recommendations, and execute differential privacy releases.
+
+![Private LLM Analytics Local Web Console](docs/images/web-console.png)
+
+### Security & Privacy Invariants
+
+- **Localhost Bound**: The server binds strictly to `127.0.0.1` by default (never `0.0.0.0`) and is designed exclusively for local trusted curators.
+- **Zero External Egress**: Uses standard server-rendered HTML, vanilla CSS, and vanilla JavaScript with zero external CDN dependencies, remote fonts, or network telemetry.
+- **Authoritative Accounting**: The Web Console does not implement standalone DP logic; every release and budget inquiry delegates strictly to the authoritative `AnalyticsService` and `PrivacyStateManager`.
+- **RNG Fencing**: External request payloads cannot supply random seeds or tamper with cryptographic noise generators.
+
+### Starting the Console
+
+```bash
+# Install with web dependencies
+pip install -e ".[web]"
+
+# Launch the local console (defaults to http://127.0.0.1:8000)
+python -m private_llm_analytics.web
+
+# Or specify custom host and port:
+python -m private_llm_analytics.web --host 127.0.0.1 --port 8080
+```
+
+Open your browser at `http://127.0.0.1:8000`.
+
+### Key Console Capabilities & Operational Semantics
+
+1. **Dataset Management**: Load bundled enterprise synthetic demo telemetry (50,000 users, 3M+ rows) or upload local CSV/Parquet telemetry datasets. Dataset Status contains trusted local administrative metadata and is NOT an external DP release.
+2. **Authoritative Privacy Monitor**: Real-time inspection of cumulative lifetime RDP budget spend, current effective $(\epsilon, \delta)$ consumption, and per-recipient scope breakdown.
+3. **Query Configuration & Trailing Data Windows**: Selection across analytics metrics and target privacy parameters $(\epsilon, \delta)$. Window selection performs a real trailing calendar-day filter derived from the maximum timestamp in the loaded dataset.
+4. **Display Filters**: Provider and task category checkboxes operate as client-side display filters over the already released DP result cells; they do not trigger new privacy releases or additional privacy spend.
+5. **Utility-Aware Planner Preview**: Preview recommended clipping bounds and utility loss decompositions before spending privacy budget (zero budget spend for preview). Planner recommendations do not automatically modify releases, and alternate release granularities are recommendation-only in v0.5.
+6. **Execution & Concurrency Confirmation**: Explicit two-step confirmation modal before budget expenditure; automatic detection and notification for memoized releases (cache hit with 0 incremental spend).
+7. **Release History**: Audit trail of completed releases with sanitization of internal user identities.
+8. **Continual Observation**: Status inspection of binary time-tree continual observation. Continual observation remains disabled by default, and interval queries fail closed without an authoritative finalized stream configuration.
 
 ---
 
@@ -217,8 +258,9 @@ private-llm-analytics/
 │       ├── continual/  # Binary time tree, continual query engine, and temporal mechanisms
 │       ├── evaluation/ # Analytical utility estimators and accuracy metrics
 │       ├── privacy/    # Differential privacy mechanisms, state manager, and RDP accounting
-│       └── service/    # High-level analytics service API
-└── tests/              # Comprehensive pytest verification suite (420+ tests)
+│       ├── service/    # High-level analytics service API
+│       └── web/        # Local Web Analytics Console (FastAPI, zero external egress)
+└── tests/              # Comprehensive pytest verification suite (448 tests)
 ```
 
 ---

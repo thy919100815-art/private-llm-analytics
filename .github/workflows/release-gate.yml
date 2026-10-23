@@ -17,6 +17,7 @@ on:
     branches:
       - v0.3-dev
       - v0.4-dev
+      - v0.5-dev
 
 jobs:
   verification-gate:
