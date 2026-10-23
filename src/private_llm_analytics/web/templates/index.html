@@ -102,7 +102,31 @@
             <input type="radio" name="metric-choice" value="user_normalized_share">
             <strong>用户归一化占比</strong>（用户工作流在不同类别中的归一化分布）
           </label>
+          <label class="radio-item">
+            <input type="radio" name="metric-choice" value="success_rate">
+            <strong>成功率</strong>（任务成功数与总尝试数的安全联合比率）
+          </label>
         </div>
+      </div>
+
+      <!-- Read-only Differential Privacy Release Profile Panel -->
+      <div class="profile-summary-box" id="profile-summary-panel" style="margin-bottom: 16px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+          <span style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--primary-color); letter-spacing: 0.5px;">差分隐私方案</span>
+          <span id="profile-display-name" style="font-weight: 600; font-size: 13px; color: var(--text-color);">用户级 L2 裁剪 + 高斯向量机制</span>
+        </div>
+        <details class="profile-details-collapsible" id="profile-details-collapse" style="font-size: 12px; color: var(--text-light); margin-top: 6px;">
+          <summary style="cursor: pointer; font-weight: 500; color: var(--primary-color); outline: none;">机制详情</summary>
+          <div id="profile-details-content" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 16px; margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border-color);">
+            <div><span style="font-weight: 600;">隐私单位:</span> <span id="detail-privacy-unit">用户</span></div>
+            <div><span style="font-weight: 600;">邻接关系:</span> <span id="detail-adjacency">增加/删除一个用户</span></div>
+            <div><span style="font-weight: 600;">贡献约束:</span> <span id="detail-contribution">用户交互向量 L2 裁剪</span></div>
+            <div><span style="font-weight: 600;">敏感度:</span> <span id="detail-sensitivity">L2 敏感度 = C</span></div>
+            <div><span style="font-weight: 600;">DP 机制:</span> <span id="detail-mechanism">高斯向量机制</span></div>
+            <div><span style="font-weight: 600;">隐私记账:</span> <span id="detail-accounting">RDP</span></div>
+            <div style="grid-column: span 2;"><span style="font-weight: 600;">持续观测:</span> <span id="detail-continual">支持二叉树结构</span></div>
+          </div>
+        </details>
       </div>
 
       <!-- Recipient & Window & Privacy Parameters -->

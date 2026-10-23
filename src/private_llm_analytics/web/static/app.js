@@ -8,6 +8,7 @@ const METRIC_NAMES = {
   interaction_volume: "交互量",
   user_prevalence: "用户使用率",
   user_normalized_share: "用户归一化占比",
+  success_rate: "成功率",
 };
 
 const TASK_NAMES = {
@@ -20,6 +21,7 @@ const UNIT_NAMES = {
   interactions: "次交互",
   "workflow share": "工作流占比",
   prevalence: "用户使用率",
+  success_rate: "任务成功率",
 };
 
 const GRANULARITY_NAMES = {
@@ -34,6 +36,84 @@ const SOURCE_NAMES = {
   uploaded: "本地上传",
 };
 
+const PROFILE_DETAILS = {
+  interaction_volume: {
+    scheme: "用户级 L2 裁剪 + 高斯向量机制",
+    privacyUnit: "用户",
+    adjacency: "增加/删除一个用户",
+    contribution: "用户交互向量 L2 裁剪",
+    sensitivity: "L2 敏感度 = C",
+    mechanism: "高斯向量机制",
+    accounting: "RDP",
+    continual: "支持二叉树结构",
+  },
+  user_prevalence: {
+    scheme: "用户参与二值化 + 高斯直方图机制",
+    privacyUnit: "用户",
+    adjacency: "增加/删除一个用户",
+    contribution: "用户参与状态二值化（k=9）",
+    sensitivity: "L2 敏感度 = 3.0",
+    mechanism: "高斯直方图机制",
+    accounting: "RDP",
+    continual: "暂不支持",
+  },
+  user_normalized_share: {
+    scheme: "用户归一化贡献 + 高斯向量机制 + 单纯形归一化",
+    privacyUnit: "用户",
+    adjacency: "增加/删除一个用户",
+    contribution: "用户交互向量 L1 归一化（范数上限 1.0）",
+    sensitivity: "L2 敏感度 = 1.0",
+    mechanism: "高斯向量机制",
+    accounting: "RDP",
+    continual: "暂不支持",
+  },
+  success_rate: {
+    scheme: "共享用户级裁剪 + 成功数/总数联合高斯机制 + 比率后处理",
+    privacyUnit: "用户",
+    adjacency: "增加/删除一个用户",
+    contribution: "用户交互向量 L2 裁剪（共享缩放因子 a_u）",
+    sensitivity: "联合 L2 敏感度 = sqrt(2) × C_rate",
+    mechanism: "联合高斯机制（18维联合向量单次发布）",
+    accounting: "RDP（单次 RDP 计费）",
+    continual: "暂不支持",
+  },
+};
+
+function updateProfileSchemePanel(metric) {
+  let d = PROFILE_DETAILS[metric] || PROFILE_DETAILS.interaction_volume;
+  if (currentConfig && currentConfig.statistics) {
+    const backendStat = currentConfig.statistics.find(s => s.id === metric || s.statistic_id === metric);
+    if (backendStat) {
+      d = {
+        scheme: backendStat.profile_name_zh || d.scheme,
+        privacyUnit: backendStat.privacy_unit === "user" ? "用户" : backendStat.privacy_unit,
+        adjacency: backendStat.adjacency === "add_remove_user" ? "增加/删除一个用户" : backendStat.adjacency,
+        contribution: backendStat.contribution_definition || d.contribution,
+        sensitivity: backendStat.sensitivity_description || d.sensitivity,
+        mechanism: backendStat.profile_name_zh || d.mechanism,
+        accounting: (backendStat.accounting_family || "").toUpperCase() || d.accounting,
+        continual: backendStat.supports_continual ? "支持二叉树结构" : "暂不支持",
+      };
+    }
+  }
+  const nameEl = document.getElementById("profile-display-name");
+  if (nameEl) nameEl.textContent = d.scheme;
+  const unitEl = document.getElementById("detail-privacy-unit");
+  if (unitEl) unitEl.textContent = d.privacyUnit;
+  const adjEl = document.getElementById("detail-adjacency");
+  if (adjEl) adjEl.textContent = d.adjacency;
+  const contEl = document.getElementById("detail-contribution");
+  if (contEl) contEl.textContent = d.contribution;
+  const sensEl = document.getElementById("detail-sensitivity");
+  if (sensEl) sensEl.textContent = d.sensitivity;
+  const mechEl = document.getElementById("detail-mechanism");
+  if (mechEl) mechEl.textContent = d.mechanism;
+  const accEl = document.getElementById("detail-accounting");
+  if (accEl) accEl.textContent = d.accounting;
+  const contnEl = document.getElementById("detail-continual");
+  if (contnEl) contnEl.textContent = d.continual;
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   initConsole();
 });
@@ -45,6 +125,7 @@ async function initConsole() {
   await refreshReleaseHistory();
   await refreshContinualStatus();
 
+  updateProfileSchemePanel(getSelectedMetric());
   setupEventListeners();
 }
 
@@ -328,6 +409,13 @@ function setupEventListeners() {
     refreshPrivacyStatus();
   });
 
+  // Metric selection change -> update read-only DP Profile panel
+  document.querySelectorAll("input[name='metric-choice']").forEach((radio) => {
+    radio.addEventListener("change", () => {
+      updateProfileSchemePanel(getSelectedMetric());
+    });
+  });
+
   // Planner Recommendation
   document.getElementById("btn-get-recommendation").addEventListener("click", async () => {
     clearAlerts();
@@ -530,6 +618,12 @@ function applyResultFilter() {
       cell: k,
       value: (Number(v) * 100).toFixed(2) + "%",
       unit: "prevalence",
+    }));
+  } else if (results.cell_success_rates) {
+    cellEntries = Object.entries(results.cell_success_rates).map(([k, v]) => ({
+      cell: k,
+      value: (Number(v) * 100).toFixed(2) + "%",
+      unit: "success_rate",
     }));
   }
 

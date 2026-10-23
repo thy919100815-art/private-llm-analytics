@@ -5,7 +5,12 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 
-VALID_METRICS = {"user_prevalence", "user_normalized_share", "interaction_volume"}
+VALID_METRICS = {
+    "user_prevalence",
+    "user_normalized_share",
+    "interaction_volume",
+    "success_rate",
+}
 FORBIDDEN_RNG_KEYS = {"rng", "seed", "noise_seed", "noise", "random_state"}
 
 
@@ -85,10 +90,8 @@ class PlannerRecommendRequest(BaseModel):
     @classmethod
     def validate_metric(cls, v: str) -> str:
         norm = v.lower().strip()
-        if norm != "interaction_volume":
-            raise ValueError(
-                "Utility-aware parameter planning is formally supported for 'interaction_volume' only."
-            )
+        if norm not in VALID_METRICS:
+            raise ValueError(f"Invalid metric '{v}'. Allowed metrics: {sorted(list(VALID_METRICS))}")
         return norm
 
 
@@ -129,6 +132,7 @@ class ConfigResponse(BaseModel):
     recipients: List[str]
     continual_enabled: bool
     granularities: List[str]
+    statistics: Optional[List[Dict[str, Any]]] = None
 
 
 class DatasetStatusResponse(BaseModel):

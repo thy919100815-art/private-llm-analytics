@@ -74,10 +74,14 @@ class WebAnalyticsAdapter:
         continual_cfg = getattr(cfg.privacy, "continual", None)
         continual_enabled = bool(continual_cfg.enabled if continual_cfg else False)
 
+        from private_llm_analytics.statistics.registry import StatisticProfileRegistry
+        statistics = [m.to_dict() for m in StatisticProfileRegistry.get_metadata_list()]
+
         return {
             "providers": providers,
             "tasks": tasks,
             "metrics": metrics,
+            "statistics": statistics,
             "default_epsilon": default_eps,
             "default_delta": default_delta,
             "candidate_windows": candidate_windows,
@@ -196,6 +200,21 @@ class WebAnalyticsAdapter:
         planning_horizon_days: int = 90,
     ) -> Dict[str, Any]:
         """Invoke existing SmallNReleasePlanner to provide utility recommendations."""
+        if metric != "interaction_volume":
+            return {
+                "recommended_clipping": None,
+                "recommended_granularity": "full_9_cell",
+                "recommended_window_days": 30,
+                "recommended_frequency_days": 7,
+                "estimated_clipping_loss": None,
+                "estimated_dp_noise": None,
+                "estimated_utility": None,
+                "budget_feasible": True,
+                "projected_epsilon": 0.0,
+                "decision_reason": "当前统计项目暂未启用自动参数规划，请使用已验证的默认公开参数。",
+                "is_recommendation_only": True,
+            }
+
         planner = SmallNReleasePlanner(
             app_config=self.service.config,
             state_manager=self.service.orchestrator.state_manager,
