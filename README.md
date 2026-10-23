@@ -8,11 +8,11 @@ User-level DP · Lifetime RDP Accounting · Multi-Recipient Composition · Conti
 [![Release Gate](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/release-gate.yml/badge.svg?branch=main)](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/release-gate.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/thy919100815-art/private-llm-analytics?color=orange)](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.4.0)
+[![Latest Release](https://img.shields.io/github/v/release/thy919100815-art/private-llm-analytics?color=orange)](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.5.0)
 
 Private LLM Analytics is a privacy layer for organizations that need to analyze employee usage of multiple LLM providers without exposing individual user behavior to external vendors or analysts.
 
-Current stable release: [`v0.4.0`](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.4.0)
+Current stable release: [`v0.5.0`](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.5.0)
 
 ---
 

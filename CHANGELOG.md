@@ -3,6 +3,18 @@
 All notable changes to **Private LLM Analytics** are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0]
+
+### Added
+- **Local Web Console**: Localhost FastAPI analytics console with zero external network egress and no frontend build system.
+- **Authoritative Trailing-Window Release Selection**: Trailing 7/14/30/60/90-day release windows derived strictly from dataset maximum timestamps.
+- **Privacy-Budget and Release-History Inspection**: Real-time monitoring of cumulative lifetime RDP budget spend and sanitized persistent audit ledger.
+- **Utility-Planner Preview**: Zero-spend preview of recommended clipping bounds and utility loss decompositions with explicit recommendation-only labeling.
+- **Local Telemetry Ingestion**: Support for local CSV and Parquet telemetry uploads with schema and taxonomy validation.
+- **Canonical DP Release Replay UX**: Replay memoization indicators with zero incremental privacy cost on repeated queries.
+- **Continual-Observation Status**: Inspection of binary time-tree continual observation with fail-closed stream initialization semantics.
+- **Test Suite Expansion**: Comprehensive regression suite increased from 421 to 448 tests.
+
 ## [0.4.0]
 
 ### Added
