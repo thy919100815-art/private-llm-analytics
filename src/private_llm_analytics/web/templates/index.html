@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Private LLM Analytics Console</title>
+  <title>大模型隐私分析控制台</title>
   <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -11,11 +11,12 @@
   <!-- Header -->
   <header>
     <div class="header-brand">
-      <span class="header-title">Private LLM Analytics Console</span>
+      <span class="header-title">大模型隐私分析控制台</span>
+      <span class="header-subtitle" style="font-size: 12px; color: var(--text-light); margin-left: 8px;">Private LLM Analytics Console</span>
       <div class="header-badges">
-        <span class="badge badge-primary">v0.5.0-dev</span>
-        <span class="badge">Local Only (127.0.0.1)</span>
-        <span class="badge">Central DP</span>
+        <span class="badge badge-primary">v0.5.0</span>
+        <span class="badge">仅本地访问（127.0.0.1）</span>
+        <span class="badge">中心化差分隐私</span>
       </div>
     </div>
   </header>
@@ -32,14 +33,14 @@
       <!-- Dataset Card -->
       <section class="card">
         <div class="card-header">
-          <span class="card-title">Dataset Telemetry</span>
-          <span id="dataset-status-badge" class="badge badge-warning">Checking...</span>
+          <span class="card-title">数据集状态</span>
+          <span id="dataset-status-badge" class="badge badge-warning">检查中...</span>
         </div>
-        <p id="dataset-info" class="card-subtitle">Connecting to local service...</p>
-        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">Dataset Status contains trusted local administrative metadata and is NOT an external DP release.</p>
+        <p id="dataset-info" class="card-subtitle">正在连接本地服务...</p>
+        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">此处显示的是本地可信管理员可见的数据集状态信息，不属于对外差分隐私发布结果。</p>
         <div class="btn-group">
-          <button id="btn-load-demo" class="btn btn-secondary">Load Demo Data</button>
-          <button id="btn-upload" class="btn btn-secondary">Upload CSV / Parquet</button>
+          <button id="btn-load-demo" class="btn btn-secondary">加载演示数据</button>
+          <button id="btn-upload" class="btn btn-secondary">上传 CSV / Parquet</button>
           <input type="file" id="file-input" accept=".csv,.parquet" style="display: none;">
         </div>
       </section>
@@ -47,8 +48,8 @@
       <!-- Privacy Budget Card -->
       <section class="card">
         <div class="card-header">
-          <span class="card-title">Lifetime Privacy Budget</span>
-          <span id="budget-accountant-mode" class="badge">RDP</span>
+          <span class="card-title">全生命周期隐私预算</span>
+          <span id="budget-accountant-mode" class="badge">RDP → (ε, δ)</span>
         </div>
         <div class="budget-meter">
           <div class="progress-track">
@@ -56,23 +57,24 @@
           </div>
           <div class="budget-stats">
             <div class="stat-item">
-              <span class="stat-label">Effective ε Used</span>
+              <span class="stat-label">已使用有效 ε</span>
               <span id="budget-eps-used" class="stat-val">0.0000</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Lifetime ε Cap</span>
+              <span class="stat-label">全生命周期 ε 上限</span>
               <span id="budget-eps-cap" class="stat-val">4.0000</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">Headroom</span>
+              <span class="stat-label">剩余 ε 空间</span>
               <span id="budget-headroom" class="stat-val">4.0000</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">δ Global</span>
+              <span class="stat-label">全局 δ</span>
               <span id="budget-delta" class="stat-val">1.0e-6</span>
             </div>
           </div>
         </div>
+        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 8px;">隐私预算按照历史发布持续累计，不会因重新启动服务而自动重置。</p>
       </section>
 
     </div>
@@ -80,25 +82,25 @@
     <!-- Query Configuration Card -->
     <section class="card">
       <div class="card-header">
-        <span class="card-title">Query Configuration</span>
-        <span class="card-subtitle">Configure release parameters and view planner recommendations</span>
+        <span class="card-title">查询配置</span>
+        <span class="card-subtitle">配置差分隐私发布参数并查看规划器建议</span>
       </div>
 
       <!-- Metric Selection -->
       <div class="form-group">
-        <label class="form-label">Analytics Metric</label>
+        <label class="form-label">统计指标</label>
         <div class="radio-group">
           <label class="radio-item">
             <input type="radio" name="metric-choice" value="interaction_volume" checked>
-            <strong>Interaction Volume</strong> (Total counts, daily L2 bound)
+            <strong>交互量</strong>（交互总量，按日进行 L2 贡献约束）
           </label>
           <label class="radio-item">
             <input type="radio" name="metric-choice" value="user_prevalence">
-            <strong>User Prevalence</strong> (Workforce adoption proportion)
+            <strong>用户使用率</strong>（使用该模型能力的用户占比）
           </label>
           <label class="radio-item">
             <input type="radio" name="metric-choice" value="user_normalized_share">
-            <strong>User-Normalized Share</strong> (Workflow distribution on simplex)
+            <strong>用户归一化占比</strong>（用户工作流在不同类别中的归一化分布）
           </label>
         </div>
       </div>
@@ -106,37 +108,39 @@
       <!-- Recipient & Window & Privacy Parameters -->
       <div class="grid-two-col">
         <div class="form-group">
-          <label class="form-label">Authorized Recipient</label>
+          <label class="form-label">授权接收方</label>
           <select id="select-recipient" class="form-select"></select>
         </div>
         <div class="form-group">
-          <label class="form-label">Reporting Window</label>
+          <label class="form-label">统计时间窗口</label>
           <select id="select-window" class="form-select"></select>
         </div>
       </div>
 
       <div class="grid-two-col">
         <div class="form-group">
-          <label class="form-label">Privacy Parameter ε (Epsilon > 0)</label>
+          <label class="form-label">隐私参数 ε（Epsilon > 0）</label>
           <input type="number" id="input-epsilon" class="form-input" step="0.1" min="0.01" value="1.0">
+          <p class="form-hint" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">ε 越小，隐私保护越强，但噪声通常越大。</p>
         </div>
         <div class="form-group">
-          <label class="form-label">Privacy Parameter δ (0 < Delta < 1)</label>
+          <label class="form-label">隐私参数 δ（0 < Delta < 1）</label>
           <input type="number" id="input-delta" class="form-input" step="1e-7" min="1e-10" max="0.999" value="1e-6">
+          <p class="form-hint" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">δ 为全局隐私参数的一部分。</p>
         </div>
       </div>
 
       <!-- Display Filters -->
       <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-        <span class="card-title" style="font-size: 13px;">Display Filters</span>
-        <p class="card-subtitle" style="margin-bottom: 8px;">Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend.</p>
+        <span class="card-title" style="font-size: 13px;">结果显示筛选 <!-- Display Filters --></span>
+        <p class="card-subtitle" style="margin-bottom: 8px;">以下筛选仅作用于已经生成的差分隐私结果，不会重新发起发布，也不会额外消耗隐私预算。 <!-- Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend. --></p>
         <div class="grid-two-col">
           <div class="form-group">
-            <label class="form-label">Display providers</label>
+            <label class="form-label">显示模型 / Provider <!-- Display providers --></label>
             <div id="provider-checkboxes" class="checkbox-group"></div>
           </div>
           <div class="form-group">
-            <label class="form-label">Display tasks</label>
+            <label class="form-label">显示任务类型 <!-- Display tasks --></label>
             <div id="task-checkboxes" class="checkbox-group"></div>
           </div>
         </div>
@@ -144,50 +148,50 @@
 
       <!-- Query Actions -->
       <div class="btn-group" style="margin-top: 12px;">
-        <button id="btn-get-recommendation" class="btn btn-secondary">Get Recommendation</button>
-        <button id="btn-open-confirm" class="btn btn-primary">Release DP Result</button>
+        <button id="btn-get-recommendation" class="btn btn-secondary">获取参数建议</button>
+        <button id="btn-open-confirm" class="btn btn-primary">生成差分隐私结果</button>
       </div>
 
       <!-- Planner Recommendation Panel -->
       <div id="planner-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <span style="font-weight: 600; font-size: 13px;">Utility Planner Recommendation</span>
+          <span style="font-weight: 600; font-size: 13px;">隐私效用规划建议</span>
           <div>
-            <span id="plan-feasible" class="badge badge-success">Feasible</span>
-            <span class="badge">Recommendation Only (0 Budget Spend)</span>
+            <span id="plan-feasible" class="badge badge-success">预算可行</span>
+            <span class="badge">仅供建议（不消耗隐私预算）</span>
           </div>
         </div>
         <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 8px;">
           <div class="stat-item">
-            <span class="stat-label">Clipping Bound (C)</span>
+            <span class="stat-label">贡献裁剪上限（C）</span>
             <span id="plan-clipping" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Recommended Granularity</span>
+            <span class="stat-label">建议统计粒度</span>
             <span id="plan-granularity" class="stat-val">-</span>
-            <span class="badge" style="margin-top: 4px; font-size: 10px;">Planner recommendation only</span>
+            <span class="badge" style="margin-top: 4px; font-size: 10px;">仅为规划器建议 <!-- Planner recommendation only --></span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Window</span>
+            <span class="stat-label">建议时间窗口</span>
             <span id="plan-window" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Frequency</span>
+            <span class="stat-label">建议发布频率</span>
             <span id="plan-freq" class="stat-val">-</span>
           </div>
         </div>
-        <p class="card-subtitle" style="margin-top: 4px; font-size: 11px;">Alternate release granularities are not directly executable from the v0.5 Web Console.</p>
+        <p class="card-subtitle" style="margin-top: 4px; font-size: 11px;">v0.5 Web 控制台当前仅展示统计粒度建议，不会直接按该粒度执行新的发布。</p>
         <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-top: 8px;">
           <div class="stat-item">
-            <span class="stat-label">Estimated Clipping Loss</span>
+            <span class="stat-label">预计裁剪误差</span>
             <span id="plan-clip-loss" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Estimated DP Noise</span>
+            <span class="stat-label">预计 DP 噪声误差</span>
             <span id="plan-noise-loss" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Total Estimated Loss</span>
+            <span class="stat-label">预计总误差</span>
             <span id="plan-total-loss" class="stat-val">-</span>
           </div>
         </div>
@@ -198,37 +202,37 @@
     <!-- DP Result Display Panel -->
     <section id="release-result-panel" class="card" style="display: none;">
       <div class="card-header">
-        <span class="card-title">Differential Privacy Result</span>
-        <span id="res-cache-status" class="badge badge-primary">Committed</span>
+        <span class="card-title">差分隐私结果</span>
+        <span id="res-cache-status" class="badge badge-primary">已发布</span>
       </div>
       <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr);">
         <div class="stat-item">
-          <span class="stat-label">Metric</span>
+          <span class="stat-label">统计指标</span>
           <span id="res-metric" class="stat-val">-</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Recipient</span>
+          <span class="stat-label">接收方</span>
           <span id="res-recipient" class="stat-val">-</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Privacy Parameters</span>
+          <span class="stat-label">隐私参数</span>
           <span id="res-eps-delta" class="stat-val">-</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Noise Scale (σ)</span>
+          <span class="stat-label">噪声尺度（σ）</span>
           <span id="res-noise-scale" class="stat-val">-</span>
         </div>
       </div>
-      <p class="card-subtitle">Release ID: <span id="res-release-id" style="font-family: monospace;">-</span></p>
+      <p class="card-subtitle">发布 ID: <span id="res-release-id" style="font-family: monospace;">-</span></p>
 
       <!-- DP Cell Values Table -->
       <div class="table-container">
         <table>
           <thead>
             <tr>
-              <th>Cell / Domain</th>
-              <th>DP Estimate</th>
-              <th>Unit</th>
+              <th>统计单元</th>
+              <th>DP 估计值</th>
+              <th>单位</th>
             </tr>
           </thead>
           <tbody id="results-table-body"></tbody>
@@ -239,24 +243,24 @@
     <!-- Release History Card -->
     <section class="card">
       <div class="card-header">
-        <span class="card-title">Release & Accounting History</span>
-        <span class="card-subtitle">Persistent SQLite audit ledger</span>
+        <span class="card-title">发布与隐私记账历史</span>
+        <span class="card-subtitle">持久化 SQLite 审计记录</span>
       </div>
       <div class="table-container">
         <table>
           <thead>
             <tr>
-              <th>Release ID</th>
-              <th>Timestamp</th>
-              <th>Metric</th>
-              <th>Recipient</th>
-              <th>Privacy Budget</th>
-              <th>Mechanism</th>
-              <th>Status</th>
+              <th>发布 ID</th>
+              <th>时间</th>
+              <th>统计指标</th>
+              <th>接收方</th>
+              <th>隐私预算</th>
+              <th>DP 机制</th>
+              <th>状态</th>
             </tr>
           </thead>
           <tbody id="history-table-body">
-            <tr><td colspan="7" style="text-align:center; color: var(--text-light);">Loading history...</td></tr>
+            <tr><td colspan="7" style="text-align:center; color: var(--text-light);">加载历史记录中...</td></tr>
           </tbody>
         </table>
       </div>
@@ -265,66 +269,66 @@
     <!-- Continual Observation Card -->
     <section class="card">
       <div class="card-header">
-        <span class="card-title">Continual Observation</span>
-        <span id="continual-status-badge" class="badge badge-warning">Disabled</span>
+        <span class="card-title">持续观测</span>
+        <span id="continual-status-badge" class="badge badge-warning">未启用（默认）</span>
       </div>
-      <p id="continual-msg" class="card-subtitle">Continual observation requires trusted configuration and an authoritative finalized stream state.</p>
+      <p id="continual-msg" class="card-subtitle">持续观测功能需要可信配置，以及已经正式确认的权威数据流状态。</p>
       <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-top: 8px; margin-bottom: 8px;">
         <div class="stat-item">
-          <span class="stat-label">Supported Metric</span>
-          <span id="cont-metric" class="stat-val">Interaction Volume</span>
+          <span class="stat-label">当前支持指标</span>
+          <span id="cont-metric" class="stat-val">交互量</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Epoch Days</span>
+          <span class="stat-label">Epoch 时间跨度</span>
           <span id="cont-epoch-days" class="stat-val">90</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Sensitivity (C_day / C_epoch)</span>
+          <span class="stat-label">敏感度（C_day / C_epoch）</span>
           <span id="cont-bounds" class="stat-val">10.0 / 40.0</span>
         </div>
         <div class="stat-item">
-          <span class="stat-label">Tree Topology</span>
-          <span id="cont-topo" class="stat-val">binary</span>
+          <span class="stat-label">时间树结构</span>
+          <span id="cont-topo" class="stat-val">二叉树</span>
         </div>
       </div>
       <div class="grid-two-col" style="margin-top: 6px;">
         <div class="form-group">
-          <label class="form-label">Start Day (1-indexed)</label>
+          <label class="form-label">起始天数（从第 1 天起算）</label>
           <input type="number" id="continual-start-day" class="form-input" min="1" value="1">
         </div>
         <div class="form-group">
-          <label class="form-label">End Day (1-indexed)</label>
+          <label class="form-label">截止天数（从第 1 天起算）</label>
           <input type="number" id="continual-end-day" class="form-input" min="1" value="30">
         </div>
       </div>
       <div>
-        <button id="btn-continual-query" class="btn btn-secondary" disabled>Query Interval</button>
+        <button id="btn-continual-query" class="btn btn-secondary" disabled>区间查询</button>
       </div>
 
       <!-- Continual Query Result -->
       <div id="continual-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-        <div class="card-title" style="margin-bottom: 8px;">Continual Interval Query Output</div>
+        <div class="card-title" style="margin-bottom: 8px;">持续观测区间查询结果</div>
         <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 12px;">
           <div class="stat-item">
-            <span class="stat-label">Canonical Nodes Used</span>
+            <span class="stat-label">使用的标准树节点</span>
             <span id="cont-nodes-used" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Reused Levels (0 Spend)</span>
+            <span class="stat-label">已复用层级（0 隐私消耗）</span>
             <span id="cont-reused" class="stat-val">-</span>
           </div>
           <div class="stat-item">
-            <span class="stat-label">Newly Exposed Levels</span>
+            <span class="stat-label">新暴露层级</span>
             <span id="cont-new-exposed" class="stat-val">-</span>
           </div>
         </div>
-        <p class="card-subtitle" style="margin-bottom: 12px;">Query ID: <span id="cont-query-id" style="font-family: monospace;">-</span> | Tree Levels: <span id="cont-levels">-</span></p>
+        <p class="card-subtitle" style="margin-bottom: 12px;">查询 ID: <span id="cont-query-id" style="font-family: monospace;">-</span> | 树层级: <span id="cont-levels">-</span></p>
         <div class="table-container">
           <table>
             <thead>
               <tr>
-                <th>Cell Name</th>
-                <th>DP Interaction Volume</th>
+                <th>统计单元</th>
+                <th>DP 交互量估计</th>
               </tr>
             </thead>
             <tbody id="continual-table-body"></tbody>
@@ -338,18 +342,18 @@
   <!-- Confirmation Modal -->
   <div id="confirm-modal" class="modal-overlay">
     <div class="modal-card">
-      <div class="modal-title">Confirm Differential Privacy Release</div>
-      <p class="modal-desc">This query may consume lifetime privacy budget.</p>
+      <div class="modal-title">确认差分隐私发布</div>
+      <p class="modal-desc">本次新查询可能消耗全生命周期隐私预算。</p>
       <div class="modal-list">
-        <div><strong>Metric:</strong> <span id="confirm-metric"></span></div>
-        <div><strong>Recipient:</strong> <span id="confirm-recipient"></span></div>
-        <div><strong>Epsilon (ε):</strong> <span id="confirm-eps"></span></div>
-        <div><strong>Delta (δ):</strong> <span id="confirm-delta"></span></div>
-        <div><strong>Window:</strong> <span id="confirm-window"></span></div>
+        <div><strong>统计指标:</strong> <span id="confirm-metric"></span></div>
+        <div><strong>接收方:</strong> <span id="confirm-recipient"></span></div>
+        <div><strong>隐私参数 ε:</strong> <span id="confirm-eps"></span></div>
+        <div><strong>隐私参数 δ:</strong> <span id="confirm-delta"></span></div>
+        <div><strong>统计时间窗口:</strong> <span id="confirm-window"></span></div>
       </div>
       <div class="modal-actions">
-        <button id="btn-cancel-release" class="btn btn-secondary">Cancel</button>
-        <button id="btn-confirm-release" class="btn btn-primary">Confirm & Release DP Result</button>
+        <button id="btn-cancel-release" class="btn btn-secondary">取消</button>
+        <button id="btn-confirm-release" class="btn btn-primary">确认发布</button>
       </div>
     </div>
   </div>

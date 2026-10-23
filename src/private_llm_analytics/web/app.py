@@ -164,7 +164,7 @@ def create_app(
     async def health_check():
         return {
             "status": "ok",
-            "version": "0.5.0-dev",
+            "version": "0.5.0",
             "service": "Private LLM Analytics Console",
             "local_only": True,
         }

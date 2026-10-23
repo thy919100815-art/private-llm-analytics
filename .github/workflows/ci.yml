@@ -2,9 +2,9 @@ name: CI
 
 on:
   push:
-    branches: [ "main", "v0.2-dev", "v0.3-dev", "v0.4-dev", "v0.5-dev" ]
+    branches: [ "main", "v0.2-dev", "v0.3-dev", "v0.4-dev", "v0.5-dev", "v0.5.1-dev" ]
   pull_request:
-    branches: [ "main", "v0.2-dev", "v0.3-dev", "v0.4-dev", "v0.5-dev" ]
+    branches: [ "main", "v0.2-dev", "v0.3-dev", "v0.4-dev", "v0.5-dev", "v0.5.1-dev" ]
 
 jobs:
   test:

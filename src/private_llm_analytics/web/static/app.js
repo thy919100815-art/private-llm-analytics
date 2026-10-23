@@ -1,8 +1,38 @@
 // Private LLM Analytics Web Console (v0.5)
-// Vanilla JavaScript Client - Local Only
+// Vanilla JavaScript Client - Local Only (Simplified Chinese Localization)
 
 let currentConfig = null;
 let lastReleaseData = null;
+
+const METRIC_NAMES = {
+  interaction_volume: "交互量",
+  user_prevalence: "用户使用率",
+  user_normalized_share: "用户归一化占比",
+};
+
+const TASK_NAMES = {
+  technical: "技术类",
+  document: "文档类",
+  analysis: "分析类",
+};
+
+const UNIT_NAMES = {
+  interactions: "次交互",
+  "workflow share": "工作流占比",
+  prevalence: "用户使用率",
+};
+
+const GRANULARITY_NAMES = {
+  daily: "按日（Daily）",
+  weekly: "按周（Weekly）",
+  biweekly: "双周（Bi-weekly）",
+  monthly: "按月（Monthly）",
+};
+
+const SOURCE_NAMES = {
+  demo: "演示数据",
+  uploaded: "本地上传",
+};
 
 document.addEventListener("DOMContentLoaded", () => {
   initConsole();
@@ -28,7 +58,7 @@ async function fetchConfig() {
     currentConfig = await res.json();
     renderConfigOptions(currentConfig);
   } catch (err) {
-    showError("Failed to load configuration from backend: " + err);
+    showError("无法从后端加载配置：" + (err.error || err.detail || err));
   }
 }
 
@@ -63,7 +93,8 @@ function renderConfigOptions(cfg) {
     input.checked = true;
     input.addEventListener("change", applyResultFilter);
     label.appendChild(input);
-    label.appendChild(document.createTextNode(" " + t));
+    const displayTask = TASK_NAMES[t] || t;
+    label.appendChild(document.createTextNode(" " + displayTask));
     taskContainer.appendChild(label);
   });
 
@@ -90,13 +121,13 @@ function renderConfigOptions(cfg) {
   cfg.candidate_windows.forEach((w) => {
     const opt = document.createElement("option");
     opt.value = w;
-    opt.textContent = `${w} days`;
+    opt.textContent = `最近 ${w} 天`;
     if (w === 30) opt.selected = true;
     windowSelect.appendChild(opt);
   });
   const optAll = document.createElement("option");
   optAll.value = "all";
-  optAll.textContent = "All time";
+  optAll.textContent = "全部时间";
   windowSelect.appendChild(optAll);
 }
 
@@ -109,15 +140,16 @@ async function refreshDatasetStatus() {
 
     if (data.loaded) {
       statusEl.className = "badge badge-success";
-      statusEl.textContent = "Loaded";
-      infoEl.textContent = `Rows: ${data.rows.toLocaleString()} | Active Users: ${data.active_users.toLocaleString()} | Source: ${data.source}`;
+      statusEl.textContent = "已加载";
+      const displaySource = SOURCE_NAMES[data.source] || data.source;
+      infoEl.textContent = `数据行数: ${data.rows.toLocaleString()} | 活跃用户数: ${data.active_users.toLocaleString()} | 数据来源: ${displaySource}`;
     } else {
       statusEl.className = "badge badge-warning";
-      statusEl.textContent = "No Data Loaded";
-      infoEl.textContent = "Please click 'Load Demo Data' or upload a telemetry file (CSV/Parquet).";
+      statusEl.textContent = "未加载数据";
+      infoEl.textContent = "请加载演示数据，或上传本地遥测数据文件（CSV / Parquet）。";
     }
   } catch (err) {
-    showError("Failed to fetch dataset status: " + err);
+    showError("无法获取数据集状态：" + (err.error || err.detail || err));
   }
 }
 
@@ -131,7 +163,7 @@ async function refreshPrivacyStatus() {
     document.getElementById("budget-eps-cap").textContent = data.epsilon_cap.toFixed(4);
     document.getElementById("budget-headroom").textContent = data.remaining_headroom.toFixed(4);
     document.getElementById("budget-delta").textContent = data.delta_global.toExponential(1);
-    document.getElementById("budget-accountant-mode").textContent = data.accountant_mode;
+    document.getElementById("budget-accountant-mode").textContent = "RDP → (ε, δ)";
 
     const fillEl = document.getElementById("budget-progress-fill");
     fillEl.style.width = `${Math.min(100, data.spend_percentage)}%`;
@@ -144,7 +176,7 @@ async function refreshPrivacyStatus() {
       fillEl.className = "progress-fill";
     }
   } catch (err) {
-    showError("Failed to fetch privacy status: " + err);
+    showError("无法获取隐私预算状态：" + (err.error || err.detail || err));
   }
 }
 
@@ -161,7 +193,7 @@ async function refreshReleaseHistory() {
       emptyCell.colSpan = 7;
       emptyCell.style.textAlign = "center";
       emptyCell.style.color = "var(--text-light)";
-      emptyCell.textContent = "No historical releases recorded yet.";
+      emptyCell.textContent = "暂无历史发布记录。";
       emptyRow.appendChild(emptyCell);
       tbody.appendChild(emptyRow);
       return;
@@ -181,7 +213,7 @@ async function refreshReleaseHistory() {
 
       const tdMetric = document.createElement("td");
       const strongMetric = document.createElement("strong");
-      strongMetric.textContent = item.metric;
+      strongMetric.textContent = METRIC_NAMES[item.metric] || item.metric;
       tdMetric.appendChild(strongMetric);
 
       const tdRecipient = document.createElement("td");
@@ -196,7 +228,7 @@ async function refreshReleaseHistory() {
       const tdStatus = document.createElement("td");
       const badge = document.createElement("span");
       badge.className = item.cache_hit ? "badge badge-success" : "badge badge-primary";
-      badge.textContent = item.cache_hit ? "Reused (0 Cost)" : "Committed";
+      badge.textContent = item.cache_hit ? "已复用（无额外消耗）" : "已提交";
       tdStatus.appendChild(badge);
 
       tr.appendChild(tdId);
@@ -210,7 +242,7 @@ async function refreshReleaseHistory() {
       tbody.appendChild(tr);
     });
   } catch (err) {
-    showError("Failed to fetch release history: " + err);
+    showError("无法获取历史发布记录：" + (err.error || err.detail || err));
   }
 }
 
@@ -223,25 +255,27 @@ async function refreshContinualStatus() {
     const queryBtn = document.getElementById("btn-continual-query");
 
     if (document.getElementById("cont-metric")) {
-      document.getElementById("cont-metric").textContent = data.supported_metric === "interaction_volume" ? "Interaction Volume" : data.supported_metric;
+      document.getElementById("cont-metric").textContent =
+        data.supported_metric === "interaction_volume" ? "交互量" : (METRIC_NAMES[data.supported_metric] || data.supported_metric);
       document.getElementById("cont-epoch-days").textContent = data.epoch_days ?? 90;
       document.getElementById("cont-bounds").textContent = `${data.daily_l2_bound ?? 10.0} / ${data.epoch_group_l12_bound ?? 40.0}`;
-      document.getElementById("cont-topo").textContent = data.tree_topology ?? "binary";
+      document.getElementById("cont-topo").textContent =
+        data.tree_topology === "binary" ? "二叉树" : (data.tree_topology ?? "二叉树");
     }
 
     if (data.enabled) {
       statusBadge.className = "badge badge-success";
-      statusBadge.textContent = "Enabled";
-      msgEl.textContent = data.message || `Mode: ${data.mode} | Epoch Horizon: ${data.epoch_days} days.`;
+      statusBadge.textContent = "已启用";
+      msgEl.textContent = data.message || `模式: ${data.mode} | Epoch 时间跨度: ${data.epoch_days} 天。`;
       queryBtn.disabled = false;
     } else {
       statusBadge.className = "badge badge-warning";
-      statusBadge.textContent = "Disabled (Default)";
-      msgEl.textContent = data.message || "Continual observation requires trusted configuration and an authoritative finalized stream state.";
+      statusBadge.textContent = "未启用（默认）";
+      msgEl.textContent = "持续观测功能需要可信配置，以及已经正式确认的权威数据流状态。";
       queryBtn.disabled = true;
     }
   } catch (err) {
-    showError("Failed to fetch continual status: " + err);
+    showError("无法获取持续观测状态：" + (err.error || err.detail || err));
   }
 }
 
@@ -257,9 +291,9 @@ function setupEventListeners() {
       const res = await fetch("/api/dataset/demo", { method: "POST" });
       if (!res.ok) throw await res.json();
       await refreshDatasetStatus();
-      showSuccess("Demo synthetic telemetry dataset generated successfully.");
+      showSuccess("演示遥测数据已成功加载。");
     } catch (err) {
-      showError(err.error || "Failed to load demo data.");
+      showError(translateError(err) || "演示数据加载失败。");
     }
   });
 
@@ -283,9 +317,9 @@ function setupEventListeners() {
       });
       if (!res.ok) throw await res.json();
       await refreshDatasetStatus();
-      showSuccess(`Dataset '${file.name}' validated and loaded successfully.`);
+      showSuccess(`数据集“${file.name}”校验通过并已成功加载。`);
     } catch (err) {
-      showError(err.error || "Dataset upload failed.");
+      showError(translateError(err) || "数据集上传失败。");
     }
   });
 
@@ -315,7 +349,7 @@ function setupEventListeners() {
       const plan = await res.json();
       renderPlannerRecommendation(plan);
     } catch (err) {
-      showError(err.error || "Failed to get planner recommendation.");
+      showError(translateError(err) || "获取效用规划器建议失败。");
     }
   });
 
@@ -329,19 +363,19 @@ function setupEventListeners() {
     const windowVal = document.getElementById("select-window").value;
 
     if (isNaN(eps) || eps <= 0) {
-      showError("Epsilon must be a positive number.");
+      showError("隐私参数 ε 必须为正数。");
       return;
     }
     if (isNaN(delta) || delta <= 0 || delta >= 1) {
-      showError("Delta must be strictly between 0 and 1.");
+      showError("隐私参数 δ 必须严格介于 0 和 1 之间。");
       return;
     }
 
-    document.getElementById("confirm-metric").textContent = metric;
+    document.getElementById("confirm-metric").textContent = METRIC_NAMES[metric] || metric;
     document.getElementById("confirm-recipient").textContent = recipient;
     document.getElementById("confirm-eps").textContent = eps;
     document.getElementById("confirm-delta").textContent = delta;
-    document.getElementById("confirm-window").textContent = windowVal === "all" ? "All time" : `${windowVal} days`;
+    document.getElementById("confirm-window").textContent = windowVal === "all" ? "全部时间" : `最近 ${windowVal} 天`;
 
     document.getElementById("confirm-modal").classList.add("active");
   });
@@ -384,11 +418,11 @@ function setupEventListeners() {
       await refreshReleaseHistory();
       showSuccess(
         data.cache_hit
-          ? "Existing canonical release reused. No additional privacy spend."
-          : `DP release executed and committed to persistent ledger. Incremental ε cost: ${data.incremental_privacy_cost}`
+          ? "已复用现有标准发布结果，本次没有产生额外隐私消耗。"
+          : `差分隐私结果已生成，并写入持久化隐私记账记录。增量 ε 消耗: ${data.incremental_privacy_cost}`
       );
     } catch (err) {
-      showError(err.error || "Failed to execute differential privacy release.");
+      showError(translateError(err) || "差分隐私发布失败。");
     }
   });
 
@@ -415,9 +449,9 @@ function setupEventListeners() {
       const data = await res.json();
       renderContinualResult(data);
       await refreshPrivacyStatus();
-      showSuccess(`Continual interval query [${startDay}, ${endDay}] executed.`);
+      showSuccess(`持续观测区间查询 [${startDay}, ${endDay}] 已完成。`);
     } catch (err) {
-      showError(err.error || "Continual query failed.");
+      showError(translateError(err) || "持续观测区间查询失败。");
     }
   });
 }
@@ -438,15 +472,16 @@ function renderPlannerRecommendation(plan) {
   const panel = document.getElementById("planner-result-panel");
   panel.style.display = "block";
 
-  document.getElementById("plan-clipping").textContent = plan.recommended_clipping ?? "N/A";
-  document.getElementById("plan-granularity").textContent = plan.recommended_granularity;
-  document.getElementById("plan-window").textContent = `${plan.recommended_window_days} days`;
-  document.getElementById("plan-freq").textContent = `Every ${plan.recommended_frequency_days} days`;
+  document.getElementById("plan-clipping").textContent = plan.recommended_clipping ?? "无";
+  document.getElementById("plan-granularity").textContent =
+    GRANULARITY_NAMES[plan.recommended_granularity] || plan.recommended_granularity;
+  document.getElementById("plan-window").textContent = `${plan.recommended_window_days} 天`;
+  document.getElementById("plan-freq").textContent = `每 ${plan.recommended_frequency_days} 天`;
 
-  document.getElementById("plan-clip-loss").textContent = plan.estimated_clipping_loss ?? "N/A";
-  document.getElementById("plan-noise-loss").textContent = plan.estimated_dp_noise ?? "N/A";
-  document.getElementById("plan-total-loss").textContent = plan.estimated_utility ?? "N/A";
-  document.getElementById("plan-feasible").textContent = plan.budget_feasible ? "Feasible" : "Infeasible";
+  document.getElementById("plan-clip-loss").textContent = plan.estimated_clipping_loss ?? "无";
+  document.getElementById("plan-noise-loss").textContent = plan.estimated_dp_noise ?? "无";
+  document.getElementById("plan-total-loss").textContent = plan.estimated_utility ?? "无";
+  document.getElementById("plan-feasible").textContent = plan.budget_feasible ? "预算可行" : "预算不可行";
   document.getElementById("plan-feasible").className = plan.budget_feasible ? "badge badge-success" : "badge badge-warning";
   document.getElementById("plan-reason").textContent = plan.decision_reason;
 }
@@ -455,13 +490,13 @@ function renderReleaseResult(data) {
   const panel = document.getElementById("release-result-panel");
   panel.style.display = "block";
 
-  document.getElementById("res-metric").textContent = data.metric;
+  document.getElementById("res-metric").textContent = METRIC_NAMES[data.metric] || data.metric;
   document.getElementById("res-recipient").textContent = data.recipient;
   document.getElementById("res-eps-delta").textContent = `ε = ${data.epsilon}, δ = ${data.delta}`;
   document.getElementById("res-noise-scale").textContent = data.noise_scale;
 
   const cacheStatusEl = document.getElementById("res-cache-status");
-  cacheStatusEl.textContent = data.cache_hit ? "Reused (0 Cost)" : "New Release Committed";
+  cacheStatusEl.textContent = data.cache_hit ? "已复用（无额外隐私消耗）" : "新结果已发布";
   cacheStatusEl.className = data.cache_hit ? "badge badge-success" : "badge badge-primary";
 
   document.getElementById("res-release-id").textContent = data.release_id || data.release_key;
@@ -521,7 +556,7 @@ function applyResultFilter() {
     emptyCell.colSpan = 3;
     emptyCell.style.textAlign = "center";
     emptyCell.style.color = "var(--text-light)";
-    emptyCell.textContent = "No cells match the current filter selection.";
+    emptyCell.textContent = "当前筛选条件下没有匹配的统计单元。";
     emptyRow.appendChild(emptyCell);
     tbody.appendChild(emptyRow);
     return;
@@ -542,7 +577,7 @@ function applyResultFilter() {
 
     const tdUnit = document.createElement("td");
     tdUnit.style.color = "var(--text-light)";
-    tdUnit.textContent = item.unit;
+    tdUnit.textContent = UNIT_NAMES[item.unit] || item.unit;
 
     tr.appendChild(tdCell);
     tr.appendChild(tdVal);
@@ -558,8 +593,8 @@ function renderContinualResult(data) {
   document.getElementById("cont-query-id").textContent = data.query_id;
   document.getElementById("cont-nodes-used").textContent = data.nodes_used.map((n) => `[${n[0]}, ${n[1]}]`).join(", ");
   document.getElementById("cont-levels").textContent = data.levels_used.join(", ");
-  document.getElementById("cont-reused").textContent = data.reused_levels.length > 0 ? data.reused_levels.join(", ") : "None";
-  document.getElementById("cont-new-exposed").textContent = data.newly_exposed_levels.length > 0 ? data.newly_exposed_levels.join(", ") : "None";
+  document.getElementById("cont-reused").textContent = data.reused_levels.length > 0 ? data.reused_levels.join(", ") : "无";
+  document.getElementById("cont-new-exposed").textContent = data.newly_exposed_levels.length > 0 ? data.newly_exposed_levels.join(", ") : "无";
 
   const tbody = document.getElementById("continual-table-body");
   tbody.textContent = "";
@@ -583,8 +618,59 @@ function renderContinualResult(data) {
 }
 
 // -------------------------------------------------------------
-// Alerts
+// Alerts & Error Translation
 // -------------------------------------------------------------
+
+function translateError(err) {
+  if (!err) return "";
+  let msg = "";
+  let errorType = "";
+  if (typeof err === "string") {
+    msg = err;
+  } else if (typeof err === "object") {
+    msg = err.error || err.detail || "";
+    errorType = err.error_type || "";
+    if (!msg && !errorType) {
+      msg = JSON.stringify(err);
+    }
+  }
+
+  if (
+    errorType === "BudgetExhaustedError" ||
+    msg.includes("BudgetExhaustedError") ||
+    msg.includes("budget exhausted") ||
+    msg.includes("not authorized under the current lifetime privacy cap") ||
+    msg.includes("Lifetime privacy cap exceeded")
+  ) {
+    return "当前全生命周期隐私预算不足，无法执行本次发布。";
+  }
+  if (msg.includes("No telemetry data loaded") || msg.includes("no telemetry")) {
+    return "尚未加载遥测数据。请先加载演示数据或上传本地遥测数据文件。";
+  }
+  if (
+    errorType === "ProductionSafetyConfigurationError" ||
+    msg.includes("ProductionSafetyConfigurationError") ||
+    msg.includes("Continual interval queries require an authoritative finalized stream configuration")
+  ) {
+    return "持续观测区间查询需要权威的已完成数据流配置，当前 Web 控制台不会自动初始化该状态。";
+  }
+  if (msg.includes("Delta must be strictly between 0 and 1")) {
+    return "隐私参数 δ 必须严格介于 0 和 1 之间。";
+  }
+  if (msg.includes("Epsilon must be a positive number")) {
+    return "隐私参数 ε 必须为正数。";
+  }
+  if (msg.includes("Failed to execute differential privacy release")) {
+    return "差分隐私发布失败。";
+  }
+  if (msg.includes("Failed to load demo data")) {
+    return "演示数据加载失败。";
+  }
+  if (msg.includes("Dataset upload failed")) {
+    return "数据集上传失败。";
+  }
+  return msg || "操作遇到错误。";
+}
 
 function clearAlerts() {
   const container = document.getElementById("alert-container");
