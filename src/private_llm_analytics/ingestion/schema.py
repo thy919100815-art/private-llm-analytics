@@ -1,8 +1,10 @@
 """Schema definition for interaction events."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 
 # Required column names for the long-format interaction logs
 COL_INTERACTION_ID = "interaction_id"
