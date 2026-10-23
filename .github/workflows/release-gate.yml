@@ -18,6 +18,7 @@ on:
       - v0.3-dev
       - v0.4-dev
       - v0.5-dev
+      - v0.6-dev
 
 jobs:
   verification-gate:
