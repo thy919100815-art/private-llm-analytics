@@ -1,0 +1,26 @@
+{
+  "user_prevalence": {
+    "contributions_match": true,
+    "sensitivity_match": true,
+    "noise_scale_match": true,
+    "post_processing_match": true,
+    "sensitivity": 3.0,
+    "noise_scale": 12.674036667980548
+  },
+  "user_normalized_share": {
+    "contributions_match": true,
+    "sensitivity_match": true,
+    "noise_scale_match": true,
+    "post_processing_match": true,
+    "sensitivity": 1.0,
+    "noise_scale": 4.224678889326844
+  },
+  "interaction_volume": {
+    "contributions_match": true,
+    "sensitivity_match": true,
+    "noise_scale_match": true,
+    "post_processing_match": true,
+    "sensitivity": 25.0,
+    "noise_scale": 105.61697223317111
+  }
+}
