@@ -213,7 +213,11 @@ class PrivacyStateManager:
                     rdp_orders_json TEXT,
                     delta_global TEXT,
                     effective_epsilon TEXT,
-                    best_alpha TEXT
+                    best_alpha TEXT,
+                    statistic_id TEXT,
+                    profile_id TEXT,
+                    profile_version TEXT,
+                    profile_fingerprint TEXT
                 )
             """)
             cursor.execute("""
@@ -356,7 +360,11 @@ class PrivacyStateManager:
                     accountant_mode TEXT NOT NULL DEFAULT 'basic',
                     rdp_cost_json TEXT,
                     effective_epsilon TEXT,
-                    best_alpha TEXT
+                    best_alpha TEXT,
+                    statistic_id TEXT,
+                    profile_id TEXT,
+                    profile_version TEXT,
+                    profile_fingerprint TEXT
                 )
             """)
 
@@ -548,6 +556,10 @@ class PrivacyStateManager:
                 "delta_global": "TEXT",
                 "effective_epsilon": "TEXT",
                 "best_alpha": "TEXT",
+                "statistic_id": "TEXT",
+                "profile_id": "TEXT",
+                "profile_version": "TEXT",
+                "profile_fingerprint": "TEXT",
             }
             cursor.execute("PRAGMA table_info(release_store)")
             rel_cols = {row[1] for row in cursor.fetchall()}
@@ -561,6 +573,10 @@ class PrivacyStateManager:
                 "rdp_cost_json": "TEXT",
                 "effective_epsilon": "TEXT",
                 "best_alpha": "TEXT",
+                "statistic_id": "TEXT",
+                "profile_id": "TEXT",
+                "profile_version": "TEXT",
+                "profile_fingerprint": "TEXT",
             }
             cursor.execute("PRAGMA table_info(privacy_ledger)")
             led_cols = {row[1] for row in cursor.fetchall()}
@@ -971,7 +987,7 @@ class PrivacyStateManager:
             else:
                 pp_reconstructed[k] = v
 
-        return DPReleaseResult(
+        res = DPReleaseResult(
             metric_name=row["metric"],
             dp_vector=dp_vec,
             post_processed=pp_reconstructed,
@@ -984,6 +1000,15 @@ class PrivacyStateManager:
             n_users=int(row["n_users"]),
             public_population_size=row["public_population_size"],
         )
+        if "statistic_id" in row.keys() and row["statistic_id"]:
+            setattr(res, "statistic_id", row["statistic_id"])
+        if "profile_id" in row.keys() and row["profile_id"]:
+            setattr(res, "profile_id", row["profile_id"])
+        if "profile_version" in row.keys() and row["profile_version"]:
+            setattr(res, "profile_version", row["profile_version"])
+        if "profile_fingerprint" in row.keys() and row["profile_fingerprint"]:
+            setattr(res, "profile_fingerprint", row["profile_fingerprint"])
+        return res
 
     def _get_unified_active_rdp_vectors_tx(
         self,
@@ -1363,6 +1388,11 @@ class PrivacyStateManager:
                         ),
                     )
 
+                    stat_id = str(plan_metadata.get("statistic_id") or canonical_semantics.get("statistic_id") or "")
+                    prof_id = str(plan_metadata.get("profile_id") or canonical_semantics.get("profile_id") or "")
+                    prof_ver = str(plan_metadata.get("profile_version") or canonical_semantics.get("profile_version") or "")
+                    prof_fp = str(plan_metadata.get("profile_fingerprint") or canonical_semantics.get("profile_fingerprint") or "")
+
                     if row is not None:
                         # Key exists in aborted state, update to PENDING with incremented generation
                         cursor.execute(
@@ -1375,7 +1405,8 @@ class PrivacyStateManager:
                                 cell_names_json = ?, n_users = ?, public_population_size = ?,
                                 dp_vector_json = NULL, post_processed_json = NULL, committed_at = NULL,
                                 recipient = ?, recipient_role = ?, budget_scope_id = ?,
-                                accountant_mode = ?, rdp_cost_json = ?, rdp_orders_json = ?, delta_global = ?
+                                accountant_mode = ?, rdp_cost_json = ?, rdp_orders_json = ?, delta_global = ?,
+                                statistic_id = ?, profile_id = ?, profile_version = ?, profile_fingerprint = ?
                             WHERE release_key = ?
                             """,
                             (
@@ -1404,6 +1435,10 @@ class PrivacyStateManager:
                                 rdp_j,
                                 orders_j,
                                 delta_g,
+                                stat_id,
+                                prof_id,
+                                prof_ver,
+                                prof_fp,
                                 release_key,
                             ),
                         )
@@ -1416,8 +1451,9 @@ class PrivacyStateManager:
                                 dataset_version, mechanism, epsilon, delta, sensitivity, noise_scale,
                                 cell_names_json, n_users, public_population_size, dp_vector_json,
                                 post_processed_json, recipient, recipient_role, budget_scope_id,
-                                accountant_mode, rdp_cost_json, rdp_orders_json, delta_global
-                            ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?)
+                                accountant_mode, rdp_cost_json, rdp_orders_json, delta_global,
+                                statistic_id, profile_id, profile_version, profile_fingerprint
+                            ) VALUES (?, ?, ?, ?, ?, ?, 'PENDING', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """,
                             (
                                 release_key,
@@ -1446,6 +1482,10 @@ class PrivacyStateManager:
                                 rdp_j,
                                 orders_j,
                                 delta_g,
+                                stat_id,
+                                prof_id,
+                                prof_ver,
+                                prof_fp,
                             ),
                         )
 
@@ -1686,6 +1726,16 @@ class PrivacyStateManager:
 
                 # 3. Insert audit ledger row
                 cursor.execute(
+                    "SELECT statistic_id, profile_id, profile_version, profile_fingerprint FROM release_store WHERE release_key = ?",
+                    (release_key,),
+                )
+                stat_meta_row = cursor.fetchone()
+                stat_id = stat_meta_row["statistic_id"] if stat_meta_row and "statistic_id" in stat_meta_row.keys() else getattr(release_result, "statistic_id", None)
+                prof_id = stat_meta_row["profile_id"] if stat_meta_row and "profile_id" in stat_meta_row.keys() else getattr(release_result, "profile_id", None)
+                prof_ver = stat_meta_row["profile_version"] if stat_meta_row and "profile_version" in stat_meta_row.keys() else getattr(release_result, "profile_version", None)
+                prof_fp = stat_meta_row["profile_fingerprint"] if stat_meta_row and "profile_fingerprint" in stat_meta_row.keys() else getattr(release_result, "profile_fingerprint", None)
+
+                cursor.execute(
                     """
                     INSERT INTO privacy_ledger (
                         release_id, timestamp, metric, recipient,
@@ -1693,8 +1743,9 @@ class PrivacyStateManager:
                         mechanism, epsilon, delta, sensitivity,
                         noise_scale, release_key, cache_hit,
                         budget_scope_id, accountant_mode, rdp_cost_json,
-                        effective_epsilon, best_alpha
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+                        effective_epsilon, best_alpha,
+                        statistic_id, profile_id, profile_version, profile_fingerprint
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         release_id,
@@ -1715,6 +1766,10 @@ class PrivacyStateManager:
                         rdp_cost_json,
                         eff_eps_str,
                         best_alpha_str,
+                        stat_id,
+                        prof_id,
+                        prof_ver,
+                        prof_fp,
                     ),
                 )
 

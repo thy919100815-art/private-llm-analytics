@@ -20,4 +20,8 @@ class ExecutionPlan:
     public_population_size: Optional[int] = None
     execution_mode: str = "production"
     privacy_scope_id: Optional[str] = None
+    statistic_id: Optional[str] = None
+    profile_id: Optional[str] = None
+    profile_version: Optional[str] = None
+    profile_fingerprint: Optional[str] = None
 
