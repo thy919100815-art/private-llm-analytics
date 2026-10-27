@@ -3,6 +3,17 @@
 All notable changes to **Private LLM Analytics** are documented in this file.
 This project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.0.0]
+
+### Added
+- **Statistic-Specific DP Framework**: Complete decoupling of statistical queries into specialized profiles (`StatisticProfile`) encapsulating user-level contribution bounding, sensitivity derivations, mechanism calibration, and privacy cost descriptors.
+- **Dynamic Taxonomy & Arbitrary Domains**: Generalized Provider $\times$ Task taxonomy beyond fixed 9-cell grids, with versioned configuration (`TaxonomyConfig`), SHA-256 fingerprint provenance tracking, and dynamic cell mapping.
+- **Success Rate Profile**: Joint $(S, T)$ bounded 2D contribution vector release with $L_2$ sensitivity $\sqrt{2} \cdot C$ and post-processing denominator thresholding preserving $[0, 1]$ valid rate bounds.
+- **Long-Tail Top-K Tasks Profile**: User-level task participation bounding ($k_{\text{tasks}}$) with exact $\sqrt{k_{\text{tasks}}}$ sensitivity, Gaussian noise injection, and deterministic post-processing rank-ordering.
+- **Production Hardening & Unified Evaluation**: Comprehensive cross-statistic empirical benchmarks (Exp 20–30), multi-threaded SQLite ACID ledger concurrency testing, and fail-closed validation for NaNs, infinites, and negative values.
+- **Local Web Console Chinese Localization**: Complete simplified Chinese localization of the local web analytics console with zero external network egress.
+- **Test Suite & CI Verification**: Regression test suite expanded to 503 tests with 100% pass rate across Python 3.10, 3.11, and 3.12.
+
 ## [0.5.0]
 
 ### Added

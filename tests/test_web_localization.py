@@ -38,12 +38,12 @@ def test_02_index_no_v050_dev(local_web_client):
     assert "v0.5.0-dev" not in html
 
 
-def test_03_index_shows_v050(local_web_client):
-    """3. 首页显示：v0.5.0"""
+def test_03_index_shows_version_badge(local_web_client):
+    """3. 首页显示版本 badge：v1.0.0"""
     res = local_web_client.get("/")
     assert res.status_code == 200
     html = res.text
-    assert "v0.5.0" in html
+    assert "v1.0.0" in html
 
 
 def test_04_index_shows_lifetime_privacy_budget(local_web_client):

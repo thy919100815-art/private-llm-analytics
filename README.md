@@ -8,11 +8,11 @@ User-level DP · Lifetime RDP Accounting · Multi-Recipient Composition · Conti
 [![Release Gate](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/release-gate.yml/badge.svg?branch=main)](https://github.com/thy919100815-art/private-llm-analytics/actions/workflows/release-gate.yml)
 [![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-green.svg)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/thy919100815-art/private-llm-analytics?color=orange)](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.5.0)
+[![Latest Release](https://img.shields.io/github/v/release/thy919100815-art/private-llm-analytics?color=orange)](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v1.0.0)
 
 Private LLM Analytics is a privacy layer for organizations that need to analyze employee usage of multiple LLM providers without exposing individual user behavior to external vendors or analysts.
 
-Current stable release: [`v0.5.0`](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v0.5.0)
+Current stable release: [`v1.0.0`](https://github.com/thy919100815-art/private-llm-analytics/releases/tag/v1.0.0)
 
 ---
 
@@ -47,11 +47,13 @@ Private LLM Analytics provides a security-hardened user-level differential priva
 
 ## Supported Analytics
 
-Statistical aggregates are computed across a standard $3 \times 3$ Provider $\times$ Task Category grid (9 cells):
+Statistical aggregates are computed across configurable Provider $\times$ Task Category taxonomies:
 
 1. **User Prevalence**: The proportion of employees in the public eligible roster who utilized a specific model capability within the observation window.
 2. **User-Normalized Share**: Distribution of an employee's workflow across providers and capabilities (simplex-normalized per user before aggregation).
 3. **Interaction Volume**: Total volume of model interactions, bounded by daily $L_2$ sensitivity and epoch-wide group-$L_{1,2}$ limits.
+4. **Success Rate**: Jointly bounded $(S, T)$ release estimating empirical success probabilities across cells with post-processing denominator thresholding.
+5. **Long-Tail Top-K Tasks**: Task discovery across arbitrary domain sizes bounded by max tasks per user with Gaussian noise addition and ranking.
 
 ---
 
@@ -251,7 +253,7 @@ Generated tables are stored in `results/tables/`, figures in `results/figures/`,
 ```text
 private-llm-analytics/
 ├── configs/            # System and privacy configuration YAMLs
-├── experiments/        # Formal research experiments (Exp01–Exp19) & 30 verification scripts
+├── experiments/        # Formal research experiments (Exp01–Exp30) & verification scripts
 ├── results/            # Research tables (CSV/JSON), publication figures (PDF/PNG), state DB
 ├── src/                # Core library
 │   └── private_llm_analytics/
@@ -259,8 +261,9 @@ private-llm-analytics/
 │       ├── evaluation/ # Analytical utility estimators and accuracy metrics
 │       ├── privacy/    # Differential privacy mechanisms, state manager, and RDP accounting
 │       ├── service/    # High-level analytics service API
+│       ├── statistics/ # Statistic-specific DP profiles (prevalence, share, volume, success, top-k)
 │       └── web/        # Local Web Analytics Console (FastAPI, zero external egress)
-└── tests/              # Comprehensive pytest verification suite (448 tests)
+└── tests/              # Comprehensive pytest verification suite (503 tests)
 ```
 
 ---
