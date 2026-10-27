@@ -39,7 +39,8 @@ class UserNormalizedShareMetric(BaseMetric):
         total_s = float(np.sum(s_exact))
         if total_s > 0:
             return s_exact / total_s
-        return np.ones(9, dtype=np.float64) / 9.0
+        d_cells = user_matrix.n_cells
+        return np.ones(d_cells, dtype=np.float64) / float(d_cells)
 
     def get_sensitivity(self, mechanism_type: str) -> float:
         l2_sens, l1_sens = get_normalized_share_sensitivity(self.norm_bound)
@@ -67,10 +68,11 @@ class UserNormalizedShareMetric(BaseMetric):
         # 1. Project to non-negative and normalize to simplex
         clamped = np.maximum(0.0, dp_vector)
         total_sum = float(np.sum(clamped))
+        d_cells = len(user_matrix.cell_names)
         if total_sum > 0:
             share_9d = clamped / total_sum
         else:
-            share_9d = np.ones(9, dtype=np.float64) / 9.0
+            share_9d = np.ones(d_cells, dtype=np.float64) / float(d_cells)
 
         # Reshape to (n_providers, n_tasks) = (3, 3)
         grid_3x3 = share_9d.reshape((len(user_matrix.providers), len(user_matrix.tasks)))
