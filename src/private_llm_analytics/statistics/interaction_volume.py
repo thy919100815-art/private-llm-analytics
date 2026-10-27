@@ -91,7 +91,12 @@ class InteractionVolumeProfile(DPStatisticProfile):
             clip_norm=self.clip_norm,
         )
 
-    def build_mechanism_plan(self, epsilon: float, delta: float) -> MechanismPlan:
+    def build_mechanism_plan(
+        self,
+        epsilon: float,
+        delta: float,
+        dimension: Optional[int] = None,
+    ) -> MechanismPlan:
         sens = self.sensitivity()
         mech = GaussianMechanism(
             epsilon=epsilon,
@@ -105,7 +110,7 @@ class InteractionVolumeProfile(DPStatisticProfile):
             noise_scale=float(mech.noise_scale),
             epsilon=float(epsilon),
             delta=float(delta),
-            dimension=9,
+            dimension=dimension or 9,
         )
 
     def privacy_cost_descriptor(

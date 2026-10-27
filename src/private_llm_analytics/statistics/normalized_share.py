@@ -85,7 +85,12 @@ class UserNormalizedShareProfile(DPStatisticProfile):
     def build_user_contributions(self, user_matrix: UserMatrix) -> np.ndarray:
         return transform_user_normalized_share(user_matrix.matrix)
 
-    def build_mechanism_plan(self, epsilon: float, delta: float) -> MechanismPlan:
+    def build_mechanism_plan(
+        self,
+        epsilon: float,
+        delta: float,
+        dimension: Optional[int] = None,
+    ) -> MechanismPlan:
         sens = self.sensitivity()
         mech = GaussianMechanism(
             epsilon=epsilon,
@@ -99,7 +104,7 @@ class UserNormalizedShareProfile(DPStatisticProfile):
             noise_scale=float(mech.noise_scale),
             epsilon=float(epsilon),
             delta=float(delta),
-            dimension=9,
+            dimension=dimension or 9,
         )
 
     def privacy_cost_descriptor(
@@ -145,43 +150,45 @@ class UserNormalizedShareProfile(DPStatisticProfile):
     ) -> Dict[str, Any]:
         clamped = np.maximum(0.0, dp_vector)
         total_sum = float(np.sum(clamped))
+        d_cells = len(user_matrix.cell_names)
         if total_sum > 0:
-            share_9d = clamped / total_sum
+            share_vec = clamped / total_sum
         else:
-            share_9d = np.ones(9, dtype=np.float64) / 9.0
+            share_vec = np.ones(d_cells, dtype=np.float64) / float(d_cells)
 
-        grid_3x3 = share_9d.reshape((len(user_matrix.providers), len(user_matrix.tasks)))
+        grid = share_vec.reshape((len(user_matrix.providers), len(user_matrix.tasks)))
 
         provider_dist = {
-            p: float(grid_3x3[i, :].sum())
+            p: float(grid[i, :].sum())
             for i, p in enumerate(user_matrix.providers)
         }
         task_dist = {
-            t: float(grid_3x3[:, j].sum())
+            t: float(grid[:, j].sum())
             for j, t in enumerate(user_matrix.tasks)
         }
 
         provider_task_dist: Dict[str, Dict[str, float]] = {}
         for i, p in enumerate(user_matrix.providers):
-            p_total = float(grid_3x3[i, :].sum())
+            p_total = float(grid[i, :].sum())
             if p_total > 0:
-                p_cond = (grid_3x3[i, :] / p_total).tolist()
+                p_cond = (grid[i, :] / p_total).tolist()
             else:
                 p_cond = [1.0 / len(user_matrix.tasks)] * len(user_matrix.tasks)
             provider_task_dist[p] = {
                 t: float(p_cond[j]) for j, t in enumerate(user_matrix.tasks)
             }
 
-        cell_shares = {name: float(share_9d[i]) for i, name in enumerate(user_matrix.cell_names)}
+        cell_shares = {name: float(share_vec[i]) for i, name in enumerate(user_matrix.cell_names)}
 
         return {
             "cell_shares": cell_shares,
-            "share_distribution_array": share_9d,
+            "share_distribution_array": share_vec,
             "provider_distribution": provider_dist,
             "task_distribution": task_dist,
             "provider_conditional_task_distribution": provider_task_dist,
-            "grid_3x3": grid_3x3,
+            "grid_3x3": grid,
+            "grid": grid,
             "provider_task_distribution": provider_task_dist,
-            "share_9d_array": share_9d,
+            "share_9d_array": share_vec,
             "raw_noisy_sum": total_sum,
         }

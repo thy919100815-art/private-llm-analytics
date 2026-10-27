@@ -124,7 +124,7 @@ class TestPrevalenceProfile:
 
     def test_prevalence_disallows_invalid_k(self):
         with pytest.raises(InvalidStatisticProfileConfiguration):
-            UserPrevalenceProfile(max_cells_per_user=5)
+            UserPrevalenceProfile(max_cells_per_user=0)
 
 
 class TestNormalizedShareProfile:

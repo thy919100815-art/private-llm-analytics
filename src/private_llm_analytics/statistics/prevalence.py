@@ -43,12 +43,12 @@ class UserPrevalenceProfile(DPStatisticProfile):
     profile_id = "binary_prevalence_gaussian"
     profile_version = "1"
 
-    def __init__(self, max_cells_per_user: int = 9):
-        if max_cells_per_user != 9:
+    def __init__(self, max_cells_per_user: Optional[int] = 9):
+        if max_cells_per_user is not None and int(max_cells_per_user) <= 0:
             raise InvalidStatisticProfileConfiguration(
-                f"User Prevalence profile strictly requires max_cells_per_user == 9, got {max_cells_per_user}."
+                f"User Prevalence profile requires max_cells_per_user > 0, got {max_cells_per_user}."
             )
-        self.max_cells_per_user = int(max_cells_per_user)
+        self.max_cells_per_user = int(max_cells_per_user) if max_cells_per_user is not None else 9
 
     def metadata(self) -> ProfileMetadata:
         return ProfileMetadata(
@@ -63,17 +63,17 @@ class UserPrevalenceProfile(DPStatisticProfile):
             privacy_unit="user",
             adjacency="add_remove_user",
             required_columns=list(REQUIRED_COLUMNS),
-            contribution_definition="b_{u,j} = 1[m_{u,j} > 0] in {0, 1}^9",
-            contribution_bound_description="max_cells_per_user = 9",
+            contribution_definition=f"b_{{u,j}} = 1[m_{{u,j}} > 0] in {{0, 1}}^{self.max_cells_per_user}",
+            contribution_bound_description=f"max_cells_per_user = {self.max_cells_per_user}",
             sensitivity_type="L2",
-            sensitivity_description="Delta_2 = sqrt(9) = 3.0",
+            sensitivity_description=f"Delta_2 = sqrt({self.max_cells_per_user}) = {np.sqrt(self.max_cells_per_user):.4f}",
             mechanism_family="gaussian_vector",
             accounting_family="rdp",
             post_processing_description="Clamp noisy counts to >= 0, divide by public population size, clamp rates to [0, 1]",
             supports_continual=False,
             supports_planner=False,
             public_parameters={"max_cells_per_user": self.max_cells_per_user},
-            configurable_parameters=[],
+            configurable_parameters=["max_cells_per_user"],
         )
 
     def required_columns(self) -> List[str]:
@@ -91,7 +91,12 @@ class UserPrevalenceProfile(DPStatisticProfile):
             max_cells_per_user=self.max_cells_per_user,
         )
 
-    def build_mechanism_plan(self, epsilon: float, delta: float) -> MechanismPlan:
+    def build_mechanism_plan(
+        self,
+        epsilon: float,
+        delta: float,
+        dimension: Optional[int] = None,
+    ) -> MechanismPlan:
         sens = self.sensitivity()
         mech = GaussianMechanism(
             epsilon=epsilon,
@@ -99,13 +104,14 @@ class UserPrevalenceProfile(DPStatisticProfile):
             sensitivity=sens,
             method="analytic",
         )
+        eff_dim = int(dimension) if dimension is not None else self.max_cells_per_user
         return MechanismPlan(
             mechanism_name="gaussian",
             sensitivity=sens,
             noise_scale=float(mech.noise_scale),
             epsilon=float(epsilon),
             delta=float(delta),
-            dimension=9,
+            dimension=eff_dim,
         )
 
     def privacy_cost_descriptor(

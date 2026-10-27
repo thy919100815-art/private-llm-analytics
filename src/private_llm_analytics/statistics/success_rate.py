@@ -118,14 +118,14 @@ class SuccessRateProfile(DPStatisticProfile):
         return float(np.sqrt(2.0) * self.clip_norm)
 
     def build_user_contributions(self, user_matrix: UserMatrix) -> np.ndarray:
-        """Compute 18-dimensional joint contribution vectors: [sbar_u ; nbar_u]."""
+        """Compute 2*D dimensional joint contribution vectors: [sbar_u ; nbar_u]."""
         if getattr(user_matrix, "success_matrix", None) is None:
             raise MissingRequiredStatisticColumn(
                 f"Statistic '{self.statistic_id}' requires interaction column '{COL_SUCCESS}' to be present."
             )
 
-        n_matrix = user_matrix.matrix         # shape: (n_users, 9)
-        s_matrix = user_matrix.success_matrix # shape: (n_users, 9)
+        n_matrix = user_matrix.matrix         # shape: (n_users, d_cells)
+        s_matrix = user_matrix.success_matrix # shape: (n_users, d_cells)
 
         # Enforce mathematical prerequisite: 0 <= s_{u,j} <= n_{u,j}
         s_matrix_bounded = np.clip(s_matrix, 0.0, n_matrix)
@@ -140,17 +140,20 @@ class SuccessRateProfile(DPStatisticProfile):
         scale_factors[nonzero_mask] = np.minimum(1.0, self.clip_norm / n_norms[nonzero_mask])
 
         # Apply identical shared factor to both success and total vectors
-        # shape: (n_users, 9)
+        # shape: (n_users, d_cells)
         sbar = s_matrix_bounded * scale_factors[:, np.newaxis]
         nbar = n_matrix * scale_factors[:, np.newaxis]
 
-        # Concatenate horizontally to form 18-dimensional joint vectors: shape (n_users, 18)
-        # Columns 0..8: sbar (success)
-        # Columns 9..17: nbar (total)
+        # Concatenate horizontally to form 2*D dimensional joint vectors: shape (n_users, 2*d_cells)
         joint_contributions = np.hstack([sbar, nbar])
         return joint_contributions
 
-    def build_mechanism_plan(self, epsilon: float, delta: float) -> MechanismPlan:
+    def build_mechanism_plan(
+        self,
+        epsilon: float,
+        delta: float,
+        dimension: Optional[int] = None,
+    ) -> MechanismPlan:
         sens = self.sensitivity()
         mech = GaussianMechanism(
             epsilon=epsilon,
@@ -164,7 +167,7 @@ class SuccessRateProfile(DPStatisticProfile):
             noise_scale=float(mech.noise_scale),
             epsilon=float(epsilon),
             delta=float(delta),
-            dimension=18,
+            dimension=dimension or 18,
         )
 
     def privacy_cost_descriptor(
@@ -195,7 +198,6 @@ class SuccessRateProfile(DPStatisticProfile):
         plan: MechanismPlan,
         rng: Optional[np.random.Generator] = None,
     ) -> np.ndarray:
-        assert len(bounded_aggregate) == 18
         mech = GaussianMechanism(
             epsilon=plan.epsilon,
             delta=plan.delta,
@@ -209,10 +211,11 @@ class SuccessRateProfile(DPStatisticProfile):
         dp_vector: np.ndarray,
         user_matrix: UserMatrix,
     ) -> Dict[str, Any]:
-        """Post-process 18-dim noisy joint vector into DP success rates."""
-        assert len(dp_vector) == 18
-        noisy_success = dp_vector[:9]
-        noisy_total = dp_vector[9:18]
+        """Post-process 2*D dim noisy joint vector into DP success rates."""
+        d_cells = len(user_matrix.cell_names)
+        assert len(dp_vector) == 2 * d_cells
+        noisy_success = dp_vector[:d_cells]
+        noisy_total = dp_vector[d_cells:2 * d_cells]
 
         # 1. Total counts must be >= 0
         total_dp = np.maximum(0.0, noisy_total)
@@ -232,7 +235,7 @@ class SuccessRateProfile(DPStatisticProfile):
             dp_totals[cell] = t_val
             dp_successes[cell] = s_val
 
-            if t_val < self.min_noisy_denominator:
+            if t_val <= 0.0 or t_val < self.min_noisy_denominator:
                 success_rates[cell] = None
                 cell_status[cell] = "noisy denominator below reporting threshold"
                 suppressed_cells.append(cell)

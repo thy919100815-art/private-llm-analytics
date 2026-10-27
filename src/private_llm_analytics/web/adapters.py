@@ -40,8 +40,12 @@ class WebAnalyticsAdapter:
     def get_config(self) -> Dict[str, Any]:
         """Expose safe, non-sensitive configuration to the browser."""
         cfg = self.service.config
-        providers = list(cfg.scenario.providers)
-        tasks = list(cfg.scenario.tasks)
+        if getattr(cfg, "taxonomy", None) is not None:
+            providers = list(cfg.taxonomy.providers)
+            tasks = list(cfg.taxonomy.tasks)
+        else:
+            providers = list(cfg.scenario.providers)
+            tasks = list(cfg.scenario.tasks)
         metrics = [
             {
                 "id": "user_prevalence",

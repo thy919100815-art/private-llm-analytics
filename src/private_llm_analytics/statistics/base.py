@@ -259,7 +259,10 @@ class DPStatisticProfile(ABC):
         bounded_aggregate = np.sum(contributions, axis=0)
 
         # 4. Calibrate mechanism plan
-        plan = self.build_mechanism_plan(epsilon=epsilon, delta=delta)
+        try:
+            plan = self.build_mechanism_plan(epsilon=epsilon, delta=delta, dimension=len(bounded_aggregate))
+        except TypeError:
+            plan = self.build_mechanism_plan(epsilon=epsilon, delta=delta)
 
         # 5. Add calibrated noise
         noisy_aggregate = self.execute_mechanism(bounded_aggregate, plan=plan, rng=rng)
