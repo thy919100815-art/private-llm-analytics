@@ -506,5 +506,5 @@ def test_v014_exceptions_hierarchy():
 def test_v014_n2_version_string_updated():
     """N2: Package version must be strictly 0.1.4 or later."""
     import private_llm_analytics
-    assert private_llm_analytics.__version__ in ("0.1.4", "0.1.5", "0.1.6", "0.1.7")
+    assert private_llm_analytics.__version__ in ("0.1.4", "0.1.5", "0.1.6", "0.1.7", "1.0.0")
 

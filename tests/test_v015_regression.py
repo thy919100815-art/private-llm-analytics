@@ -268,6 +268,6 @@ def test_v015_finding_f_orchestrator_experiment_fails_closed_on_production_db():
 # =============================================================================
 
 def test_v015_version_string():
-    """Ensure package version is 0.1.5 or later (v0.1.7 freeze)."""
+    """Ensure package version is 0.1.5 or later (v0.1.7 freeze, v1.0.0)."""
     import private_llm_analytics
-    assert private_llm_analytics.__version__ in ("0.1.5", "0.1.6", "0.1.7")
+    assert private_llm_analytics.__version__ in ("0.1.5", "0.1.6", "0.1.7", "1.0.0")
