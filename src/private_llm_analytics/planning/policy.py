@@ -55,6 +55,12 @@ def get_direct_granularity_sensitivity(
             raise ValueError(f"Unsupported granularity '{granularity}' for prevalence")
     elif "share" in metric_norm:
         return 1.0  # L2 norm of user-normalized simplex vector is <= 1.0
+    elif "success" in metric_norm:
+        c = float(clip_norm or 10.0)
+        return math.sqrt(2.0) * c
+    elif "top_k" in metric_norm:
+        k = float(clip_norm or 5.0)
+        return math.sqrt(k)
     else:
         return float(clip_norm or 1.0)
 
@@ -89,6 +95,12 @@ def get_direct_granularity_l1_sensitivity(
             raise ValueError(f"Unsupported granularity '{granularity}' for prevalence L1 sensitivity")
     elif "share" in metric_norm:
         return 1.0
+    elif "success" in metric_norm:
+        c = float(clip_norm or 10.0)
+        return 2.0 * c
+    elif "top_k" in metric_norm:
+        k = float(clip_norm or 5.0)
+        return k
     else:
         return float(clip_norm or 1.0)
 

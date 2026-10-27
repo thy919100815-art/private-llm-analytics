@@ -35,6 +35,15 @@ class UserMatrix:
     success_matrix: Optional[np.ndarray] = None   # shape (n_users, d_cells), float64 successful interaction counts
 
     def __post_init__(self):
+        if not np.all(np.isfinite(self.matrix)):
+            raise ValueError("UserMatrix contains NaN or infinite values.")
+        if np.any(self.matrix < 0):
+            raise ValueError("UserMatrix contains negative interaction counts.")
+        if self.success_matrix is not None:
+            if not np.all(np.isfinite(self.success_matrix)):
+                raise ValueError("UserMatrix success_matrix contains NaN or infinite values.")
+            if np.any(self.success_matrix < 0):
+                raise ValueError("UserMatrix success_matrix contains negative counts.")
         if self.public_population_size is not None:
             if self.public_population_size <= 0:
                 raise PrivacyConfigurationError(f"public_population_size must be positive, got {self.public_population_size}")

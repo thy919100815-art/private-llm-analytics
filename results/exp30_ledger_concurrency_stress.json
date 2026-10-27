@@ -1,0 +1,10 @@
+{
+  "num_workers": 20,
+  "total_requests": 100,
+  "cache_hits": 80,
+  "cache_misses": 20,
+  "committed_releases_in_db": 20,
+  "sqlite_integrity": "ok",
+  "errors": [],
+  "concurrency_stress_pass": true
+}

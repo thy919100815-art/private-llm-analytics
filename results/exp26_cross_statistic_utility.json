@@ -1,0 +1,134 @@
+{
+  "epsilon_0.25": {
+    "user_prevalence": {
+      "sensitivity": 6.324555320336759,
+      "noise_scale": 97.46022021428476,
+      "mae": 0.06030912134272509
+    },
+    "user_normalized_share": {
+      "sensitivity": 1.0,
+      "noise_scale": 15.40981385693636,
+      "mae": 0.01773336550205864
+    },
+    "interaction_volume": {
+      "sensitivity": 20.0,
+      "noise_scale": 308.19627713872603,
+      "mae": 320.6676667737348
+    },
+    "success_rate": {
+      "sensitivity": 14.142135623730951,
+      "noise_scale": 217.92767750124054,
+      "joint_dim": 80
+    },
+    "top_k_tasks": {
+      "sensitivity": 2.23606797749979,
+      "noise_scale": 34.457391304727714,
+      "selected_top_k": [
+        "task_8",
+        "task_6",
+        "task_4",
+        "task_0",
+        "task_1"
+      ]
+    }
+  },
+  "epsilon_0.5": {
+    "user_prevalence": {
+      "sensitivity": 6.324555320336759,
+      "noise_scale": 50.96085383151336,
+      "mae": 0.03489677581499913
+    },
+    "user_normalized_share": {
+      "sensitivity": 1.0,
+      "noise_scale": 8.057618480725026,
+      "mae": 0.011020592724264556
+    },
+    "interaction_volume": {
+      "sensitivity": 20.0,
+      "noise_scale": 161.15236961450125,
+      "mae": 146.46712849330524
+    },
+    "success_rate": {
+      "sensitivity": 14.142135623730951,
+      "noise_scale": 113.95193335869469,
+      "joint_dim": 80
+    },
+    "top_k_tasks": {
+      "sensitivity": 2.23606797749979,
+      "noise_scale": 18.017382659659816,
+      "selected_top_k": [
+        "task_7",
+        "task_5",
+        "task_9",
+        "task_2",
+        "task_0"
+      ]
+    }
+  },
+  "epsilon_1.0": {
+    "user_prevalence": {
+      "sensitivity": 6.324555320336759,
+      "noise_scale": 26.719215346206283,
+      "mae": 0.022712559006293827
+    },
+    "user_normalized_share": {
+      "sensitivity": 1.0,
+      "noise_scale": 4.224678889326844,
+      "mae": 0.0076025557564836825
+    },
+    "interaction_volume": {
+      "sensitivity": 20.0,
+      "noise_scale": 84.49357778653626,
+      "mae": 107.35577593995313
+    },
+    "success_rate": {
+      "sensitivity": 14.142135623730951,
+      "noise_scale": 59.745981819573274,
+      "joint_dim": 80
+    },
+    "top_k_tasks": {
+      "sensitivity": 2.23606797749979,
+      "noise_scale": 9.44666917964312,
+      "selected_top_k": [
+        "task_0",
+        "task_1",
+        "task_3",
+        "task_6",
+        "task_2"
+      ]
+    }
+  },
+  "epsilon_2.0": {
+    "user_prevalence": {
+      "sensitivity": 6.324555320336759,
+      "noise_scale": 14.106770567816914,
+      "mae": 0.012956306168033416
+    },
+    "user_normalized_share": {
+      "sensitivity": 1.0,
+      "noise_scale": 2.2304762711864115,
+      "mae": 0.0036139595875280886
+    },
+    "interaction_volume": {
+      "sensitivity": 20.0,
+      "noise_scale": 44.60952542372838,
+      "mae": 112.22640619197905
+    },
+    "success_rate": {
+      "sensitivity": 14.142135623730951,
+      "noise_scale": 31.54369793263204,
+      "joint_dim": 80
+    },
+    "top_k_tasks": {
+      "sensitivity": 2.23606797749979,
+      "noise_scale": 4.987496564573088,
+      "selected_top_k": [
+        "task_6",
+        "task_3",
+        "task_7",
+        "task_0",
+        "task_2"
+      ]
+    }
+  }
+}
