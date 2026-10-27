@@ -102,6 +102,16 @@ def filter_release_for_recipient(
         elif k == "total_estimated_volume":
             if wildcard_provider or policy.cross_provider_comparison:
                 filtered_stats[k] = v
+        elif k in ("success_rates", "dp_total_counts", "dp_success_counts"):
+            if wildcard_provider:
+                filtered_stats[k] = v
+            else:
+                filtered_stats[k] = {
+                    cell_k: cell_v for cell_k, cell_v in v.items()
+                    if any(cell_k.startswith(f"{p}:") for p in allowed_providers)
+                }
+        elif k in ("top_k", "selected_tasks", "all_noisy_counts", "k", "max_tasks_per_user", "threshold"):
+            filtered_stats[k] = v
 
     output["results"] = filtered_stats
 

@@ -295,12 +295,15 @@ class PrivacyConfig(BaseModel):
 
 
 class ContributionConfig(BaseModel):
-    mode: Literal["binary", "l1_normalized", "l2_clip", "joint_l2_clip"]
+    mode: Literal["binary", "l1_normalized", "l2_clip", "joint_l2_clip", "top_k"]
     max_cells_per_user: Optional[int] = 9
     norm_bound: Optional[float] = 1.0
     clip_norm: Optional[float] = 20.0
     clip_norm_rate: Optional[float] = 10.0
     min_noisy_denominator: Optional[float] = 5.0
+    max_tasks_per_user: Optional[int] = 5
+    top_k: Optional[int] = 5
+    threshold: Optional[float] = None
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "ContributionConfig":
@@ -324,6 +327,19 @@ class ContributionConfig(BaseModel):
                 raise ValueError(
                     f"Success Rate requires clip_norm_rate > 0, got {self.clip_norm_rate}."
                 )
+        elif self.mode == "top_k":
+            if self.max_tasks_per_user is None or self.max_tasks_per_user <= 0:
+                raise ValueError(
+                    f"Top-K Tasks requires max_tasks_per_user > 0, got {self.max_tasks_per_user}."
+                )
+            if self.top_k is not None and self.top_k <= 0:
+                raise ValueError(
+                    f"Top-K Tasks requires top_k > 0, got {self.top_k}."
+                )
+            if self.threshold is not None and self.threshold < 0:
+                raise ValueError(
+                    f"Top-K Tasks requires threshold >= 0, got {self.threshold}."
+                )
         return self
 
 
@@ -333,7 +349,7 @@ class MechanismItemConfig(BaseModel):
 
 class MetricDefinition(BaseModel):
     enabled: bool = True
-    type: Literal["prevalence", "normalized_share", "volume", "success_rate"]
+    type: Literal["prevalence", "normalized_share", "volume", "success_rate", "top_k_tasks"]
     version: int = 1
     dimensions: List[str] = Field(default_factory=lambda: ["provider", "task"])
     contribution: ContributionConfig

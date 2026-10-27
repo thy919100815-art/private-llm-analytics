@@ -6,10 +6,11 @@ import threading
 
 from private_llm_analytics.privacy.exceptions import UnknownStatisticProfile
 from private_llm_analytics.statistics.base import DPStatisticProfile, ProfileMetadata
-from private_llm_analytics.statistics.prevalence import UserPrevalenceProfile
-from private_llm_analytics.statistics.normalized_share import UserNormalizedShareProfile
 from private_llm_analytics.statistics.interaction_volume import InteractionVolumeProfile
+from private_llm_analytics.statistics.normalized_share import UserNormalizedShareProfile
+from private_llm_analytics.statistics.prevalence import UserPrevalenceProfile
 from private_llm_analytics.statistics.success_rate import SuccessRateProfile
+from private_llm_analytics.statistics.top_k_tasks import TopKTasksProfile
 
 
 class StatisticProfileRegistry:
@@ -28,6 +29,7 @@ class StatisticProfileRegistry:
                     "user_normalized_share": UserNormalizedShareProfile(),
                     "interaction_volume": InteractionVolumeProfile(),
                     "success_rate": SuccessRateProfile(),
+                    "top_k_tasks": TopKTasksProfile(),
                 }
                 cls._initialized = True
 
@@ -88,5 +90,6 @@ class StatisticProfileRegistry:
                 "user_normalized_share": UserNormalizedShareProfile(),
                 "interaction_volume": InteractionVolumeProfile(),
                 "success_rate": SuccessRateProfile(),
+                "top_k_tasks": TopKTasksProfile(),
             }
             cls._initialized = True
