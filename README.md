@@ -49,11 +49,11 @@ Private LLM Analytics provides a security-hardened user-level differential priva
 
 Statistical aggregates are computed across configurable Provider $\times$ Task Category taxonomies:
 
-1. **User Prevalence**: The proportion of employees in the public eligible roster who utilized a specific model capability within the observation window.
-2. **User-Normalized Share**: Distribution of an employee's workflow across providers and capabilities (simplex-normalized per user before aggregation).
-3. **Interaction Volume**: Total volume of model interactions, bounded by daily $L_2$ sensitivity and epoch-wide group-$L_{1,2}$ limits.
-4. **Success Rate**: Jointly bounded $(S, T)$ release estimating empirical success probabilities across cells with post-processing denominator thresholding.
-5. **Long-Tail Top-K Tasks**: Task discovery across arbitrary domain sizes bounded by max tasks per user with Gaussian noise addition and ranking.
+1. **User Prevalence**: Bounded binary user-participation count vector with $L_2$ sensitivity $\sqrt{k}$; capability adoption rates are derived by post-processing division by the fixed public population denominator $N_{\text{public}}$ (rate-vector sensitivity $\sqrt{k} / N_{\text{public}}$).
+2. **User-Normalized Share**: Distribution of an employee's workflow across providers and capabilities (per-user $L_1$-normalized share vector with $L_2$ sensitivity 1.0, post-processed via coordinate-wise nonnegative clamping and simplex renormalization).
+3. **Interaction Volume**: Total volume of model interactions, bounded by user-level $L_2$ clipping at bound $C$ ($\Delta_2 = C$) and epoch-wide group-$L_{1,2}$ limits.
+4. **Success Rate**: Jointly bounded $(S, T)$ vector release with joint $L_2$ sensitivity $\sqrt{2} \cdot C_{\text{rate}}$, estimating empirical success probabilities across cells with post-processing denominator thresholding.
+5. **Long-Tail Top-K Tasks**: Differentially private discovery of top-$k$ frequent tasks across a dynamically configured task taxonomy, bounded by max tasks per user with exact $L_2$ sensitivity $\sqrt{k_{\text{tasks}}}$, Gaussian noise addition, and deterministic ranking.
 
 ---
 
@@ -278,6 +278,7 @@ Please see [`SECURITY.md`](SECURITY.md) for security policies, vulnerability rep
 
 - **Central Differential Privacy**: Assumes a trusted curator operating within the enterprise security boundary; does not support local DP (LDP) or shuffle/federated models.
 - **Continual Metric Scope**: The continual observation tree mechanism is verified for Interaction Volume with the Gaussian mechanism. Continual prevalence and normalized share mechanisms remain subjects for future releases.
+- **Configured Task Domain**: Top-K task discovery operates over a preconfigured or dynamically declared finite task taxonomy, not an open/unbounded universe of arbitrary unknown strings.
 - **Fixed Public Topology**: Tree structure and interval partitions are public, fixed, and data-independent. Dynamic or data-dependent tree topologies are not supported.
 - **Temporal Clipping Bias**: Prefix-stable online clipping introduces deterministic clipping bias for high-frequency users across long horizons, which must be balanced against additive DP noise variance.
 
