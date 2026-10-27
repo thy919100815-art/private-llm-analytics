@@ -37,7 +37,12 @@ class SyntheticDataGenerator:
         counts = np.clip(counts, sc.freq_min, sc.freq_max)
         return counts
 
-    def generate(self, seed: Optional[int] = None) -> pd.DataFrame:
+    def generate(
+        self,
+        seed: Optional[int] = None,
+        include_success: bool = True,
+        success_rate: float = 0.85,
+    ) -> pd.DataFrame:
         """Generate long-format interaction DataFrame for the entire population."""
         sc = self.scenario
         current_seed = seed if seed is not None else sc.random_seed
@@ -70,6 +75,8 @@ class SyntheticDataGenerator:
             start_date=sc.start_date,
             n_days=sc.n_days,
             rng=rng,
+            include_success=include_success,
+            success_rate=success_rate,
         )
 
         # 5. Validate against ingestion schema

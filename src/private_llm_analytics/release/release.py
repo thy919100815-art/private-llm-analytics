@@ -424,6 +424,10 @@ class ReleaseOrchestrator:
             "cell_names": user_matrix.cell_names,
             "n_users": user_matrix.n_users,
             "public_population_size": user_matrix.public_population_size,
+            "statistic_id": getattr(plan, "statistic_id", ""),
+            "profile_id": getattr(plan, "profile_id", ""),
+            "profile_version": getattr(plan, "profile_version", ""),
+            "profile_fingerprint": getattr(plan, "profile_fingerprint", ""),
         }
 
         single_flight_timeout = getattr(self.config.privacy.release, "single_flight_timeout", 30.0)
@@ -521,6 +525,15 @@ class ReleaseOrchestrator:
 
             metric = self.catalog.get(plan.metric)
             release_result = metric.release_dp(user_matrix, mechanism, rng=execution_rng)
+
+            if hasattr(plan, "statistic_id"):
+                setattr(release_result, "statistic_id", plan.statistic_id)
+            if hasattr(plan, "profile_id"):
+                setattr(release_result, "profile_id", plan.profile_id)
+            if hasattr(plan, "profile_version"):
+                setattr(release_result, "profile_version", plan.profile_version)
+            if hasattr(plan, "profile_fingerprint"):
+                setattr(release_result, "profile_fingerprint", plan.profile_fingerprint)
 
             self._trigger_hook("after_noise_generation")
             self._trigger_hook("before_release_commit")

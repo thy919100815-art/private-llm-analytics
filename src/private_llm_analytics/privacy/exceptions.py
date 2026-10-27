@@ -59,3 +59,29 @@ class ReleaseInProgressError(RuntimeError):
 class CommitIrreversibleError(RuntimeError):
     """Raised when an invalid attempt is made to rollback or abort an already committed release."""
     pass
+
+
+# v0.6 Statistic-Specific Profile Exceptions
+class MissingRequiredStatisticColumn(ValueError):
+    """Raised when interaction dataset is missing a column required by a statistic profile."""
+    pass
+
+
+class UnsupportedProductionMechanism(UnsupportedMechanismError):
+    """Raised when caller attempts to override an approved production statistic mechanism."""
+    pass
+
+
+class UnknownStatisticProfile(KeyError):
+    """Raised when no approved profile exists for a requested statistic."""
+    pass
+
+
+class InvalidStatisticProfileConfiguration(PrivacyConfigurationError):
+    """Raised when an approved statistic profile's parameters fail validation."""
+    pass
+
+
+class StatisticPlannerNotSupported(ValueError):
+    """Raised when automated utility planning is requested for a statistic that does not support it."""
+    pass

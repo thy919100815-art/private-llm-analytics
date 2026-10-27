@@ -85,6 +85,7 @@ class ContinualStreamConfig:
     noise: ContinualNoiseConfig = field(default_factory=ContinualNoiseConfig)
     dataset_fingerprint: Optional[str] = None
     public_roster_fingerprint: Optional[str] = None
+    taxonomy_fingerprint: Optional[str] = None
 
     def __post_init__(self):
         norm_metric = str(self.metric).lower().strip()
@@ -134,6 +135,7 @@ class ContinualStreamConfig:
             "rdp_orders": list(self.noise.rdp_orders),
             "dataset_fingerprint": self.dataset_fingerprint,
             "public_roster_fingerprint": self.public_roster_fingerprint,
+            "taxonomy_fingerprint": self.taxonomy_fingerprint,
         }
         encoded = json.dumps(canonical_dict, sort_keys=True, separators=(",", ":")).encode("utf-8")
         return hashlib.sha256(encoded).hexdigest()

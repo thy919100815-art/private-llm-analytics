@@ -11,6 +11,7 @@ from private_llm_analytics.config.models import (
     PrivacyConfig,
     RecipientsConfig,
     ScenarioConfig,
+    TaxonomyConfig,
 )
 
 
@@ -56,6 +57,12 @@ def load_recipients_config(config_path: Union[str, Path]) -> RecipientsConfig:
     return RecipientsConfig.model_validate(inner)
 
 
+def load_taxonomy_config(config_path: Union[str, Path]) -> TaxonomyConfig:
+    data = load_yaml(config_path)
+    inner = data.get("taxonomy", data)
+    return TaxonomyConfig.model_validate(inner)
+
+
 def load_app_config(config_dir: Union[str, Path]) -> AppConfig:
     from private_llm_analytics.config.validator import validate_app_config
 
@@ -64,11 +71,18 @@ def load_app_config(config_dir: Union[str, Path]) -> AppConfig:
     privacy = load_privacy_config(cdir / "privacy.yaml")
     metrics = load_metrics_config(cdir / "metrics.yaml")
     recipients = load_recipients_config(cdir / "recipients.yaml")
+
+    taxonomy_file = cdir / "taxonomy.yaml"
+    taxonomy = None
+    if taxonomy_file.is_file():
+        taxonomy = load_taxonomy_config(taxonomy_file)
+
     app_config = AppConfig(
         scenario=scenario,
         privacy=privacy,
         metrics=metrics,
         recipients=recipients,
+        taxonomy=taxonomy,
     )
     validate_app_config(app_config)
     return app_config

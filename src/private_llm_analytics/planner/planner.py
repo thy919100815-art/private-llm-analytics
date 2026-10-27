@@ -106,17 +106,50 @@ class AnalyticsPlanner:
         clip_c = float(m_def.contribution.clip_norm or 20.0)
         max_k = int(m_def.contribution.max_cells_per_user or 9)
         norm_b = float(m_def.contribution.norm_bound or 1.0)
+        clip_c_rate = float(getattr(m_def.contribution, "clip_norm_rate", 10.0) or 10.0)
 
         l2_s, l1_s = get_metric_sensitivities(
             metric_type=m_def.type,
             max_cells_per_user=max_k,
             norm_bound=norm_b,
             clip_norm=clip_c,
+            clip_norm_rate=clip_c_rate,
         )
 
         sensitivity = l2_s if "gaussian" in mech_type else l1_s
 
         # 7. Build stable, canonical semantic release key fingerprint
+        from private_llm_analytics.statistics.registry import StatisticProfileRegistry
+
+        if StatisticProfileRegistry.has(metric_name):
+            profile = StatisticProfileRegistry.get(metric_name)
+        elif m_def.type == "prevalence":
+            profile = StatisticProfileRegistry.get("user_prevalence")
+        elif m_def.type == "normalized_share":
+            profile = StatisticProfileRegistry.get("user_normalized_share")
+        elif m_def.type == "volume":
+            profile = StatisticProfileRegistry.get("interaction_volume")
+        elif m_def.type == "success_rate":
+            profile = StatisticProfileRegistry.get("success_rate")
+        else:
+            profile = None
+
+        if profile is not None:
+            stat_id = profile.statistic_id
+            prof_id = profile.profile_id
+            prof_ver = profile.version
+            runtime_params = {}
+            if stat_id == "interaction_volume":
+                runtime_params = {"clip_norm": float(clip_c)}
+            elif stat_id == "success_rate":
+                runtime_params = {"clip_norm_rate": float(clip_c_rate)}
+            prof_fp = profile.canonical_profile_fingerprint(runtime_params)
+        else:
+            stat_id = str(metric_name)
+            prof_id = str(metric_name)
+            prof_ver = "1.0.0"
+            prof_fp = ""
+
         exec_mode_str = (
             execution_mode.value if isinstance(execution_mode, ExecutionMode) else str(execution_mode)
         ).lower()
@@ -149,6 +182,7 @@ class AnalyticsPlanner:
         canonical_semantics = {
             "calibration_version": "analytic_gaussian_v1" if "gaussian" in mech_type else "laplace_v1",
             "clip_norm": float(clip_c),
+            "clip_norm_rate": float(clip_c_rate),
             "contribution_mode": str(m_def.contribution.mode),
             "dataset_version": str(dataset_version),
             "delta": float(delta),
@@ -163,8 +197,12 @@ class AnalyticsPlanner:
             "norm_bound": float(norm_b),
             "population_mode": str(self.config.scenario.population.mode),
             "privacy_scope_id": str(resolved_scope_id),
+            "profile_fingerprint": str(prof_fp),
+            "profile_id": str(prof_id),
+            "profile_version": str(prof_ver),
             "providers": sorted(list(self.config.scenario.providers)),
             "public_population_size": int(resolved_pop_size) if resolved_pop_size is not None else -1,
+            "statistic_id": str(stat_id),
             "tasks": sorted(list(self.config.scenario.tasks)),
             "window_end": str(t_end) if t_end else "",
             "window_start": str(t_start) if t_start else "",
@@ -187,5 +225,9 @@ class AnalyticsPlanner:
             public_population_size=resolved_pop_size,
             execution_mode=exec_mode_str,
             privacy_scope_id=str(resolved_scope_id),
+            statistic_id=str(stat_id),
+            profile_id=str(prof_id),
+            profile_version=str(prof_ver),
+            profile_fingerprint=str(prof_fp),
         )
 

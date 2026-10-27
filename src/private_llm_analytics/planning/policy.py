@@ -20,7 +20,7 @@ from private_llm_analytics.aggregation.grouping import (
 def _extract_matrix_and_names(
     raw_user_matrix: Any,
 ) -> Tuple[np.ndarray, List[str]]:
-    """Helper to extract (n_users, 9) numpy matrix and cell_names."""
+    """Helper to extract numpy matrix and cell_names."""
     if hasattr(raw_user_matrix, "matrix") and hasattr(raw_user_matrix, "cell_names"):
         return np.asarray(raw_user_matrix.matrix, dtype=float), list(raw_user_matrix.cell_names)
     mat = np.asarray(raw_user_matrix, dtype=float)
@@ -29,7 +29,8 @@ def _extract_matrix_and_names(
     if mat.shape[1] == 9:
         default_names = [f"{p}:{t}" for p in DEFAULT_PROVIDERS for t in DEFAULT_TASKS]
         return mat, default_names
-    raise ValueError(f"Expected 9-cell user matrix, got shape {mat.shape}")
+    default_names = [f"provider_{i}:task_0" for i in range(mat.shape[1])]
+    return mat, default_names
 
 
 def get_direct_granularity_sensitivity(
@@ -44,16 +45,22 @@ def get_direct_granularity_sensitivity(
             raise ValueError(f"Volume metric requires clip_norm > 0, got {clip_norm}")
         return float(clip_norm)
     elif "prevalence" in metric_norm:
-        if granularity == "full_9_cell":
+        if granularity in ("full_9_cell", "full_cell"):
             return 3.0  # sqrt(9)
-        elif granularity in ("provider_3_cell", "task_3_cell"):
+        elif granularity in ("provider_3_cell", "task_3_cell", "provider_marginal", "task_marginal"):
             return math.sqrt(3.0)  # sqrt(3)
-        elif granularity == "overall_1_cell":
+        elif granularity in ("overall_1_cell", "overall_cell"):
             return 1.0  # sqrt(1)
         else:
             raise ValueError(f"Unsupported granularity '{granularity}' for prevalence")
     elif "share" in metric_norm:
         return 1.0  # L2 norm of user-normalized simplex vector is <= 1.0
+    elif "success" in metric_norm:
+        c = float(clip_norm or 10.0)
+        return math.sqrt(2.0) * c
+    elif "top_k" in metric_norm:
+        k = float(clip_norm or 5.0)
+        return math.sqrt(k)
     else:
         return float(clip_norm or 1.0)
 
@@ -69,25 +76,31 @@ def get_direct_granularity_l1_sensitivity(
         if clip_norm is None or clip_norm <= 0:
             raise ValueError(f"Volume metric requires clip_norm > 0, got {clip_norm}")
         c = float(clip_norm)
-        if granularity == "full_9_cell":
+        if granularity in ("full_9_cell", "full_cell"):
             return 3.0 * c  # sqrt(9) * C
-        elif granularity in ("provider_3_cell", "task_3_cell"):
+        elif granularity in ("provider_3_cell", "task_3_cell", "provider_marginal", "task_marginal"):
             return math.sqrt(3.0) * c  # sqrt(3) * C
-        elif granularity == "overall_1_cell":
+        elif granularity in ("overall_1_cell", "overall_cell"):
             return 1.0 * c  # sqrt(1) * C
         else:
             raise ValueError(f"Unsupported granularity '{granularity}' for volume L1 sensitivity")
     elif "prevalence" in metric_norm:
-        if granularity == "full_9_cell":
+        if granularity in ("full_9_cell", "full_cell"):
             return 9.0
-        elif granularity in ("provider_3_cell", "task_3_cell"):
+        elif granularity in ("provider_3_cell", "task_3_cell", "provider_marginal", "task_marginal"):
             return 3.0
-        elif granularity == "overall_1_cell":
+        elif granularity in ("overall_1_cell", "overall_cell"):
             return 1.0
         else:
             raise ValueError(f"Unsupported granularity '{granularity}' for prevalence L1 sensitivity")
     elif "share" in metric_norm:
         return 1.0
+    elif "success" in metric_norm:
+        c = float(clip_norm or 10.0)
+        return 2.0 * c
+    elif "top_k" in metric_norm:
+        k = float(clip_norm or 5.0)
+        return k
     else:
         return float(clip_norm or 1.0)
 
@@ -123,25 +136,25 @@ def build_volume_contributions_for_granularity(
         else:
             coords.append((name.strip(), "unknown"))
 
-    if granularity == "full_9_cell":
+    if granularity in ("full_9_cell", "full_cell"):
         target_names = list(cell_names)
         target_mat = mat_9.copy()
 
-    elif granularity == "provider_3_cell":
+    elif granularity in ("provider_3_cell", "provider_marginal"):
         target_names = sorted(list({p for p, _ in coords}))
         target_mat = np.zeros((n_users, len(target_names)), dtype=float)
         for i, p in enumerate(target_names):
             indices = [idx for idx, (p_c, _) in enumerate(coords) if p_c == p]
             target_mat[:, i] = np.sum(mat_9[:, indices], axis=1)
 
-    elif granularity == "task_3_cell":
+    elif granularity in ("task_3_cell", "task_marginal"):
         target_names = sorted(list({t for _, t in coords}))
         target_mat = np.zeros((n_users, len(target_names)), dtype=float)
         for i, t in enumerate(target_names):
             indices = [idx for idx, (_, t_c) in enumerate(coords) if t_c == t]
             target_mat[:, i] = np.sum(mat_9[:, indices], axis=1)
 
-    elif granularity == "overall_1_cell":
+    elif granularity in ("overall_1_cell", "overall_cell"):
         target_names = ["overall_total"]
         target_mat = np.sum(mat_9, axis=1, keepdims=True)
 
@@ -183,30 +196,30 @@ def build_prevalence_contributions_for_granularity(
         else:
             coords.append((name.strip(), "unknown"))
 
-    if granularity == "full_9_cell":
+    if granularity in ("full_9_cell", "full_cell"):
         target_names = list(cell_names)
         binary_mat = (mat_9 > 0).astype(float)
-        sens = 3.0
+        sens = math.sqrt(len(cell_names)) if len(cell_names) != 9 else 3.0
 
-    elif granularity == "provider_3_cell":
+    elif granularity in ("provider_3_cell", "provider_marginal"):
         target_names = sorted(list({p for p, _ in coords}))
         binary_mat = np.zeros((n_users, len(target_names)), dtype=float)
         for i, p in enumerate(target_names):
             indices = [idx for idx, (p_c, _) in enumerate(coords) if p_c == p]
             # User used provider p at least once
             binary_mat[:, i] = (np.sum(mat_9[:, indices], axis=1) > 0).astype(float)
-        sens = math.sqrt(3.0)
+        sens = math.sqrt(len(target_names))
 
-    elif granularity == "task_3_cell":
+    elif granularity in ("task_3_cell", "task_marginal"):
         target_names = sorted(list({t for _, t in coords}))
         binary_mat = np.zeros((n_users, len(target_names)), dtype=float)
         for i, t in enumerate(target_names):
             indices = [idx for idx, (_, t_c) in enumerate(coords) if t_c == t]
             # User used task t at least once
             binary_mat[:, i] = (np.sum(mat_9[:, indices], axis=1) > 0).astype(float)
-        sens = math.sqrt(3.0)
+        sens = math.sqrt(len(target_names))
 
-    elif granularity == "overall_1_cell":
+    elif granularity in ("overall_1_cell", "overall_cell"):
         target_names = ["overall_total"]
         binary_mat = (np.sum(mat_9, axis=1, keepdims=True) > 0).astype(float)
         sens = 1.0
@@ -238,25 +251,25 @@ def build_share_contributions_for_granularity(
         else:
             coords.append((name.strip(), "unknown"))
 
-    if granularity == "full_9_cell":
+    if granularity in ("full_9_cell", "full_cell"):
         target_names = list(cell_names)
         target_mat = mat_9.copy()
 
-    elif granularity == "provider_3_cell":
+    elif granularity in ("provider_3_cell", "provider_marginal"):
         target_names = sorted(list({p for p, _ in coords}))
         target_mat = np.zeros((n_users, len(target_names)), dtype=float)
         for i, p in enumerate(target_names):
             indices = [idx for idx, (p_c, _) in enumerate(coords) if p_c == p]
             target_mat[:, i] = np.sum(mat_9[:, indices], axis=1)
 
-    elif granularity == "task_3_cell":
+    elif granularity in ("task_3_cell", "task_marginal"):
         target_names = sorted(list({t for _, t in coords}))
         target_mat = np.zeros((n_users, len(target_names)), dtype=float)
         for i, t in enumerate(target_names):
             indices = [idx for idx, (_, t_c) in enumerate(coords) if t_c == t]
             target_mat[:, i] = np.sum(mat_9[:, indices], axis=1)
 
-    elif granularity == "overall_1_cell":
+    elif granularity in ("overall_1_cell", "overall_cell"):
         target_names = ["overall_total"]
         target_mat = np.sum(mat_9, axis=1, keepdims=True)
 
@@ -300,10 +313,10 @@ def build_aggregation_matrix(
         else:
             coords.append((name.strip(), "unknown"))
 
-    if target_granularity == "full_9_cell":
+    if target_granularity in ("full_9_cell", "full_cell"):
         return np.eye(n_cells, dtype=np.float64), list(source_9_cell_names)
 
-    elif target_granularity == "provider_3_cell":
+    elif target_granularity in ("provider_3_cell", "provider_marginal"):
         providers = sorted(list({p for p, _ in coords}))
         A = np.zeros((len(providers), n_cells), dtype=np.float64)
         for i, p in enumerate(providers):
@@ -311,7 +324,7 @@ def build_aggregation_matrix(
             A[i, indices] = 1.0
         return A, providers
 
-    elif target_granularity == "task_3_cell":
+    elif target_granularity in ("task_3_cell", "task_marginal"):
         tasks = sorted(list({t for _, t in coords}))
         A = np.zeros((len(tasks), n_cells), dtype=np.float64)
         for i, t in enumerate(tasks):
@@ -319,7 +332,7 @@ def build_aggregation_matrix(
             A[i, indices] = 1.0
         return A, tasks
 
-    elif target_granularity == "overall_1_cell":
+    elif target_granularity in ("overall_1_cell", "overall_cell"):
         A = np.ones((1, n_cells), dtype=np.float64)
         return A, ["overall_total"]
 
@@ -337,8 +350,9 @@ def build_reconstruction_matrix(
     """Build single source of truth reconstruction matrix R_G mapping source granularity to 9-cell space.
 
     Args:
-        source_granularity: One of 'full_9_cell', 'provider_3_cell', 'task_3_cell', 'overall_1_cell'.
-        target_9_cell_names: List of target 9 cell names (defaults to DEFAULT_PROVIDERS x DEFAULT_TASKS).
+        source_granularity: One of 'full_9_cell', 'provider_3_cell', 'task_3_cell', 'overall_1_cell',
+                           or conceptual aliases 'full_cell', 'provider_marginal', 'task_marginal', 'overall_cell'.
+        target_9_cell_names: List of target cell names (defaults to DEFAULT_PROVIDERS x DEFAULT_TASKS).
         provider_shares: Public prior provider distribution shares (used for task_3_cell and overall_1_cell).
         task_shares: Public prior task distribution shares (used for provider_3_cell and overall_1_cell).
         marginal_names: Explicit source column names (defaults to sorted aggregate order).
@@ -358,10 +372,10 @@ def build_reconstruction_matrix(
         else:
             coords.append((name.strip(), "unknown"))
 
-    if source_granularity == "full_9_cell":
+    if source_granularity in ("full_9_cell", "full_cell"):
         return np.eye(n_cells, dtype=np.float64)
 
-    elif source_granularity == "provider_3_cell":
+    elif source_granularity in ("provider_3_cell", "provider_marginal"):
         providers = list(marginal_names) if marginal_names is not None else sorted(list({p for p, _ in coords}))
         R_G = np.zeros((n_cells, len(providers)), dtype=np.float64)
         for i, (p, t) in enumerate(coords):
@@ -378,7 +392,7 @@ def build_reconstruction_matrix(
             R_G[i, j] = norm_w
         return R_G
 
-    elif source_granularity == "task_3_cell":
+    elif source_granularity in ("task_3_cell", "task_marginal"):
         tasks = list(marginal_names) if marginal_names is not None else sorted(list({t for _, t in coords}))
         R_G = np.zeros((n_cells, len(tasks)), dtype=np.float64)
         for i, (p, t) in enumerate(coords):
@@ -395,7 +409,7 @@ def build_reconstruction_matrix(
             R_G[i, j] = norm_w
         return R_G
 
-    elif source_granularity == "overall_1_cell":
+    elif source_granularity in ("overall_1_cell", "overall_cell"):
         R_G = np.zeros((n_cells, 1), dtype=np.float64)
         raw_w = np.zeros(n_cells, dtype=np.float64)
         for i, (p, t) in enumerate(coords):
@@ -438,7 +452,7 @@ def reconstruct_to_9_cell(
 ) -> np.ndarray:
     """Deterministically reconstruct a 9-cell representation from lower granularity."""
     vec = np.asarray(marginal_vector, dtype=float)
-    if source_granularity == "full_9_cell":
+    if source_granularity in ("full_9_cell", "full_cell"):
         return vec.copy()
 
     R_G = build_reconstruction_matrix(
@@ -460,7 +474,7 @@ def compute_workload_reconstruction_error(
     task_shares: Optional[Dict[str, float]] = None,
 ) -> float:
     """Compute normalized workload aggregation error based on public workload weights."""
-    if granularity == "full_9_cell":
+    if granularity in ("full_9_cell", "full_cell"):
         return 0.0
 
     norm_weights = {

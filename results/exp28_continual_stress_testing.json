@@ -1,0 +1,8 @@
+{
+  "intervals_tested": 50,
+  "canonical_cover_valid": 50,
+  "epoch_days": 128,
+  "tree_depth": 8,
+  "calibrated_tree_sigma": 308.06778326983454,
+  "stress_invariants_pass": true
+}

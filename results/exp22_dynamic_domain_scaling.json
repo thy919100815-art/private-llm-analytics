@@ -1,0 +1,110 @@
+{
+  "3x3_9cells": {
+    "providers": 3,
+    "tasks": 3,
+    "total_cells": 9,
+    "statistics": {
+      "user_prevalence": {
+        "sensitivity": 3.0,
+        "runtime_ms": 96.57789999982924,
+        "mean_absolute_error": 0.01143819994908524
+      },
+      "user_normalized_share": {
+        "sensitivity": 1.0,
+        "runtime_ms": 2.291900000273017,
+        "mean_absolute_error": 0.01677910337618432
+      },
+      "interaction_volume": {
+        "sensitivity": 20.0,
+        "runtime_ms": 2.216500000031374,
+        "mean_absolute_error": 46.88670981924482
+      },
+      "success_rate": {
+        "sensitivity": 14.142135623730951,
+        "joint_dimension": 18,
+        "runtime_ms": 2.1001000000069325
+      }
+    }
+  },
+  "5x10_50cells": {
+    "providers": 5,
+    "tasks": 10,
+    "total_cells": 50,
+    "statistics": {
+      "user_prevalence": {
+        "sensitivity": 7.0710678118654755,
+        "runtime_ms": 2.2219000002223765,
+        "mean_absolute_error": 0.023367827957390074
+      },
+      "user_normalized_share": {
+        "sensitivity": 1.0,
+        "runtime_ms": 2.1563000000242027,
+        "mean_absolute_error": 0.017564708809315318
+      },
+      "interaction_volume": {
+        "sensitivity": 20.0,
+        "runtime_ms": 2.289700000346784,
+        "mean_absolute_error": 123.5582261366448
+      },
+      "success_rate": {
+        "sensitivity": 14.142135623730951,
+        "joint_dimension": 100,
+        "runtime_ms": 2.249899999696936
+      }
+    }
+  },
+  "10x20_200cells": {
+    "providers": 10,
+    "tasks": 20,
+    "total_cells": 200,
+    "statistics": {
+      "user_prevalence": {
+        "sensitivity": 14.142135623730951,
+        "runtime_ms": 2.122599999893282,
+        "mean_absolute_error": 0.04586826364679152
+      },
+      "user_normalized_share": {
+        "sensitivity": 1.0,
+        "runtime_ms": 2.4561999998695683,
+        "mean_absolute_error": 0.005012526300898161
+      },
+      "interaction_volume": {
+        "sensitivity": 20.0,
+        "runtime_ms": 2.3870999998507614,
+        "mean_absolute_error": 342.6606914188445
+      },
+      "success_rate": {
+        "sensitivity": 14.142135623730951,
+        "joint_dimension": 400,
+        "runtime_ms": 3.077400000165653
+      }
+    }
+  },
+  "10x50_500cells": {
+    "providers": 10,
+    "tasks": 50,
+    "total_cells": 500,
+    "statistics": {
+      "user_prevalence": {
+        "sensitivity": 22.360679774997898,
+        "runtime_ms": 2.4481999998897663,
+        "mean_absolute_error": 0.07147316554923447
+      },
+      "user_normalized_share": {
+        "sensitivity": 1.0,
+        "runtime_ms": 3.888900000220019,
+        "mean_absolute_error": 0.0022255970231433715
+      },
+      "interaction_volume": {
+        "sensitivity": 20.0,
+        "runtime_ms": 3.3749999997780833,
+        "mean_absolute_error": 418.6012696098877
+      },
+      "success_rate": {
+        "sensitivity": 14.142135623730951,
+        "joint_dimension": 1000,
+        "runtime_ms": 4.823700000088138
+      }
+    }
+  }
+}

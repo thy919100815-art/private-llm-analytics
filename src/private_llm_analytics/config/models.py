@@ -1,6 +1,8 @@
 """Pydantic configuration models for Private LLM Analytics v0.1.1."""
 
 from typing import Any, Dict, List, Literal, Optional
+import hashlib
+import json
 from pydantic import BaseModel, Field, model_validator
 
 
@@ -39,11 +41,45 @@ class ScenarioConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_dimensions(self) -> "ScenarioConfig":
-        if len(self.providers) != 3:
-            raise ValueError(f"v0.1.1 strictly requires exactly 3 providers, got {len(self.providers)}")
-        if len(self.tasks) != 3:
-            raise ValueError(f"v0.1.1 strictly requires exactly 3 tasks, got {len(self.tasks)}")
+        if len(self.providers) < 1:
+            raise ValueError(f"At least 1 provider required, got {len(self.providers)}")
+        if len(self.tasks) < 1:
+            raise ValueError(f"At least 1 task required, got {len(self.tasks)}")
+        if len(set(self.providers)) != len(self.providers):
+            raise ValueError(f"Provider names must be unique, got {self.providers}")
+        if len(set(self.tasks)) != len(self.tasks):
+            raise ValueError(f"Task names must be unique, got {self.tasks}")
         return self
+
+
+class TaxonomyConfig(BaseModel):
+    version: int = 1
+    providers: List[str] = Field(default_factory=lambda: ["provider_a", "provider_b", "provider_c"])
+    tasks: List[str] = Field(default_factory=lambda: ["technical", "document", "analysis"])
+    ordering: Literal["canonical_lexicographic", "fixed_legacy"] = "canonical_lexicographic"
+
+    @model_validator(mode="after")
+    def validate_taxonomy(self) -> "TaxonomyConfig":
+        if len(self.providers) < 1:
+            raise ValueError(f"At least 1 provider required, got {len(self.providers)}")
+        if len(self.tasks) < 1:
+            raise ValueError(f"At least 1 task required, got {len(self.tasks)}")
+        if len(set(self.providers)) != len(self.providers):
+            raise ValueError(f"Duplicate providers found: {self.providers}")
+        if len(set(self.tasks)) != len(self.tasks):
+            raise ValueError(f"Duplicate tasks found: {self.tasks}")
+        return self
+
+    def compute_fingerprint(self) -> str:
+        """Deterministic SHA-256 fingerprint of canonical taxonomy."""
+        payload = {
+            "version": int(self.version),
+            "ordering": self.ordering,
+            "providers": sorted(self.providers) if self.ordering == "canonical_lexicographic" else list(self.providers),
+            "tasks": sorted(self.tasks) if self.ordering == "canonical_lexicographic" else list(self.tasks),
+        }
+        raw = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
 
 
 class GlobalBudgetConfig(BaseModel):
@@ -259,10 +295,15 @@ class PrivacyConfig(BaseModel):
 
 
 class ContributionConfig(BaseModel):
-    mode: Literal["binary", "l1_normalized", "l2_clip"]
+    mode: Literal["binary", "l1_normalized", "l2_clip", "joint_l2_clip", "top_k"]
     max_cells_per_user: Optional[int] = 9
     norm_bound: Optional[float] = 1.0
     clip_norm: Optional[float] = 20.0
+    clip_norm_rate: Optional[float] = 10.0
+    min_noisy_denominator: Optional[float] = 5.0
+    max_tasks_per_user: Optional[int] = 5
+    top_k: Optional[int] = 5
+    threshold: Optional[float] = None
 
     @model_validator(mode="after")
     def validate_bounds(self) -> "ContributionConfig":
@@ -272,14 +313,32 @@ class ContributionConfig(BaseModel):
                     f"User-Normalized Share strictly requires norm_bound == 1.0 in v0.1.2, got {self.norm_bound}."
                 )
         elif self.mode == "binary":
-            if self.max_cells_per_user is None or self.max_cells_per_user != 9:
+            if self.max_cells_per_user is None or self.max_cells_per_user <= 0:
                 raise ValueError(
-                    f"User Prevalence strictly requires max_cells_per_user == 9 in v0.1.2, got {self.max_cells_per_user}."
+                    f"User Prevalence requires max_cells_per_user > 0, got {self.max_cells_per_user}."
                 )
         elif self.mode == "l2_clip":
             if self.clip_norm is None or self.clip_norm <= 0:
                 raise ValueError(
                     f"Interaction Volume requires clip_norm > 0, got {self.clip_norm}."
+                )
+        elif self.mode == "joint_l2_clip":
+            if self.clip_norm_rate is None or self.clip_norm_rate <= 0:
+                raise ValueError(
+                    f"Success Rate requires clip_norm_rate > 0, got {self.clip_norm_rate}."
+                )
+        elif self.mode == "top_k":
+            if self.max_tasks_per_user is None or self.max_tasks_per_user <= 0:
+                raise ValueError(
+                    f"Top-K Tasks requires max_tasks_per_user > 0, got {self.max_tasks_per_user}."
+                )
+            if self.top_k is not None and self.top_k <= 0:
+                raise ValueError(
+                    f"Top-K Tasks requires top_k > 0, got {self.top_k}."
+                )
+            if self.threshold is not None and self.threshold < 0:
+                raise ValueError(
+                    f"Top-K Tasks requires threshold >= 0, got {self.threshold}."
                 )
         return self
 
@@ -290,7 +349,7 @@ class MechanismItemConfig(BaseModel):
 
 class MetricDefinition(BaseModel):
     enabled: bool = True
-    type: Literal["prevalence", "normalized_share", "volume"]
+    type: Literal["prevalence", "normalized_share", "volume", "success_rate", "top_k_tasks"]
     version: int = 1
     dimensions: List[str] = Field(default_factory=lambda: ["provider", "task"])
     contribution: ContributionConfig
@@ -325,3 +384,17 @@ class AppConfig(BaseModel):
     privacy: PrivacyConfig
     metrics: MetricsConfig
     recipients: RecipientsConfig
+    taxonomy: Optional[TaxonomyConfig] = None
+
+    @model_validator(mode="after")
+    def sync_taxonomy_and_scenario(self) -> "AppConfig":
+        if self.taxonomy is None:
+            self.taxonomy = TaxonomyConfig(
+                version=1,
+                providers=list(self.scenario.providers),
+                tasks=list(self.scenario.tasks),
+            )
+        else:
+            self.scenario.providers = list(self.taxonomy.providers)
+            self.scenario.tasks = list(self.taxonomy.tasks)
+        return self

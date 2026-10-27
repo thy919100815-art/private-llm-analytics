@@ -17,6 +17,7 @@ recipients:
       - user_prevalence
       - user_normalized_share
       - interaction_volume
+      - success_rate
     exact_results: false
     dp_results: true
     cross_provider_comparison: false
@@ -29,6 +30,7 @@ recipients:
       - user_prevalence
       - user_normalized_share
       - interaction_volume
+      - success_rate
     exact_results: false
     dp_results: true
     cross_provider_comparison: false
@@ -41,6 +43,7 @@ recipients:
       - user_prevalence
       - user_normalized_share
       - interaction_volume
+      - success_rate
     exact_results: false
     dp_results: true
     cross_provider_comparison: false

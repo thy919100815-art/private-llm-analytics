@@ -1,0 +1,6 @@
+{
+  "empty_dataset_handling": "PASS",
+  "outlier_clipping_preservation": "PASS",
+  "success_rate_boundary_clamping": "PASS",
+  "top_k_ties_and_uniformity": "PASS"
+}

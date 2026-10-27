@@ -8,6 +8,7 @@ import pandas as pd
 from private_llm_analytics.ingestion.schema import (
     COL_INTERACTION_ID,
     COL_PROVIDER,
+    COL_SUCCESS,
     COL_TASK,
     COL_TIMESTAMP,
     COL_USER_ID,
@@ -22,6 +23,8 @@ def generate_interaction_dataframe(
     start_date: datetime,
     n_days: int,
     rng: np.random.Generator,
+    include_success: bool = True,
+    success_rate: float = 0.85,
 ) -> pd.DataFrame:
     """Expand user cell counts into a long-format interaction DataFrame.
 
@@ -68,16 +71,22 @@ def generate_interaction_dataframe(
 
     # Generate unique interaction IDs
     pad_len = max(7, len(str(total_interactions)))
-    # Create sequential IDs
     interaction_ids = [f"I{i+1:0{pad_len}d}" for i in range(total_interactions)]
 
-    df = pd.DataFrame({
+    data_dict = {
         COL_INTERACTION_ID: interaction_ids,
         COL_USER_ID: row_user_ids,
         COL_TIMESTAMP: row_timestamps,
         COL_PROVIDER: row_providers,
         COL_TASK: row_tasks,
-    })
+    }
+
+    if include_success:
+        # Realistic Bernoulli success events per interaction
+        success_flags = rng.random(size=total_interactions) < success_rate
+        data_dict[COL_SUCCESS] = success_flags.astype(bool)
+
+    df = pd.DataFrame(data_dict)
 
     # Sort by timestamp for realistic telemetry arrival
     df.sort_values(by=COL_TIMESTAMP, inplace=True, ignore_index=True)

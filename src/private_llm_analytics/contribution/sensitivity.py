@@ -30,8 +30,22 @@ def get_interaction_volume_sensitivity(clip_norm: float = 20.0, d_cells: int = 9
     return l2_sens, l1_sens
 
 
+def get_success_rate_sensitivity(clip_norm_rate: float = 10.0, d_cells: int = 9) -> Tuple[float, float]:
+    """Return (l2_sensitivity, l1_sensitivity) for Success Rate under joint vector [s_u; n_u].
+
+    With user attempt clipping ||n_u||_2 <= C_rate and 0 <= s_{u,j} <= n_{u,j},
+    ||w_u||_2 = sqrt(||s_u||_2^2 + ||n_u||_2^2) <= sqrt(2) * C_rate.
+    Under add/remove user adjacency:
+      - L2 sensitivity = sqrt(2) * C_rate
+      - L1 sensitivity = sqrt(2 * d_cells) * C_rate
+    """
+    l2_sens = float(math.sqrt(2.0) * clip_norm_rate)
+    l1_sens = float(math.sqrt(2.0 * d_cells) * clip_norm_rate)
+    return l2_sens, l1_sens
+
+
 def get_metric_sensitivities(
-    metric_type: Literal["prevalence", "normalized_share", "volume"],
+    metric_type: Literal["prevalence", "normalized_share", "volume", "success_rate"],
     **kwargs,
 ) -> Tuple[float, float]:
     """Dispatch sensitivity calculation for given metric type.
@@ -49,5 +63,9 @@ def get_metric_sensitivities(
         c = kwargs.get("clip_norm", 20.0)
         d = kwargs.get("d_cells", 9)
         return get_interaction_volume_sensitivity(clip_norm=c, d_cells=d)
+    elif metric_type == "success_rate":
+        c_rate = kwargs.get("clip_norm_rate", 10.0)
+        d = kwargs.get("d_cells", 9)
+        return get_success_rate_sensitivity(clip_norm_rate=c_rate, d_cells=d)
     else:
         raise ValueError(f"Unknown metric type: {metric_type}")

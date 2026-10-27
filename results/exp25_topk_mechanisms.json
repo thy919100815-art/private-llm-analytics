@@ -1,0 +1,12 @@
+{
+  "n_users": 200,
+  "n_tasks": 40,
+  "max_tasks_per_user": 5,
+  "theoretical_l2_sensitivity": 2.23606797749979,
+  "max_empirical_user_l2_norm": 2.23606797749979,
+  "super_user_pre_bounding_tasks": 40,
+  "super_user_post_bounding_tasks": 5,
+  "noise_scale": 9.44666917964312,
+  "selected_top_k_count": 10,
+  "bounding_verified": true
+}

@@ -1,0 +1,11 @@
+taxonomy:
+  version: 1
+  ordering: "canonical_lexicographic"
+  providers:
+    - provider_a
+    - provider_b
+    - provider_c
+  tasks:
+    - technical
+    - document
+    - analysis

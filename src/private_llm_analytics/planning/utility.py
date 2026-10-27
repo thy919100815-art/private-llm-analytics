@@ -42,6 +42,10 @@ GRANULARITY_DIMENSIONS: Dict[str, int] = {
     "provider_3_cell": 3,
     "task_3_cell": 3,
     "overall_1_cell": 1,
+    "full_cell": 9,
+    "provider_marginal": 3,
+    "task_marginal": 3,
+    "overall_cell": 1,
 }
 
 DEFAULT_GRANULARITY_PENALTIES: Dict[str, float] = {
@@ -49,6 +53,10 @@ DEFAULT_GRANULARITY_PENALTIES: Dict[str, float] = {
     "provider_3_cell": 0.25,
     "task_3_cell": 0.25,
     "overall_1_cell": 0.50,
+    "full_cell": 0.0,
+    "provider_marginal": 0.25,
+    "task_marginal": 0.25,
+    "overall_cell": 0.50,
 }
 
 
@@ -741,7 +749,7 @@ class GranularityEstimator:
         task_shares: Optional[Dict[str, float]] = None,
     ) -> float:
         """Estimate normalized workload reconstruction error in [0, 1]."""
-        if granularity == "full_9_cell":
+        if granularity in ("full_9_cell", "full_cell"):
             return 0.0
 
         p_shares = provider_shares or {"provider_a": 0.5, "provider_b": 0.3, "provider_c": 0.2}
@@ -951,6 +959,10 @@ class UtilityEstimator:
             norm_noise = raw_noise / float(n_pop)  # rate error scale in [0, 1]
         elif "share" in metric.lower():
             norm_noise = raw_noise / float(n_pop)  # simplex share scale in [0, 1]
+        elif "success" in metric.lower():
+            norm_noise = raw_noise / float(n_pop)  # success rate scale in [0, 1]
+        elif "top_k" in metric.lower():
+            norm_noise = raw_noise / float(n_pop)  # top-k discovery scale in [0, 1]
         else:
             norm_noise = raw_noise / expected_pop_volume
 

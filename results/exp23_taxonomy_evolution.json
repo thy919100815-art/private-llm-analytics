@@ -1,0 +1,36 @@
+{
+  "taxonomy_v1": {
+    "version": 1,
+    "providers": [
+      "provider_a",
+      "provider_b",
+      "provider_c"
+    ],
+    "tasks": [
+      "technical",
+      "document",
+      "analysis"
+    ],
+    "fingerprint": "c78335bfb21cba0bcbee3169162d3ed56b98b3e74314742bf04565287b4bca38",
+    "profile_fingerprint": "511ec682f661c1cb486f31beeba7c0e36c7e020a915d5d27e3d9b8dbdd5f5558",
+    "stream_fingerprint": "599a7c6131fe54ca6fe51de712f5f5599f6306a556f655ee1aab173fda27f4ac"
+  },
+  "taxonomy_v2": {
+    "version": 2,
+    "providers": [
+      "provider_a",
+      "provider_b",
+      "provider_c",
+      "provider_d"
+    ],
+    "tasks": [
+      "technical",
+      "document",
+      "analysis"
+    ],
+    "fingerprint": "d2757b80f34f7e6eec23902445eaae6ad43285afc315f604a8be39699f0c529a",
+    "profile_fingerprint": "7a2bd3c14e3a42501731d8801ded16f057dd3107a2a899a4689d7bc410b552bc",
+    "stream_fingerprint": "3fe28137922d74cb4063410543cd1ce571a78c2b828e86acf5ac7803ea810f6f"
+  },
+  "isolation_verified": true
+}
