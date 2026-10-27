@@ -66,3 +66,58 @@ def test_metric_interaction_volume_decomposition():
     # Check total error = clipping bias + dp noise error
     expected_total = decomp["clipping_bias"] + decomp["dp_noise_error"]
     assert np.allclose(decomp["total_error"], expected_total)
+
+
+def test_metric_normalized_share_zero_sum_dynamic_fallback():
+    """Verify legacy UserNormalizedShareMetric zero-sum exact mean and post-processing on non-9-cell domains."""
+    from private_llm_analytics.aggregation.grouping import build_cell_definitions
+
+    # Test configuration 1: 2 providers x 4 tasks = 8 cells
+    p_8 = ["provider_1", "provider_2"]
+    t_8 = ["task_1", "task_2", "task_3", "task_4"]
+    names_8, map_8 = build_cell_definitions(p_8, t_8)
+    umatrix_8 = UserMatrix(
+        matrix=np.zeros((3, len(names_8)), dtype=np.float64),
+        user_ids=["u1", "u2", "u3"],
+        providers=p_8,
+        tasks=t_8,
+        cell_names=names_8,
+        cell_map=map_8,
+        public_population_size=50,
+    )
+
+    metric = UserNormalizedShareMetric()
+    exact_mean_8 = metric.compute_exact_mean(umatrix_8)
+    assert exact_mean_8.shape == (8,)
+    assert np.allclose(exact_mean_8, 1.0 / 8.0)
+    assert np.isclose(np.sum(exact_mean_8), 1.0)
+
+    post_8 = metric.post_process(np.zeros(8, dtype=np.float64), umatrix_8)
+    assert post_8["share_distribution_array"].shape == (8,)
+    assert np.allclose(post_8["share_distribution_array"], 1.0 / 8.0)
+    assert post_8["grid_3x3"].shape == (2, 4)
+
+    # Test configuration 2: 5 providers x 2 tasks = 10 cells
+    p_10 = [f"p_{i}" for i in range(5)]
+    t_10 = [f"t_{j}" for j in range(2)]
+    names_10, map_10 = build_cell_definitions(p_10, t_10)
+    umatrix_10 = UserMatrix(
+        matrix=np.zeros((2, len(names_10)), dtype=np.float64),
+        user_ids=["u1", "u2"],
+        providers=p_10,
+        tasks=t_10,
+        cell_names=names_10,
+        cell_map=map_10,
+        public_population_size=50,
+    )
+
+    exact_mean_10 = metric.compute_exact_mean(umatrix_10)
+    assert exact_mean_10.shape == (10,)
+    assert np.allclose(exact_mean_10, 1.0 / 10.0)
+    assert np.isclose(np.sum(exact_mean_10), 1.0)
+
+    post_10 = metric.post_process(np.zeros(10, dtype=np.float64), umatrix_10)
+    assert post_10["share_distribution_array"].shape == (10,)
+    assert np.allclose(post_10["share_distribution_array"], 1.0 / 10.0)
+    assert post_10["grid_3x3"].shape == (5, 2)
+

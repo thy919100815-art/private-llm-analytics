@@ -49,11 +49,11 @@ Private LLM Analytics provides a security-hardened user-level differential priva
 
 Statistical aggregates are computed across configurable Provider $\times$ Task Category taxonomies:
 
-1. **User Prevalence**: Bounded binary user-participation count vector with $L_2$ sensitivity $\sqrt{k}$; capability adoption rates are derived by post-processing division by the fixed public population denominator $N_{\text{public}}$ (rate-vector sensitivity $\sqrt{k} / N_{\text{public}}$).
+1. **User Prevalence**: Bounded binary user-participation count vector with conservative $L_2$ sensitivity bound $\sqrt{k}$ (tight domain-aware bound $\sqrt{\min(k, D)}$); capability adoption rates are derived by post-processing division by the fixed public population denominator $N_{\text{public}}$ (conservative rate-vector bound $\sqrt{k} / N_{\text{public}}$, coordinate sensitivity $1 / N_{\text{public}}$).
 2. **User-Normalized Share**: Distribution of an employee's workflow across providers and capabilities (per-user $L_1$-normalized share vector with $L_2$ sensitivity 1.0, post-processed via coordinate-wise nonnegative clamping and simplex renormalization).
 3. **Interaction Volume**: Total volume of model interactions, bounded by user-level $L_2$ clipping at bound $C$ ($\Delta_2 = C$) and epoch-wide group-$L_{1,2}$ limits.
 4. **Success Rate**: Jointly bounded $(S, T)$ vector release with joint $L_2$ sensitivity $\sqrt{2} \cdot C_{\text{rate}}$, estimating empirical success probabilities across cells with post-processing denominator thresholding.
-5. **Long-Tail Top-K Tasks**: Differentially private discovery of top-$k$ frequent tasks across a dynamically configured task taxonomy, bounded by max tasks per user with exact $L_2$ sensitivity $\sqrt{k_{\text{tasks}}}$, Gaussian noise addition, and deterministic ranking.
+5. **Long-Tail Top-K Tasks**: Differentially private discovery of top-$k$ frequent tasks across a dynamically configured task taxonomy, bounded by max tasks per user with conservative $L_2$ sensitivity bound $\sqrt{k_{\text{tasks}}}$ (tight configured-domain bound $\sqrt{\min(k_{\text{tasks}}, |T|)}$), Gaussian noise addition, and deterministic ranking.
 
 ---
 
