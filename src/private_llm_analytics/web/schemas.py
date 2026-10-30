@@ -10,6 +10,7 @@ VALID_METRICS = {
     "user_normalized_share",
     "interaction_volume",
     "success_rate",
+    "top_k_tasks",
 }
 FORBIDDEN_RNG_KEYS = {"rng", "seed", "noise_seed", "noise", "random_state"}
 
@@ -120,6 +121,8 @@ class ConfigMetricItem(BaseModel):
     id: str
     name: str
     description: str
+    name_zh: Optional[str] = None
+    description_zh: Optional[str] = None
 
 
 class ConfigResponse(BaseModel):
@@ -133,6 +136,9 @@ class ConfigResponse(BaseModel):
     continual_enabled: bool
     granularities: List[str]
     statistics: Optional[List[Dict[str, Any]]] = None
+    recipient_details: Optional[List[Dict[str, Any]]] = None
+    mechanism_cards: Optional[Dict[str, Any]] = None
+    privacy_policy: Optional[Dict[str, Any]] = None
 
 
 class DatasetStatusResponse(BaseModel):
@@ -141,6 +147,72 @@ class DatasetStatusResponse(BaseModel):
     active_users: int
     dataset_version: Optional[str]
     source: str
+    user_count: Optional[int] = None
+    provider_count: Optional[int] = None
+    task_count: Optional[int] = None
+    time_range: Optional[Dict[str, Optional[str]]] = None
+    has_success_field: Optional[bool] = None
+    quality_checks: Optional[List[Dict[str, Any]]] = None
+
+
+class InputPreviewResponse(BaseModel):
+    total_rows: int
+    preview_limit: int
+    columns: List[str]
+    rows: List[Dict[str, Any]]
+
+
+class AccuracyEvaluationResponse(BaseModel):
+    metric: str
+    primary_metric_name: str
+    primary_metric_display: str
+    primary_metric_value: Optional[float] = None
+    mae: Optional[float] = None
+    rmse: Optional[float] = None
+    mean_relative_error_pct: Optional[float] = None
+    max_relative_error_pct: Optional[float] = None
+    mean_pp_error: Optional[float] = None
+    max_pp_error: Optional[float] = None
+    l1_distance: Optional[float] = None
+    precision_at_k: Optional[float] = None
+    jaccard_similarity: Optional[float] = None
+    k: Optional[int] = None
+    overlap_count: Optional[int] = None
+    explanation: Optional[str] = None
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+
+
+class EpsilonSweepRequest(BaseModel):
+    metric: str = Field("interaction_volume", description="Target statistic for epsilon sweep")
+    recipient: str = Field("internal", description="Requesting recipient ID (must be trusted)")
+    candidate_epsilons: Optional[List[float]] = Field(default_factory=lambda: [0.1, 0.25, 0.5, 1.0, 2.0, 4.0])
+    n_trials: Optional[int] = Field(10, ge=1, le=50)
+
+    @field_validator("metric")
+    @classmethod
+    def validate_metric(cls, v: str) -> str:
+        norm = v.lower().strip()
+        if norm not in VALID_METRICS:
+            raise ValueError(f"Invalid metric '{v}'. Allowed metrics: {sorted(list(VALID_METRICS))}")
+        return norm
+
+
+class SweepPoint(BaseModel):
+    epsilon: float
+    mean_error: float
+    std_error: float
+    median_error: float
+    p90_error: float
+    trials_count: int
+
+
+class EpsilonSweepResponse(BaseModel):
+    metric: str
+    y_axis_label: str
+    candidate_epsilons: List[float]
+    n_trials: int
+    points: List[SweepPoint]
+    explanation: str
 
 
 class PrivacyStatusResponse(BaseModel):
@@ -176,6 +248,7 @@ class ReleaseResponse(BaseModel):
     release_key: str
     metric: str
     recipient: str
+    recipient_name: Optional[str] = None
     epsilon: float
     delta: float
     noise_scale: float
@@ -193,6 +266,7 @@ class ReleaseHistoryItem(BaseModel):
     timestamp: str
     metric: str
     recipient: str
+    recipient_name: Optional[str] = None
     budget_scope_id: str
     window_start: Optional[str]
     window_end: Optional[str]
@@ -201,6 +275,53 @@ class ReleaseHistoryItem(BaseModel):
     delta: float
     cache_hit: bool
     status: str = "COMMITTED"
+    download_available: bool = True
+
+
+class AdminPrivacyPolicyResponse(BaseModel):
+    lifetime_epsilon_cap: float
+    global_delta: float
+    default_query_epsilon: float
+    default_query_delta: float
+    current_effective_epsilon: float
+    audit_history: List[Dict[str, Any]] = []
+
+
+class AdminPrivacyPolicyUpdateRequest(BaseModel):
+    recipient: str = Field("internal", description="Requesting recipient (must be trusted admin)")
+    lifetime_epsilon_cap: float = Field(..., gt=0.0, description="New lifetime epsilon cap")
+    global_delta: float = Field(..., gt=0.0, lt=1.0, description="New global delta")
+    default_query_epsilon: float = Field(..., gt=0.0, description="Default query epsilon")
+    default_query_delta: float = Field(..., gt=0.0, lt=1.0, description="Default query delta")
+    reason: Optional[str] = Field("", description="Governance reason for policy modification")
+
+    @field_validator("lifetime_epsilon_cap")
+    @classmethod
+    def validate_cap(cls, v: float) -> float:
+        if math.isnan(v) or math.isinf(v) or v <= 0:
+            raise ValueError("Lifetime epsilon cap must be a finite positive number.")
+        return v
+
+    @field_validator("global_delta")
+    @classmethod
+    def validate_gdelta(cls, v: float) -> float:
+        if math.isnan(v) or math.isinf(v) or not (0 < v < 1):
+            raise ValueError("Global delta must be a finite number strictly between 0 and 1.")
+        return v
+
+    @field_validator("default_query_epsilon")
+    @classmethod
+    def validate_qeps(cls, v: float) -> float:
+        if math.isnan(v) or math.isinf(v) or v <= 0:
+            raise ValueError("Default query epsilon must be a finite positive number.")
+        return v
+
+    @field_validator("default_query_delta")
+    @classmethod
+    def validate_qdelta(cls, v: float) -> float:
+        if math.isnan(v) or math.isinf(v) or not (0 < v < 1):
+            raise ValueError("Default query delta must be a finite number strictly between 0 and 1.")
+        return v
 
 
 class ContinualStatusResponse(BaseModel):

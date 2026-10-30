@@ -1,6 +1,7 @@
 recipients:
   internal:
     role: trusted
+    display_name: "内部 AI 治理团队"
     providers:
       - "*"
     metrics:
@@ -11,6 +12,7 @@ recipients:
 
   provider_a:
     role: external
+    display_name: "OpenAI"
     providers:
       - provider_a
     metrics:
@@ -24,6 +26,7 @@ recipients:
 
   provider_b:
     role: external
+    display_name: "Kimi"
     providers:
       - provider_b
     metrics:
@@ -37,6 +40,7 @@ recipients:
 
   provider_c:
     role: external
+    display_name: "DeepSeek"
     providers:
       - provider_c
     metrics:

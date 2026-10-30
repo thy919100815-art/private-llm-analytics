@@ -321,6 +321,7 @@ class ContinualStateManager:
         public_roster_fingerprint: Optional[str] = None,
         current_wall_clock_day: Optional[int] = None,
         partition_fingerprints: Optional[Dict[str, str]] = None,
+        rng: Optional[np.random.Generator] = None,
     ) -> np.ndarray:
         """Retrieve canonical noisy node payload or materialize with single-flight fencing (Section 23, 29, 33).
 
@@ -505,8 +506,9 @@ class ContinualStateManager:
         exact_vector = materialize_fn()
         dim = len(exact_vector)
 
-        # Add Gaussian noise
-        noise = np.random.normal(loc=0.0, scale=sigma, size=exact_vector.shape)
+        # Add Gaussian noise using Generator instance (consistent with batch Gaussian mechanism)
+        generator = rng or np.random.default_rng()
+        noise = generator.normal(loc=0.0, scale=sigma, size=exact_vector.shape)
         noisy_vector = exact_vector + noise
 
         # Store ONLY noisy_vector (Section 29)

@@ -73,6 +73,21 @@ class AnalyticsPlanner:
                 f"Unsupported mechanism '{raw_mech}'. v0.1.2 strictly supports only 'gaussian' or 'laplace'."
             )
 
+        exec_mode_str = (
+            execution_mode.value if isinstance(execution_mode, ExecutionMode) else str(execution_mode)
+        ).lower()
+
+        # Fail-closed check: mechanism compatibility
+        if mech_type == "laplace":
+            if m_def.type in ("success_rate", "top_k_tasks"):
+                raise UnsupportedMechanismError(
+                    f"Metric '{metric_name}' (type: {m_def.type}) only supports Gaussian mechanism; Laplace is not permitted."
+                )
+            if exec_mode_str == "production" and getattr(m_def.mechanism, "type", "gaussian") == "gaussian":
+                raise UnsupportedMechanismError(
+                    f"Metric '{metric_name}' is configured for Gaussian mechanism; Laplace override is rejected in production."
+                )
+
         default_query_b = getattr(self.config.privacy, "default_query_budget", self.config.privacy.global_budget)
         eps = query.epsilon if query.epsilon is not None else default_query_b.epsilon
         if eps <= 0.0:
@@ -107,6 +122,8 @@ class AnalyticsPlanner:
         max_k = int(m_def.contribution.max_cells_per_user or 9)
         norm_b = float(m_def.contribution.norm_bound or 1.0)
         clip_c_rate = float(getattr(m_def.contribution, "clip_norm_rate", 10.0) or 10.0)
+        max_tasks = int(getattr(m_def.contribution, "max_tasks_per_user", 5) or 5)
+        d_cells = len(self.config.scenario.providers) * len(self.config.scenario.tasks)
 
         l2_s, l1_s = get_metric_sensitivities(
             metric_type=m_def.type,
@@ -114,45 +131,55 @@ class AnalyticsPlanner:
             norm_bound=norm_b,
             clip_norm=clip_c,
             clip_norm_rate=clip_c_rate,
+            max_tasks_per_user=max_tasks,
+            d_cells=d_cells,
         )
 
         sensitivity = l2_s if "gaussian" in mech_type else l1_s
 
         # 7. Build stable, canonical semantic release key fingerprint
-        from private_llm_analytics.statistics.registry import StatisticProfileRegistry
+        from private_llm_analytics.statistics.prevalence import UserPrevalenceProfile
+        from private_llm_analytics.statistics.normalized_share import UserNormalizedShareProfile
+        from private_llm_analytics.statistics.interaction_volume import InteractionVolumeProfile
+        from private_llm_analytics.statistics.success_rate import SuccessRateProfile
+        from private_llm_analytics.statistics.top_k_tasks import TopKTasksProfile
 
-        if StatisticProfileRegistry.has(metric_name):
-            profile = StatisticProfileRegistry.get(metric_name)
-        elif m_def.type == "prevalence":
-            profile = StatisticProfileRegistry.get("user_prevalence")
+        min_den = getattr(m_def.contribution, "min_noisy_denominator", None)
+        top_k_val = getattr(m_def.contribution, "top_k", None)
+        threshold_val = getattr(m_def.contribution, "threshold", None)
+
+        if m_def.type == "prevalence":
+            stat_profile = UserPrevalenceProfile(max_cells_per_user=max_k)
         elif m_def.type == "normalized_share":
-            profile = StatisticProfileRegistry.get("user_normalized_share")
+            stat_profile = UserNormalizedShareProfile(norm_bound=norm_b)
         elif m_def.type == "volume":
-            profile = StatisticProfileRegistry.get("interaction_volume")
+            stat_profile = InteractionVolumeProfile(clip_norm=clip_c)
         elif m_def.type == "success_rate":
-            profile = StatisticProfileRegistry.get("success_rate")
+            stat_profile = SuccessRateProfile(
+                clip_norm=clip_c_rate,
+                min_noisy_denominator=1.0 if min_den is None else float(min_den),
+            )
+        elif m_def.type == "top_k_tasks":
+            stat_profile = TopKTasksProfile(
+                k=5 if top_k_val is None else int(top_k_val),
+                max_tasks_per_user=max_tasks,
+                threshold=None if threshold_val is None else float(threshold_val),
+            )
         else:
-            profile = None
+            stat_profile = None
 
-        if profile is not None:
-            stat_id = profile.statistic_id
-            prof_id = profile.profile_id
-            prof_ver = profile.version
-            runtime_params = {}
-            if stat_id == "interaction_volume":
-                runtime_params = {"clip_norm": float(clip_c)}
-            elif stat_id == "success_rate":
-                runtime_params = {"clip_norm_rate": float(clip_c_rate)}
-            prof_fp = profile.canonical_profile_fingerprint(runtime_params)
+        if stat_profile is not None:
+            stat_id = stat_profile.statistic_id
+            prof_id = stat_profile.profile_id
+            prof_ver = stat_profile.profile_version
+            provs = sorted(list(self.config.scenario.providers))
+            tsks = sorted(list(self.config.scenario.tasks))
+            prof_fp = stat_profile.canonical_profile_fingerprint(providers=provs, tasks=tsks)
         else:
             stat_id = str(metric_name)
             prof_id = str(metric_name)
             prof_ver = "1.0.0"
             prof_fp = ""
-
-        exec_mode_str = (
-            execution_mode.value if isinstance(execution_mode, ExecutionMode) else str(execution_mode)
-        ).lower()
 
         if exec_mode_str == "experiment":
             if noise_seed is not None:
@@ -179,6 +206,18 @@ class AnalyticsPlanner:
         else:
             resolved_scope_id = str(privacy_scope_id)
 
+        # Build stable taxonomy fingerprint
+        if hasattr(self.config.scenario, "compute_fingerprint"):
+            tax_fp = str(self.config.scenario.compute_fingerprint())
+        elif hasattr(self.config.scenario, "taxonomy") and hasattr(self.config.scenario.taxonomy, "compute_fingerprint"):
+            tax_fp = str(self.config.scenario.taxonomy.compute_fingerprint())
+        else:
+            tax_dict = {
+                "providers": sorted(list(self.config.scenario.providers)),
+                "tasks": sorted(list(self.config.scenario.tasks)),
+            }
+            tax_fp = hashlib.sha256(json.dumps(tax_dict, sort_keys=True).encode("utf-8")).hexdigest()
+
         canonical_semantics = {
             "calibration_version": "analytic_gaussian_v1" if "gaussian" in mech_type else "laplace_v1",
             "clip_norm": float(clip_c),
@@ -190,9 +229,11 @@ class AnalyticsPlanner:
             "epsilon": float(eps),
             "execution_mode": exec_mode_str,
             "max_cells_per_user": int(max_k),
+            "max_tasks_per_user": int(max_tasks),
             "mechanism": str(mech_type),
             "metric_name": str(metric_name),
             "metric_version": int(getattr(m_def, "version", 1)),
+            "min_noisy_denominator": float(min_den) if min_den is not None else 1.0,
             "noise_seed_identity": noise_identity,
             "norm_bound": float(norm_b),
             "population_mode": str(self.config.scenario.population.mode),
@@ -204,6 +245,9 @@ class AnalyticsPlanner:
             "public_population_size": int(resolved_pop_size) if resolved_pop_size is not None else -1,
             "statistic_id": str(stat_id),
             "tasks": sorted(list(self.config.scenario.tasks)),
+            "taxonomy_fingerprint": tax_fp,
+            "threshold": float(threshold_val) if threshold_val is not None else None,
+            "top_k": int(top_k_val) if top_k_val is not None else None,
             "window_end": str(t_end) if t_end else "",
             "window_start": str(t_start) if t_start else "",
         }

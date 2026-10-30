@@ -41,8 +41,10 @@ class MetricCatalog:
                 c = m_def.contribution.clip_norm or 20.0
                 self.register(InteractionVolumeMetric(name=name, clip_norm=c))
             elif m_def.type == "success_rate":
-                c_rate = getattr(m_def.contribution, "clip_norm_rate", 10.0) or 10.0
-                min_den = getattr(m_def.contribution, "min_noisy_denominator", 5.0) or 5.0
+                raw_c_rate = getattr(m_def.contribution, "clip_norm_rate", None)
+                c_rate = 10.0 if raw_c_rate is None else float(raw_c_rate)
+                raw_min_den = getattr(m_def.contribution, "min_noisy_denominator", None)
+                min_den = 1.0 if raw_min_den is None else float(raw_min_den)
                 self.register(SuccessRateMetric(name=name, clip_norm_rate=c_rate, min_noisy_denominator=min_den))
             elif m_def.type == "top_k_tasks":
                 top_k = getattr(m_def.contribution, "top_k", 5) or 5

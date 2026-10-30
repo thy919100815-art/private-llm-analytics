@@ -230,6 +230,20 @@ class PrivacyStateManager:
                     created_at TEXT NOT NULL
                 )
             """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS admin_policy_audit (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp TEXT NOT NULL,
+                    actor TEXT NOT NULL,
+                    action TEXT NOT NULL,
+                    epsilon_cap TEXT NOT NULL,
+                    delta_global TEXT NOT NULL,
+                    default_query_epsilon TEXT NOT NULL,
+                    default_query_delta TEXT NOT NULL,
+                    effective_epsilon_at_change TEXT NOT NULL,
+                    reason TEXT
+                )
+            """)
             # Upgrade privacy_policy_metadata schema if missing id or canonicalized_recipient_roles
             cursor.execute("PRAGMA table_info(privacy_policy_metadata)")
             ppm_cols = {row[1] for row in cursor.fetchall()}
@@ -976,6 +990,111 @@ class PrivacyStateManager:
         if "best_alpha" in row.keys() and row["best_alpha"]:
             setattr(res, "best_alpha", row["best_alpha"])
         return res
+
+    def get_committed_release_by_id(self, release_id: str) -> Optional[DPReleaseResult]:
+        """Lookup an already committed release by its release_id."""
+        with self._connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT r.* FROM release_store r
+                JOIN privacy_reservations p ON r.reservation_id = p.reservation_id
+                WHERE r.release_id = ? AND r.status = 'COMMITTED' AND p.status = 'COMMITTED'
+                """,
+                (release_id,),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                cursor.execute(
+                    "SELECT release_key FROM privacy_ledger WHERE release_id = ?",
+                    (release_id,),
+                )
+                ledger_row = cursor.fetchone()
+                if ledger_row:
+                    return self.get_committed_release(ledger_row["release_key"])
+
+        if row is None or not row["dp_vector_json"]:
+            return None
+
+        res = self._row_to_release_result(row)
+        if "effective_epsilon" in row.keys() and row["effective_epsilon"]:
+            setattr(res, "effective_epsilon", row["effective_epsilon"])
+        if "best_alpha" in row.keys() and row["best_alpha"]:
+            setattr(res, "best_alpha", row["best_alpha"])
+        return res
+
+    def get_committed_release_record(self, release_id_or_key: str) -> Optional[Dict[str, Any]]:
+        """Lookup full committed release row dictionary by release_id or release_key."""
+        with self._connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                SELECT r.* FROM release_store r
+                JOIN privacy_reservations p ON r.reservation_id = p.reservation_id
+                WHERE (r.release_id = ? OR r.release_key = ?) AND r.status = 'COMMITTED' AND p.status = 'COMMITTED'
+                LIMIT 1
+                """,
+                (release_id_or_key, release_id_or_key),
+            )
+            row = cursor.fetchone()
+            if row is not None:
+                return dict(row)
+            cursor.execute(
+                "SELECT * FROM privacy_ledger WHERE release_id = ? OR release_key = ? LIMIT 1",
+                (release_id_or_key, release_id_or_key),
+            )
+            l_row = cursor.fetchone()
+            if l_row is not None:
+                return dict(l_row)
+        return None
+
+    def record_admin_policy_change(
+        self,
+        actor: str,
+        epsilon_cap: float,
+        delta_global: float,
+        default_query_epsilon: float,
+        default_query_delta: float,
+        effective_epsilon_at_change: float,
+        reason: str = "",
+    ) -> None:
+        """Record an administrative privacy policy change to the persistent audit log."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO admin_policy_audit (
+                    timestamp, actor, action, epsilon_cap, delta_global,
+                    default_query_epsilon, default_query_delta,
+                    effective_epsilon_at_change, reason
+                ) VALUES (?, ?, 'POLICY_UPDATE', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    now_iso,
+                    actor,
+                    str(epsilon_cap),
+                    str(delta_global),
+                    str(default_query_epsilon),
+                    str(default_query_delta),
+                    str(effective_epsilon_at_change),
+                    reason,
+                ),
+            )
+            conn.commit()
+
+    def get_admin_policy_history(self) -> List[Dict[str, Any]]:
+        """Retrieve historical administrative privacy policy changes from persistent audit log."""
+        with self._connection() as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM admin_policy_audit ORDER BY id DESC"
+            )
+            rows = cursor.fetchall()
+            return [dict(r) for r in rows]
 
     def _row_to_release_result(self, row: sqlite3.Row) -> DPReleaseResult:
         dp_vec = np.array(json.loads(row["dp_vector_json"]), dtype=np.float64)

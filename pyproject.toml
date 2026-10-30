@@ -44,6 +44,11 @@ private_llm_analytics = [
     "web/templates/*.html",
     "web/static/*.css",
     "web/static/*.js",
+    "web/static/*.csv",
+    "web/static/vendor/katex/*.css",
+    "web/static/vendor/katex/*.js",
+    "web/static/vendor/katex/contrib/*.js",
+    "web/static/vendor/katex/fonts/*",
 ]
 
 [tool.pytest.ini_options]

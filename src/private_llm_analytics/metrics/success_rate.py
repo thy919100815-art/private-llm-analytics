@@ -17,7 +17,7 @@ class SuccessRateMetric(BaseMetric):
         self,
         name: str = "success_rate",
         clip_norm_rate: float = 10.0,
-        min_noisy_denominator: float = 5.0,
+        min_noisy_denominator: float = 1.0,
     ):
         super().__init__(name=name, metric_type="success_rate")
         self.clip_norm_rate = float(clip_norm_rate)
@@ -34,7 +34,7 @@ class SuccessRateMetric(BaseMetric):
         return self.profile.build_user_contributions(user_matrix)
 
     def get_sensitivity(self, mechanism_type: str = "gaussian") -> float:
-        return self.profile.get_sensitivity(mechanism_type)
+        return self.profile.sensitivity()
 
     def post_process(
         self,

@@ -47,3 +47,15 @@ metrics:
       min_noisy_denominator: 1.0
     mechanism:
       type: gaussian
+
+  top_k_tasks:
+    enabled: true
+    type: top_k_tasks
+    dimensions:
+      - task
+    contribution:
+      mode: binary
+      max_tasks_per_user: 5
+      top_k: 5
+    mechanism:
+      type: gaussian

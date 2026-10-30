@@ -300,7 +300,7 @@ class ContributionConfig(BaseModel):
     norm_bound: Optional[float] = 1.0
     clip_norm: Optional[float] = 20.0
     clip_norm_rate: Optional[float] = 10.0
-    min_noisy_denominator: Optional[float] = 5.0
+    min_noisy_denominator: Optional[float] = 1.0
     max_tasks_per_user: Optional[int] = 5
     top_k: Optional[int] = 5
     threshold: Optional[float] = None
@@ -367,6 +367,18 @@ class RecipientPolicy(BaseModel):
     exact_results: bool = False
     dp_results: bool = True
     cross_provider_comparison: bool = False
+    display_name: Optional[str] = None
+
+    def get_display_name(self, recipient_id: str) -> str:
+        if self.display_name:
+            return self.display_name
+        defaults = {
+            "internal": "内部 AI 治理团队",
+            "provider_a": "OpenAI",
+            "provider_b": "Kimi",
+            "provider_c": "DeepSeek",
+        }
+        return defaults.get(recipient_id, recipient_id)
 
     @model_validator(mode="after")
     def check_external_exact(self) -> "RecipientPolicy":

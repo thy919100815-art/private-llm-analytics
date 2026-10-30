@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Optional
 from fastapi import FastAPI, File, HTTPException, Query, UploadFile, status
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from private_llm_analytics.privacy.exceptions import (
@@ -16,10 +16,16 @@ from private_llm_analytics.privacy.exceptions import (
 )
 from private_llm_analytics.web.adapters import WebAnalyticsAdapter
 from private_llm_analytics.web.schemas import (
+    AccuracyEvaluationResponse,
+    AdminPrivacyPolicyResponse,
+    AdminPrivacyPolicyUpdateRequest,
     ConfigResponse,
     ContinualQueryRequest,
     ContinualStatusResponse,
     DatasetStatusResponse,
+    EpsilonSweepRequest,
+    EpsilonSweepResponse,
+    InputPreviewResponse,
     PlannerRecommendRequest,
     PlannerRecommendResponse,
     PrivacyStatusResponse,
@@ -177,6 +183,22 @@ def create_app(
     async def get_dataset_status():
         return web_adapter.get_dataset_status()
 
+    @app.get("/api/dataset/sample-template")
+    async def get_sample_template():
+        content, filename = web_adapter.get_dataset_sample_template()
+        return Response(
+            content=content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/dataset/preview", response_model=InputPreviewResponse)
+    async def get_dataset_preview(
+        recipient: str = Query("internal", description="Requesting recipient ID (must be trusted)"),
+        limit: int = Query(10, ge=1, le=100, description="Number of preview records"),
+    ):
+        return web_adapter.get_dataset_preview(recipient=recipient, limit=limit)
+
     @app.post("/api/dataset/demo", response_model=DatasetStatusResponse)
     async def load_demo_data():
         return web_adapter.load_demo_data()
@@ -205,6 +227,96 @@ def create_app(
     @app.get("/api/releases")
     async def list_releases():
         return web_adapter.list_releases()
+
+    @app.get("/api/mechanism-cards")
+    async def get_mechanism_cards():
+        from private_llm_analytics.statistics.cards import get_all_mechanism_cards
+        return get_all_mechanism_cards(web_adapter.service.config)
+
+    @app.get("/api/admin/privacy-policy", response_model=AdminPrivacyPolicyResponse)
+    async def get_admin_privacy_policy():
+        return web_adapter.get_admin_policy()
+
+    @app.post("/api/admin/privacy-policy", response_model=AdminPrivacyPolicyResponse)
+    async def update_admin_privacy_policy(payload: AdminPrivacyPolicyUpdateRequest):
+        return web_adapter.update_admin_policy(payload)
+
+    @app.get("/api/release/download/csv")
+    async def download_release_csv(
+        release_id: str = Query(..., description="ID or canonical key of committed release"),
+        recipient: str = Query("internal", description="Requesting recipient ID"),
+    ):
+        csv_content, filename = web_adapter.download_release_csv(release_id=release_id, recipient=recipient)
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/release/download/json")
+    async def download_release_json(
+        release_id: str = Query(..., description="ID or canonical key of committed release"),
+        recipient: str = Query("internal", description="Requesting recipient ID"),
+    ):
+        json_content, filename = web_adapter.download_release_json(release_id=release_id, recipient=recipient)
+        return Response(
+            content=json_content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/release/download/internal-comparison")
+    async def download_internal_comparison_csv(
+        release_id: str = Query(..., description="ID or canonical key of committed release"),
+        recipient: str = Query("internal", description="Requesting recipient ID (must be trusted)"),
+    ):
+        csv_content, filename = web_adapter.download_internal_comparison_csv(release_id=release_id, recipient=recipient)
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/evaluation/accuracy", response_model=AccuracyEvaluationResponse)
+    async def get_release_accuracy(
+        release_id: str = Query(..., description="ID or key of committed release"),
+        recipient: str = Query("internal", description="Requesting recipient (must be trusted)"),
+    ):
+        return web_adapter.get_release_accuracy_evaluation(release_id=release_id, recipient=recipient)
+
+    @app.get("/api/evaluation/summary")
+    async def get_utility_summary(
+        recipient: str = Query("internal", description="Requesting recipient (must be trusted)"),
+    ):
+        return web_adapter.get_utility_summary(recipient=recipient)
+
+    @app.post("/api/evaluation/sweep", response_model=EpsilonSweepResponse)
+    async def run_epsilon_sweep(payload: EpsilonSweepRequest):
+        return web_adapter.run_epsilon_sweep(payload)
+
+    @app.get("/api/evaluation/download/csv")
+    async def download_evaluation_csv(
+        release_id: str = Query(..., description="ID or key of committed release"),
+        recipient: str = Query("internal", description="Requesting recipient (must be trusted)"),
+    ):
+        csv_content, filename = web_adapter.download_evaluation_csv(release_id=release_id, recipient=recipient)
+        return Response(
+            content=csv_content,
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @app.get("/api/evaluation/download/json")
+    async def download_evaluation_json(
+        release_id: str = Query(..., description="ID or key of committed release"),
+        recipient: str = Query("internal", description="Requesting recipient (must be trusted)"),
+    ):
+        json_content, filename = web_adapter.download_evaluation_json(release_id=release_id, recipient=recipient)
+        return Response(
+            content=json_content,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
 
     @app.get("/api/continual/status", response_model=ContinualStatusResponse)
     async def get_continual_status():

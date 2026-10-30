@@ -261,18 +261,20 @@ class SuccessRateProfile(DPStatisticProfile):
         s_matrix = user_matrix.success_matrix if getattr(user_matrix, "success_matrix", None) is not None else np.zeros_like(n_matrix)
         s_raw = np.sum(s_matrix, axis=0)
         n_raw = np.sum(n_matrix, axis=0)
-        rates_raw = np.zeros(9, dtype=np.float64)
-        for i in range(9):
+        d = user_matrix.n_cells
+        rates_raw = np.zeros(d, dtype=np.float64)
+        for i in range(d):
             rates_raw[i] = s_raw[i] / n_raw[i] if n_raw[i] > 0 else 0.0
         return s_raw, n_raw, rates_raw
 
     def compute_clipped_exact(self, user_matrix: UserMatrix) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         joint = self.build_user_contributions(user_matrix)
         joint_sum = np.sum(joint, axis=0)
-        s_clip = joint_sum[:9]
-        n_clip = joint_sum[9:18]
-        rates_clip = np.zeros(9, dtype=np.float64)
-        for i in range(9):
+        d = user_matrix.n_cells
+        s_clip = joint_sum[:d]
+        n_clip = joint_sum[d:2 * d]
+        rates_clip = np.zeros(d, dtype=np.float64)
+        for i in range(d):
             rates_clip[i] = s_clip[i] / n_clip[i] if n_clip[i] > 0 else 0.0
         return s_clip, n_clip, rates_clip
 

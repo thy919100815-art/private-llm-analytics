@@ -35,6 +35,7 @@ from private_llm_analytics.continual.tree import BinaryTimeTree, compute_continu
 from private_llm_analytics.planning.policy import build_aggregation_matrix
 from private_llm_analytics.privacy.composition import PrivacyView, resolve_budget_scope_id
 from private_llm_analytics.privacy.exceptions import (
+    ProductionRNGControlError,
     PrivacyBudgetExceededError,
     PrivacyConfigurationError,
     ProductionSafetyConfigurationError,
@@ -345,6 +346,7 @@ class ContinualQueryEngine:
         partition_fingerprints: Optional[Dict[str, str]] = None,
         precomputed_contributions: Optional[np.ndarray] = None,
         current_wall_clock_day: Optional[int] = None,
+        rng: Optional[np.random.Generator] = None,
     ) -> List[np.ndarray]:
         """Materialize or retrieve canonical noisy nodes with prefix-stable contribution builder."""
         tree = BinaryTimeTree(epoch_days=stream_config.epoch_days)
@@ -385,6 +387,7 @@ class ContinualQueryEngine:
                 public_roster_fingerprint=public_roster_fingerprint,
                 current_wall_clock_day=current_wall_clock_day,
                 partition_fingerprints=partition_fingerprints,
+                rng=rng,
             )
             noisy_nodes.append(noisy_node)
 
@@ -429,6 +432,7 @@ class ContinualQueryEngine:
         public_roster_fingerprint: Optional[str] = None,
         current_wall_clock_day: Optional[int] = None,
         partition_fingerprints: Optional[Dict[str, str]] = None,
+        rng: Optional[np.random.Generator] = None,
     ) -> ContinualQueryResult:
         """Internal execution of tree-based dyadic interval query."""
         if not self.enabled:
@@ -532,6 +536,7 @@ class ContinualQueryEngine:
                 partition_fingerprints=partition_fingerprints,
                 precomputed_contributions=precomputed_contributions,
                 current_wall_clock_day=current_wall_clock_day,
+                rng=rng,
             )
 
             # 10. Commit level exposures
@@ -594,8 +599,13 @@ class ContinualQueryEngine:
         public_roster_fingerprint: Optional[str] = None,
         current_wall_clock_day: Optional[int] = None,
         partition_fingerprints: Optional[Dict[str, str]] = None,
+        rng: Optional[np.random.Generator] = None,
     ) -> ContinualQueryResult:
         """Fixed interval dyadic continual query [start_day, end_day] (Section 20)."""
+        if getattr(self, "execution_mode", "production") == "production" and rng is not None:
+            raise ProductionRNGControlError(
+                "Security violation: External caller cannot supply or control RNG / seed in production mode."
+            )
         return self._execute_tree_query(
             stream_config=stream_config,
             start_day=start_day,
@@ -611,6 +621,7 @@ class ContinualQueryEngine:
             public_roster_fingerprint=public_roster_fingerprint,
             current_wall_clock_day=current_wall_clock_day,
             partition_fingerprints=partition_fingerprints,
+            rng=rng,
         )
 
     def query_prefix(

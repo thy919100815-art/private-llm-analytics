@@ -45,7 +45,7 @@ def get_success_rate_sensitivity(clip_norm_rate: float = 10.0, d_cells: int = 9)
 
 
 def get_metric_sensitivities(
-    metric_type: Literal["prevalence", "normalized_share", "volume", "success_rate"],
+    metric_type: Literal["prevalence", "normalized_share", "volume", "success_rate", "top_k_tasks"],
     **kwargs,
 ) -> Tuple[float, float]:
     """Dispatch sensitivity calculation for given metric type.
@@ -67,5 +67,8 @@ def get_metric_sensitivities(
         c_rate = kwargs.get("clip_norm_rate", 10.0)
         d = kwargs.get("d_cells", 9)
         return get_success_rate_sensitivity(clip_norm_rate=c_rate, d_cells=d)
+    elif metric_type == "top_k_tasks":
+        k_tasks = kwargs.get("max_tasks_per_user", 5)
+        return float(math.sqrt(k_tasks)), float(k_tasks)
     else:
         raise ValueError(f"Unknown metric type: {metric_type}")
