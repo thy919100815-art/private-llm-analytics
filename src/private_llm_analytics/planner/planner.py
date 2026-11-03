@@ -23,8 +23,9 @@ from private_llm_analytics.privacy.exceptions import (
 class AnalyticsPlanner:
     """Plans query execution, determines sensitivities, budgets, and stable release keys."""
 
-    def __init__(self, app_config: AppConfig):
+    def __init__(self, app_config: AppConfig, epoch_planner: Optional[Any] = None):
         self.config = app_config
+        self.epoch_planner = epoch_planner
 
     def create_plan(
         self,
@@ -65,7 +66,7 @@ class AnalyticsPlanner:
         t_start = pd.to_datetime(query.window_start) if query.window_start else None
         t_end = pd.to_datetime(query.window_end) if query.window_end else None
 
-        # 4. Mechanism and budget determination with strict parameter validation
+        # 4. Mechanism determination with strict parameter validation
         raw_mech = query.mechanism or m_def.mechanism.type or self.config.privacy.default_mechanism.type
         mech_type = raw_mech.lower()
         if mech_type not in ("gaussian", "laplace"):
@@ -87,22 +88,6 @@ class AnalyticsPlanner:
                 raise UnsupportedMechanismError(
                     f"Metric '{metric_name}' is configured for Gaussian mechanism; Laplace override is rejected in production."
                 )
-
-        default_query_b = getattr(self.config.privacy, "default_query_budget", self.config.privacy.global_budget)
-        eps = query.epsilon if query.epsilon is not None else default_query_b.epsilon
-        if eps <= 0.0:
-            raise PrivacyConfigurationError(f"Privacy budget epsilon must be strictly positive, got {eps}")
-
-        if "gaussian" in mech_type:
-            delta = query.delta if query.delta is not None else default_query_b.delta
-            if delta <= 0.0 or delta >= 1.0:
-                raise PrivacyConfigurationError(f"Gaussian mechanism requires 0 < delta < 1, got delta={delta}")
-        elif "laplace" in mech_type:
-            if query.delta is not None and query.delta != 0.0:
-                raise PrivacyConfigurationError(f"Laplace mechanism is pure-DP and requires delta=0, got delta={query.delta}")
-            delta = 0.0
-        else:
-            delta = 0.0
 
         # 5. Public population size resolution and validation
         resolved_pop_size = public_population_size
@@ -136,6 +121,48 @@ class AnalyticsPlanner:
         )
 
         sensitivity = l2_s if "gaussian" in mech_type else l1_s
+
+        # 7. Privacy Budget determination: Auto Workload Calibration vs Explicit Query Override
+        planned_noise_scale: Optional[float] = None
+        planned_candidate_rdp: Optional[Dict[Any, Any]] = None
+
+        use_epoch = (
+            getattr(query, "use_epoch_planner", None) is True
+            or (getattr(query, "use_epoch_planner", None) is None and query.epsilon is None and query.delta is None)
+        )
+
+        if use_epoch and self.epoch_planner is not None and "gaussian" in mech_type:
+            cal_sigma, cal_eps, cal_rdp = self.epoch_planner.calibrate_workload_noise(
+                metric_name, sensitivity
+            )
+            eps = cal_eps
+            delta = float(self.epoch_planner.delta_global)
+            planned_noise_scale = cal_sigma
+            planned_candidate_rdp = cal_rdp
+        else:
+            default_query_b = getattr(self.config.privacy, "default_query_budget", self.config.privacy.global_budget)
+            eps = query.epsilon if query.epsilon is not None else default_query_b.epsilon
+            if eps <= 0.0:
+                raise PrivacyConfigurationError(f"Privacy budget epsilon must be strictly positive, got {eps}")
+
+            if "gaussian" in mech_type:
+                delta = query.delta if query.delta is not None else default_query_b.delta
+                if delta <= 0.0 or delta >= 1.0:
+                    raise PrivacyConfigurationError(f"Gaussian mechanism requires 0 < delta < 1, got delta={delta}")
+                from private_llm_analytics.mechanisms.gaussian import GaussianMechanism
+                mech_for_scale = GaussianMechanism(
+                    epsilon=eps,
+                    delta=delta,
+                    sensitivity=sensitivity,
+                    method="analytic",
+                )
+                planned_noise_scale = mech_for_scale.noise_scale
+            elif "laplace" in mech_type:
+                if query.delta is not None and query.delta != 0.0:
+                    raise PrivacyConfigurationError(f"Laplace mechanism is pure-DP and requires delta=0, got delta={query.delta}")
+                delta = 0.0
+            else:
+                delta = 0.0
 
         # 7. Build stable, canonical semantic release key fingerprint
         from private_llm_analytics.statistics.prevalence import UserPrevalenceProfile
@@ -234,6 +261,7 @@ class AnalyticsPlanner:
             "metric_name": str(metric_name),
             "metric_version": int(getattr(m_def, "version", 1)),
             "min_noisy_denominator": float(min_den) if min_den is not None else 1.0,
+            "noise_scale": round(float(planned_noise_scale), 6) if planned_noise_scale is not None else None,
             "noise_seed_identity": noise_identity,
             "norm_bound": float(norm_b),
             "population_mode": str(self.config.scenario.population.mode),
@@ -241,13 +269,20 @@ class AnalyticsPlanner:
             "profile_fingerprint": str(prof_fp),
             "profile_id": str(prof_id),
             "profile_version": str(prof_ver),
-            "providers": sorted(list(self.config.scenario.providers)),
+            "providers": (
+                sorted(list(self.config.recipients.recipients[query.recipient].providers))
+                if getattr(self.config, "recipients", None)
+                and query.recipient in getattr(self.config.recipients, "recipients", {})
+                and "*" not in getattr(self.config.recipients.recipients[query.recipient], "providers", ["*"])
+                and metric_name == "top_k_tasks"
+                else sorted(list(self.config.scenario.providers))
+            ),
             "public_population_size": int(resolved_pop_size) if resolved_pop_size is not None else -1,
             "statistic_id": str(stat_id),
             "tasks": sorted(list(self.config.scenario.tasks)),
             "taxonomy_fingerprint": tax_fp,
             "threshold": float(threshold_val) if threshold_val is not None else None,
-            "top_k": int(top_k_val) if top_k_val is not None else None,
+            "top_k": None if metric_name == "top_k_tasks" else (int(top_k_val) if top_k_val is not None else None),
             "window_end": str(t_end) if t_end else "",
             "window_start": str(t_start) if t_start else "",
         }
@@ -273,5 +308,7 @@ class AnalyticsPlanner:
             profile_id=str(prof_id),
             profile_version=str(prof_ver),
             profile_fingerprint=str(prof_fp),
+            noise_scale=planned_noise_scale,
+            candidate_rdp=planned_candidate_rdp,
         )
 

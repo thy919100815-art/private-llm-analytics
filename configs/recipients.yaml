@@ -20,6 +20,7 @@ recipients:
       - user_normalized_share
       - interaction_volume
       - success_rate
+      - top_k_tasks
     exact_results: false
     dp_results: true
     cross_provider_comparison: false
@@ -34,6 +35,7 @@ recipients:
       - user_normalized_share
       - interaction_volume
       - success_rate
+      - top_k_tasks
     exact_results: false
     dp_results: true
     cross_provider_comparison: false
@@ -48,6 +50,7 @@ recipients:
       - user_normalized_share
       - interaction_volume
       - success_rate
+      - top_k_tasks
     exact_results: false
     dp_results: true
     cross_provider_comparison: false

@@ -17,6 +17,8 @@ class AnalyticsQuery:
     mechanism: Optional[str] = None
     clip_norm: Optional[float] = None
     seed: Optional[int] = None
+    k: Optional[int] = None
+    use_epoch_planner: Optional[bool] = None
 
     def __post_init__(self):
         if self.clip_norm is not None:

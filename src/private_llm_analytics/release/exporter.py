@@ -139,12 +139,17 @@ def build_release_dataframe(release_output: Dict[str, Any]) -> pd.DataFrame:
     # 2. Top-K Tasks
     if metric == "top_k_tasks" or "top_k" in results:
         top_k_items = results.get("top_k", [])
+        denom_val = results.get("public_population_size", release_output.get("public_population_size", 50000))
         for item in top_k_items:
             noisy_score = round(item.get("noisy_count", 0.0), 2)
             est_prev = round(item.get("estimated_prevalence", 0.0), 4) if item.get("estimated_prevalence") is not None else None
             rows.append({
                 "rank": item.get("rank"),
                 "task": item.get("task"),
+                "noisy_count": noisy_score,
+                "estimated_prevalence": est_prev,
+                "prevalence_denominator_type": "public_enterprise_population",
+                "prevalence_denominator_value": denom_val,
                 "cell_display": str(item.get("task")),
                 "metric": "top_k_tasks",
                 "metric_name": metric_friendly,
@@ -153,7 +158,6 @@ def build_release_dataframe(release_output: Dict[str, Any]) -> pd.DataFrame:
                 "statistic_unit": stat_unit,
                 "status": "NORMAL",
                 "dp_noisy_score": noisy_score,
-                "estimated_prevalence": est_prev,
                 "epsilon": eps,
                 "delta": delta,
                 "mechanism": mech,
@@ -245,9 +249,9 @@ def build_release_dataframe(release_output: Dict[str, Any]) -> pd.DataFrame:
 
 
 def build_release_csv_string(release_output: Dict[str, Any]) -> str:
-    """Serialize DP release output to CSV formatted string."""
+    """Serialize DP release output to CSV formatted string with UTF-8 BOM for Windows Excel compatibility."""
     df = build_release_dataframe(release_output)
-    return df.to_csv(index=False)
+    return "\ufeff" + df.to_csv(index=False)
 
 
 def export_release_csv(release_output: Dict[str, Any], file_path: Union[str, Path]) -> None:
@@ -269,6 +273,12 @@ def sanitize_release_for_export(release_output: Dict[str, Any]) -> Dict[str, Any
         "random_state",
         "user_ids",
         "raw_users",
+        "exact_ground_truth",
+        "exact_data",
+        "clean_vector",
+        "clipped_vector",
+        "raw_prompt",
+        "prompt",
     }
     sanitized: Dict[str, Any] = {}
     for k, v in release_output.items():
@@ -299,6 +309,12 @@ def sanitize_release_for_export(release_output: Dict[str, Any]) -> Dict[str, Any
         sanitized["timestamp"] = datetime.now(timezone.utc).isoformat()
     if "reporting_window" not in sanitized:
         sanitized["reporting_window"] = sanitized.get("window_end") or "30d"
+
+    if metric == "top_k_tasks":
+        res_dict = sanitized.get("results", {}) if isinstance(sanitized.get("results"), dict) else {}
+        denom_val = res_dict.get("public_population_size", sanitized.get("public_population_size", 50000))
+        sanitized["prevalence_denominator_type"] = "public_enterprise_population"
+        sanitized["prevalence_denominator_value"] = denom_val
 
     return sanitized
 

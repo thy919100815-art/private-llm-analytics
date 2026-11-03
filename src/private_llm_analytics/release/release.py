@@ -39,6 +39,7 @@ from private_llm_analytics.privacy.rdp import (
     rdp_vector_to_json,
     to_decimal,
 )
+from private_llm_analytics.privacy.epoch import EpochBudgetManager, EpochBudgetPlanner
 from private_llm_analytics.privacy.ledger import PrivacyLedger
 from private_llm_analytics.privacy.rdp_accountant import RDPAccountant
 from private_llm_analytics.privacy.state import PrivacyStateManager, _to_decimal
@@ -175,6 +176,20 @@ class ReleaseOrchestrator:
             self.accountant = self.rdp_accountant
         else:
             self.accountant = self.basic_accountant
+
+        continual_en = False
+        if hasattr(app_config, "continual") and getattr(app_config.continual, "enabled", False):
+            continual_en = True
+        elif hasattr(app_config, "metrics") and hasattr(app_config.metrics, "continual") and getattr(app_config.metrics.continual, "enabled", False):
+            continual_en = True
+
+        self.epoch_manager = EpochBudgetManager(
+            state_manager=self.state_manager,
+            epoch_cap=self.epsilon_cap,
+            delta_global=self.delta_global,
+            continual_enabled=continual_en,
+        )
+        self.planner = AnalyticsPlanner(app_config, epoch_planner=self.epoch_manager.planner)
 
         # Fail-closed check: verify recipient composition policy binding in production
         if self.execution_mode == ExecutionMode.PRODUCTION:
@@ -322,6 +337,13 @@ class ReleaseOrchestrator:
         if user_matrix.public_population_size is None and self.config.scenario.population.mode == "fixed_public_population":
             user_matrix.public_population_size = self.config.scenario.population.n_users
 
+        # Resolve recipient provider scope
+        allowed_providers = None if "*" in policy.providers else list(policy.providers)
+        if allowed_providers is not None and query.metric == "top_k_tasks":
+            effective_user_matrix = user_matrix.filter_providers(allowed_providers)
+        else:
+            effective_user_matrix = user_matrix
+
         # 6. Pre-validation and Plan generation with budget_scope_id (Section A)
         plan: ExecutionPlan = self.planner.create_plan(
             query,
@@ -362,10 +384,11 @@ class ReleaseOrchestrator:
                     release_result=committed,
                     query=query,
                     policy=policy,
-                    user_matrix=user_matrix,
+                    user_matrix=effective_user_matrix,
                     include_exact=include_exact,
                     cache_hit=True,
                     release_key=plan.release_key,
+                    release_id=getattr(committed, "release_id", None) or plan.release_key,
                     budget_scope_id=budget_scope_id,
                     accountant_mode=effective_accountant_mode,
                     effective_epsilon_before=eps_fresh,
@@ -387,18 +410,22 @@ class ReleaseOrchestrator:
 
         # Calibrate mechanism scale and compute candidate RDP vector
         if "gaussian" in plan.mechanism:
-            mech_for_scale = GaussianMechanism(
-                epsilon=plan.epsilon,
-                delta=plan.delta,
-                sensitivity=plan.sensitivity,
-                method="analytic",
-            )
-            candidate_sigma = mech_for_scale.noise_scale
-            candidate_rdp = compute_gaussian_rdp(
-                sigma=candidate_sigma,
-                sensitivity=plan.sensitivity,
-                orders=effective_orders,
-            )
+            if plan.noise_scale is not None and plan.candidate_rdp is not None:
+                candidate_sigma = plan.noise_scale
+                candidate_rdp = plan.candidate_rdp
+            else:
+                mech_for_scale = GaussianMechanism(
+                    epsilon=plan.epsilon,
+                    delta=plan.delta,
+                    sensitivity=plan.sensitivity,
+                    method="analytic",
+                )
+                candidate_sigma = mech_for_scale.noise_scale
+                candidate_rdp = compute_gaussian_rdp(
+                    sigma=candidate_sigma,
+                    sensitivity=plan.sensitivity,
+                    orders=effective_orders,
+                )
         elif "laplace" in plan.mechanism:
             mech_for_scale = LaplaceMechanism(
                 epsilon=plan.epsilon,
@@ -412,6 +439,21 @@ class ReleaseOrchestrator:
             )
         else:
             raise UnsupportedMechanismError(f"Unsupported mechanism: {plan.mechanism}")
+
+        # Check Epoch Workload Budget
+        alloc_source = "WORKLOAD_QUOTA"
+        use_epoch_budgeting = (
+            getattr(query, "use_epoch_planner", None) is True
+            or (getattr(query, "use_epoch_planner", None) is None and query.epsilon is None)
+        )
+        if use_epoch_budgeting and (self.execution_mode == ExecutionMode.PRODUCTION or self.accountant_mode == "rdp"):
+            active_epoch = self.epoch_manager.get_or_create_active_epoch()
+            is_allowed, alloc_source, block_reason = active_epoch.can_execute_release(
+                workload_name=plan.metric,
+                candidate_rdp=candidate_rdp,
+            )
+            if not is_allowed:
+                raise PrivacyBudgetExceededError(block_reason)
 
         plan_metadata = {
             "metric": plan.metric,
@@ -479,10 +521,11 @@ class ReleaseOrchestrator:
                 release_result=cached_res,
                 query=query,
                 policy=policy,
-                user_matrix=user_matrix,
+                user_matrix=effective_user_matrix,
                 include_exact=include_exact,
                 cache_hit=True,
                 release_key=plan.release_key,
+                release_id=release_id or plan.release_key,
                 budget_scope_id=budget_scope_id,
                 accountant_mode=effective_accountant_mode,
                 effective_epsilon_before=eps_fresh,
@@ -512,7 +555,8 @@ class ReleaseOrchestrator:
                     epsilon=plan.epsilon,
                     delta=plan.delta,
                     sensitivity=plan.sensitivity,
-                    method="analytic",
+                    method="rdp" if plan.noise_scale is not None else "analytic",
+                    noise_scale=candidate_sigma,
                 )
             elif "laplace" in plan.mechanism:
                 mechanism = LaplaceMechanism(
@@ -524,7 +568,11 @@ class ReleaseOrchestrator:
                 raise UnsupportedMechanismError(f"Unsupported mechanism: {plan.mechanism}")
 
             metric = self.catalog.get(plan.metric)
-            release_result = metric.release_dp(user_matrix, mechanism, rng=execution_rng)
+            query_k = getattr(query, "k", None)
+            if plan.metric == "top_k_tasks":
+                release_result = metric.release_dp(effective_user_matrix, mechanism, rng=execution_rng, k=query_k)
+            else:
+                release_result = metric.release_dp(effective_user_matrix, mechanism, rng=execution_rng)
 
             if hasattr(plan, "statistic_id"):
                 setattr(release_result, "statistic_id", plan.statistic_id)
@@ -556,6 +604,18 @@ class ReleaseOrchestrator:
                 orders=effective_orders,
             )
             committed = True
+
+            # Record into Epoch Budget Manager
+            if use_epoch_budgeting and (self.execution_mode == ExecutionMode.PRODUCTION or self.accountant_mode == "rdp"):
+                try:
+                    self.epoch_manager.record_spend(
+                        workload_name=plan.metric,
+                        release_id=release_id,
+                        candidate_rdp=candidate_rdp,
+                        source=alloc_source,
+                    )
+                except Exception:
+                    pass
 
             try:
                 self.ledger.record_release(
@@ -597,10 +657,11 @@ class ReleaseOrchestrator:
             release_result=release_result,
             query=query,
             policy=policy,
-            user_matrix=user_matrix,
+            user_matrix=effective_user_matrix,
             include_exact=include_exact,
             cache_hit=False,
             release_key=plan.release_key,
+            release_id=release_id,
             budget_scope_id=budget_scope_id,
             accountant_mode=effective_accountant_mode,
             effective_epsilon_before=eps_before,
@@ -667,6 +728,7 @@ class ReleaseOrchestrator:
         best_alpha: Optional[float] = None,
         release_count: int = 0,
         candidate_rdp: Optional[Dict[Any, Any]] = None,
+        release_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         exact_data = None
         if policy.role == "trusted" and include_exact:
@@ -686,6 +748,12 @@ class ReleaseOrchestrator:
         )
         output["cache_hit"] = cache_hit
         output["release_key"] = release_key
+        output["release_id"] = str(release_id) if release_id else release_key
+        query_k = getattr(query, "k", None)
+        if query.metric == "top_k_tasks" and query_k is not None:
+            metric_obj = self.catalog.get(query.metric)
+            if hasattr(metric_obj, "post_process"):
+                output["results"] = metric_obj.post_process(release_result.dp_vector, user_matrix, k=query_k)
         output["incremental_privacy_cost"] = 0.0 if cache_hit else float(release_result.epsilon)
         output["incremental_privacy_cost_decimal"] = "0.0" if cache_hit else str(_to_decimal(release_result.epsilon))
 

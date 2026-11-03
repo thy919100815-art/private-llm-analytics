@@ -20,11 +20,13 @@ class ReleaseRequest(BaseModel):
 
     metric: str = Field(..., description="Analytics metric to compute")
     recipient: str = Field(..., description="Authorized recipient name")
-    epsilon: float = Field(..., gt=0.0, description="Differential privacy epsilon")
-    delta: float = Field(..., gt=0.0, lt=1.0, description="Differential privacy delta")
+    epsilon: Optional[float] = Field(None, gt=0.0, description="Differential privacy epsilon (auto-allocated by Epoch Planner if None)")
+    delta: Optional[float] = Field(None, gt=0.0, lt=1.0, description="Differential privacy delta (auto-allocated by Epoch Planner if None)")
     window_days: Optional[int] = Field(None, gt=0, description="Observation window in days")
     window_start: Optional[str] = Field(None, description="ISO window start timestamp")
     window_end: Optional[str] = Field(None, description="ISO window end timestamp")
+    use_epoch_planner: bool = Field(True, description="Whether to use automatic Epoch Workload Budgeting")
+    k: Optional[int] = Field(None, ge=1, description="Top-k number of items to return")
 
     @field_validator("metric")
     @classmethod
@@ -38,16 +40,18 @@ class ReleaseRequest(BaseModel):
 
     @field_validator("epsilon")
     @classmethod
-    def validate_epsilon(cls, v: float) -> float:
-        if math.isnan(v) or math.isinf(v) or v <= 0:
-            raise ValueError("Epsilon must be a finite positive number.")
+    def validate_epsilon(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None:
+            if math.isnan(v) or math.isinf(v) or v <= 0:
+                raise ValueError("Epsilon must be a finite positive number.")
         return v
 
     @field_validator("delta")
     @classmethod
-    def validate_delta(cls, v: float) -> float:
-        if math.isnan(v) or math.isinf(v) or not (0 < v < 1):
-            raise ValueError("Delta must be a finite number strictly between 0 and 1.")
+    def validate_delta(cls, v: Optional[float]) -> Optional[float]:
+        if v is not None:
+            if math.isnan(v) or math.isinf(v) or not (0 < v < 1):
+                raise ValueError("Delta must be a finite number strictly between 0 and 1.")
         return v
 
     @model_validator(mode="before")
@@ -59,6 +63,8 @@ class ReleaseRequest(BaseModel):
                     raise ValueError(
                         f"External caller cannot specify '{k}'. Production release strictly forbids RNG/seed control."
                     )
+            if "use_epoch_planner" not in data or data.get("use_epoch_planner") is None:
+                data["use_epoch_planner"] = (data.get("epsilon") is None)
         return data
 
     @model_validator(mode="after")
@@ -151,6 +157,7 @@ class DatasetStatusResponse(BaseModel):
     provider_count: Optional[int] = None
     task_count: Optional[int] = None
     time_range: Optional[Dict[str, Optional[str]]] = None
+    time_range_display: Optional[str] = None
     has_success_field: Optional[bool] = None
     quality_checks: Optional[List[Dict[str, Any]]] = None
 
@@ -215,6 +222,40 @@ class EpsilonSweepResponse(BaseModel):
     explanation: str
 
 
+class EpochWorkloadStatus(BaseModel):
+    name: str
+    display_name: str
+    weight: float
+    is_supported: bool
+    allocated_epsilon: float
+    spent_epsilon: float
+    spent_percentage: float
+    release_count: int
+
+
+class PrivacyEpochStatus(BaseModel):
+    epoch_id: str
+    epoch_start: str
+    epoch_end: str
+    epoch_days: int
+    current_day: int
+    epsilon_cap: float
+    effective_epsilon: float
+    remaining_headroom: float
+    delta_global: float
+    status: str
+    release_count: int
+    reserve_percentage_remaining: float
+    workloads: Dict[str, EpochWorkloadStatus]
+
+
+class LifetimeExposureStatus(BaseModel):
+    total_epochs_count: int
+    lifetime_effective_epsilon: float
+    lifetime_delta: float
+    notice: str
+
+
 class PrivacyStatusResponse(BaseModel):
     budget_scope_id: str
     accountant_mode: str
@@ -227,6 +268,8 @@ class PrivacyStatusResponse(BaseModel):
     release_count: int
     best_alpha: Optional[float]
     spend_percentage: float
+    epoch: Optional[PrivacyEpochStatus] = None
+    lifetime_exposure: Optional[LifetimeExposureStatus] = None
 
 
 class PlannerRecommendResponse(BaseModel):

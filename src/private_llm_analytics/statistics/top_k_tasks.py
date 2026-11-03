@@ -101,19 +101,34 @@ class TopKTasksProfile(DPStatisticProfile):
     def required_columns(self) -> List[str]:
         return list(REQUIRED_COLUMNS)
 
+    def compute_exact(
+        self,
+        user_matrix: UserMatrix,
+        allowed_providers: Optional[List[str]] = None,
+    ) -> np.ndarray:
+        contributions = self.build_user_contributions(user_matrix, allowed_providers=allowed_providers)
+        return np.sum(contributions, axis=0)
+
     def contribution_bound(self) -> float:
         return float(self.max_tasks_per_user)
 
     def sensitivity(self) -> float:
         return float(np.sqrt(self.max_tasks_per_user))
 
-    def build_user_contributions(self, user_matrix: UserMatrix) -> np.ndarray:
+    def build_user_contributions(
+        self,
+        user_matrix: UserMatrix,
+        k: Optional[int] = None,
+        allowed_providers: Optional[List[str]] = None,
+    ) -> np.ndarray:
         n_users = user_matrix.n_users
         tasks = user_matrix.tasks
         n_tasks = len(tasks)
 
         task_counts = np.zeros((n_users, n_tasks), dtype=np.float64)
         for (p, t), cell_idx in user_matrix.cell_map.items():
+            if allowed_providers is not None and "*" not in allowed_providers and p not in allowed_providers:
+                continue
             if t in tasks:
                 t_idx = tasks.index(t)
                 task_counts[:, t_idx] += user_matrix.matrix[:, cell_idx]
@@ -198,6 +213,7 @@ class TopKTasksProfile(DPStatisticProfile):
         self,
         dp_vector: np.ndarray,
         user_matrix: UserMatrix,
+        k: Optional[int] = None,
     ) -> Dict[str, Any]:
         tasks = user_matrix.tasks
         assert len(dp_vector) == len(tasks)
@@ -214,6 +230,13 @@ class TopKTasksProfile(DPStatisticProfile):
         top_k_list = []
         selected_tasks = []
         denom = user_matrix.public_population_size
+
+        effective_k_target = self.k
+        if k is not None:
+            try:
+                effective_k_target = int(k)
+            except (ValueError, TypeError):
+                effective_k_target = self.k
 
         for rank, idx in enumerate(sorted_indices):
             t_name = tasks[idx]
@@ -232,14 +255,15 @@ class TopKTasksProfile(DPStatisticProfile):
             })
             selected_tasks.append(t_name)
 
-            if len(top_k_list) >= self.k:
+            if len(top_k_list) >= effective_k_target:
                 break
 
         return {
             "top_k": top_k_list,
             "selected_tasks": selected_tasks,
             "all_noisy_counts": all_noisy_counts,
-            "k": self.k,
+            "k": effective_k_target,
+            "effective_k": min(effective_k_target, len(tasks)),
             "max_tasks_per_user": self.max_tasks_per_user,
             "threshold": self.threshold,
             "public_population_size": denom,

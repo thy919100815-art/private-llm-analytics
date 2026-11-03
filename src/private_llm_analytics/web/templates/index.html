@@ -94,27 +94,35 @@
         </div>
       </section>
 
-      <!-- Privacy Budget Card -->
+      <!-- Privacy Epoch & Budgeting Card -->
       <section class="card">
         <div class="card-header">
-          <span class="card-title">全生命周期隐私预算</span>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="card-title">当前 90 天 Privacy Epoch</span>
+            <span id="epoch-status" class="badge badge-success">ACTIVE</span>
+          </div>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <span id="budget-accountant-mode" class="badge">RDP → (ε, δ)</span>
+            <button id="btn-advance-epoch" class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;">推进到新 Epoch</button>
             <button id="btn-open-policy-modal" class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;">隐私政策设置</button>
           </div>
         </div>
-        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">隐私预算按照历史发布持续累计，不会因重新启动服务而自动重置。</p>
-        <div class="budget-meter">
+        <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between;">
+          <span>当前周期：<strong id="epoch-date-range">2026-10-01 ～ 2026-12-29</strong> (第 <strong id="epoch-current-day">1</strong> 天 / 共 90 天)</span>
+          <span>记账引擎：<strong id="budget-accountant-mode">RDP → (ε, δ)</strong></span>
+        </div>
+        
+        <!-- Epoch Meter -->
+        <div class="budget-meter" style="margin-top: 10px;">
           <div class="progress-track">
             <div id="budget-progress-fill" class="progress-fill"></div>
           </div>
           <div class="budget-stats">
             <div class="stat-item">
-              <span class="stat-label">已使用有效 ε</span>
+              <span class="stat-label">Epoch 已用有效 ε</span>
               <span id="budget-eps-used" class="stat-val">0.0000</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">全生命周期 ε 上限</span>
+              <span class="stat-label">Epoch ε 上限</span>
               <span id="budget-eps-cap" class="stat-val">4.0000</span>
             </div>
             <div class="stat-item">
@@ -125,24 +133,114 @@
               <span class="stat-label">全局 δ</span>
               <span id="budget-delta" class="stat-val">1.0e-6</span>
             </div>
+            <div class="stat-item">
+              <span class="stat-label">机动 Reserve 剩余</span>
+              <span id="epoch-reserve-pct" class="stat-val" style="color: #059669;">100.0%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Workload Quota Breakdown (7 Standard Tasks) -->
+        <div style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <span style="font-size: 12px; font-weight: 700; color: var(--text-main);">Epoch 各任务预算配额与使用情况 (Workload Budget Allocation)</span>
+            <span style="font-size: 11px; color: var(--text-muted);">自动校准 σ 与 RDP</span>
+          </div>
+          <div id="workload-breakdown-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 11px;">
+            <div class="workload-item" id="wl-item-volume" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>调用量分析 (Requests)</strong> <span class="badge" style="font-size: 10px;">25%</span></span>
+                <span id="wl-spent-volume">0.0% (0 次)</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div id="wl-bar-volume" class="progress-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="workload-item" id="wl-item-success_rate" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>成功率分析 (Success Rate)</strong> <span class="badge" style="font-size: 10px;">20%</span></span>
+                <span id="wl-spent-success_rate">0.0% (0 次)</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div id="wl-bar-success_rate" class="progress-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="workload-item" id="wl-item-prevalence" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>渗透率分析 (Prevalence)</strong> <span class="badge" style="font-size: 10px;">15%</span></span>
+                <span id="wl-spent-prevalence">0.0% (0 次)</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div id="wl-bar-prevalence" class="progress-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="workload-item" id="wl-item-share" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>归一化任务占比 (Share)</strong> <span class="badge" style="font-size: 10px;">10%</span></span>
+                <span id="wl-spent-share">0.0% (0 次)</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div id="wl-bar-share" class="progress-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="workload-item" id="wl-item-top_k" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>Top-K 热门任务 (Top-K)</strong> <span class="badge" style="font-size: 10px;">10%</span></span>
+                <span id="wl-spent-top_k">0.0% (0 次)</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div id="wl-bar-top_k" class="progress-fill" style="width: 0%;"></div></div>
+            </div>
+
+            <div class="workload-item" id="wl-item-continual" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px; opacity: 0.7;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>持续性观测 (Continual)</strong> <span class="badge" style="font-size: 10px; background: #64748b;">未启用</span></span>
+                <span style="color: #64748b;">配额已划入机动 Reserve</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div class="progress-fill" style="width: 0%; background: #94a3b8;"></div></div>
+            </div>
+
+            <div class="workload-item" id="wl-item-reserve" style="grid-column: span 2; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 6px 10px;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
+                <span><strong>预留机动预算 (Reserve)</strong> <span class="badge badge-success" style="font-size: 10px;">20% (含 Continual 转移)</span></span>
+                <span id="wl-spent-reserve" style="color: #166534;">已用 0.0% | 剩余 100.0%</span>
+              </div>
+              <div class="progress-track" style="height: 4px;"><div id="wl-bar-reserve" class="progress-fill" style="width: 0%; background: #22c55e;"></div></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Lifetime Exposure Monitor -->
+        <div class="lifetime-exposure-panel" style="margin-top: 12px; background: #fdfefe; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <span style="font-size: 12px; font-weight: 700; color: #0f172a;">全生命周期隐私预算 / Lifetime Exposure Monitor (全生命周期跨 Epoch 暴露度监控)</span>
+              <span class="badge" style="font-size: 10px; background: #e0e7ff; color: #3730a3;">Scope: 全系统物理全量发布 (跨接收方与跨 Epoch 汇总)</span>
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted);">
+              已运行 Epoch 数: <strong id="lifetime-epochs-count" style="color: var(--primary);">1</strong> | 
+              已使用有效 ε: <strong id="lifetime-effective-eps" style="color: #b91c1c;">0.0000</strong> |
+              全生命周期 ε 上限: <strong>持续监控</strong> |
+              剩余 ε 空间: <strong>动态跟踪</strong>
+            </div>
+          </div>
+          <div class="lifetime-warning-banner" style="margin-top: 6px; font-size: 11px; background: #fffbeb; border-left: 3px solid #f59e0b; padding: 6px 10px; color: #92400e; border-radius: 2px; line-height: 1.5;">
+            ⚠️ <strong>合规提示</strong>：<span id="lifetime-notice">新 Epoch 会重新开放本周期业务预算，但隐私预算按照历史发布持续累计，不会因重新启动服务而自动重置。注意：Lifetime Exposure 为全系统物理数据集在全量接收方（含内部和外部）及全历史周期的总体累积泄露，不可与单个外部接收方的当前 Epoch 配额（如 2.9282）简单直接等同。</span>
           </div>
         </div>
 
         <!-- Lifetime Budget Explanation Collapsible -->
         <details class="collapsible-box" id="budget-details-collapse" style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
-          <summary style="cursor: pointer; font-weight: 600; color: var(--primary);">全生命周期隐私政策与 RDP 记账说明</summary>
+          <summary style="cursor: pointer; font-weight: 600; color: var(--primary);">90 天 Privacy Epoch 与 Workload Budgeting 架构说明</summary>
           <div style="margin-top: 8px; padding: 10px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; line-height: 1.6;">
-            <p><strong>全生命周期隐私预算不是单次查询预算</strong>，而是该隐私作用域所有历史 DP 发布经过组合后的累计隐私损失上限。</p>
+            <p><strong>固定 90 天 Privacy Epoch + 任务预算分配（Workload Budgeting）</strong>：</p>
             <div style="margin: 8px 0; padding: 6px 10px; background: #f1f5f9; border-radius: 4px; font-family: monospace; font-size: 11px;">
-              <div>每次高斯发布 RDP 损失: &rho;<sub>t</sub>(&alpha;) = &alpha;&Delta;<sub>t</sub><sup>2</sup> / (2&sigma;<sub>t</sub><sup>2</sup>)</div>
-              <div>全生命周期累计组合: &rho;<sub>life</sub>(&alpha;) = &sum;<sub>t</sub> &rho;<sub>t</sub>(&alpha;)</div>
-              <div>转换最终有效预算: &epsilon;<sub>life</sub>(&delta;) = min<sub>&alpha;&gt;1</sub> [ &rho;<sub>life</sub>(&alpha;) + ln(1/&delta;) / (&alpha; - 1) ]</div>
+              <div>单任务 RDP 矢量: &rho;<sub>i</sub>(&alpha;) = &alpha; &Delta;<sub>2,i</sub><sup>2</sup> / (2 &sigma;<sub>i</sub><sup>2</sup>)</div>
+              <div>Epoch 累计组合约束: &sum;<sub>i</sub> &rho;<sub>i</sub>(&alpha;) &le; R<sub>epoch</sub>(&alpha;)</div>
+              <div>转换最终有效预算: &epsilon;<sub>epoch</sub>(&delta;) &le; 4.0000 (&delta; = 1e-6)</div>
             </div>
             <ul style="padding-left: 18px; margin-top: 4px; font-size: 11.5px;">
-              <li><strong>单次查询 ε</strong> 仅用于校准当前发布的噪声尺度，不等于全生命周期累计 ε。</li>
-              <li><strong>标准重放（Canonical Replay）</strong>：对相同语义参数的重复查询直接复用缓存，严格增加 0 新隐私消耗。</li>
-              <li><strong>持久化保证</strong>：重启系统、更换统计指标或调整 Taxonomy 均不会重置已消耗的历史隐私预算。</li>
-              <li><strong>政策上限 ε = 4.0</strong>：该数值为管理员制定的企业安全治理策略限额，而非算法固定推导的最优数。</li>
+              <li><strong>优先级 1（缓存命中）</strong>：相同 ReleaseKey 重复发布直接复用，严格消耗 0 预算。</li>
+              <li><strong>优先级 2（后处理）</strong>：同任务内利用已发布的充分统计量/树节点重构，严格消耗 0 预算。</li>
+              <li><strong>优先级 3（工作负载配额）</strong>：优先从调用量(25%)、成功率(20%)、渗透率(15%)、占比(10%)、Top-K(10%)中扣除。</li>
+              <li><strong>优先级 4（机动 Reserve）</strong>：任务配额不足时自动向 Reserve 申请补充。</li>
+              <li><strong>优先级 5（Fail-Closed 阻断）</strong>：配额与 Reserve 均耗尽，或导致 Epoch 累计超过 4.0，系统直接阻断发布。</li>
+              <li><strong>持久化保证</strong>：所有 Epoch 记录持久化存储在 SQLite 中，重启服务状态无缝保留，历史 Epoch 绝不覆盖。</li>
             </ul>
           </div>
         </details>
@@ -296,71 +394,55 @@
         </details>
       </div>
 
-      <!-- Step 3: Privacy Strength Section -->
+      <!-- Step 3: Privacy Strength Section (Workload-driven Auto Allocation) -->
       <div class="privacy-strength-section" style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
         <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="step-badge">步骤 3</span>
-            <span class="form-label" style="font-weight: 700; font-size: 13px; margin: 0;">设置隐私保护强度</span>
+            <span class="form-label" style="font-weight: 700; font-size: 13px; margin: 0;">隐私预算分配（自动 Workload Budgeting）</span>
           </div>
-          <button type="button" id="btn-toggle-advanced-privacy" class="btn btn-secondary" style="padding: 2px 8px; font-size: 11px;">
-            [高级参数设置]
-          </button>
+          <span class="badge badge-success" style="font-size: 11px;">自动分配生效中</span>
         </div>
-        <p class="form-hint" style="font-size: 12px; color: var(--text-muted); margin-bottom: 10px;">
-          隐私参数 ε（Epsilon）决定了添加到统计结果中的噪声大小。数值越小，隐私保护力度越强；数值越大，统计精度越高。
-        </p>
-
-        <!-- Preset Options Grid -->
-        <div class="preset-buttons-container" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px;">
-          <div class="preset-card active" data-eps="1.0" data-desc="推荐平衡：在统计可用性与企业员工隐私保护间取得最佳平衡。">
-            <div class="preset-title">推荐平衡 (ε = 1.0)</div>
-            <div class="preset-sub">适合常规业务分析与对外发布</div>
+        
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
+          <div style="font-size: 12px; color: var(--text-main); margin-bottom: 6px;">
+            <strong>Workload-driven 自动化预算管理</strong>：系统已为 90 天 Epoch 内各项标准分析任务完成预设配额规划，内部根据指标灵敏度自动计算高斯噪声尺度 &sigma; 与 RDP 矢量，日常查询无需手动指定 &epsilon;。
           </div>
-          <div class="preset-card" data-eps="0.5" data-desc="较强保护：适合强合规监管场景，噪声相对较大，单人隐私泄漏风险极低。">
-            <div class="preset-title">较强保护 (ε = 0.5)</div>
-            <div class="preset-sub">适合严格合规场景</div>
-          </div>
-          <div class="preset-card" data-eps="2.0" data-desc="较宽松：适合对统计精度要求较高、接收方可信度高的内部场景。">
-            <div class="preset-title">较宽松 (ε = 2.0)</div>
-            <div class="preset-sub">适合高精度内部评估</div>
+          <div style="display: flex; gap: 12px; font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+            <div><strong>执行优先级</strong>：</div>
+            <div>1. 命中缓存 (0消耗)</div>
+            <div>&rarr;</div>
+            <div>2. 充分统计量后处理 (0消耗)</div>
+            <div>&rarr;</div>
+            <div>3. 任务工作负载配额</div>
+            <div>&rarr;</div>
+            <div>4. 机动 Reserve</div>
+            <div>&rarr;</div>
+            <div>5. 超限阻断</div>
           </div>
         </div>
 
-        <!-- Tradeoff visual indicator -->
-        <div class="tradeoff-bar-container" style="background: #f1f5f9; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px;">
-          <div style="display: flex; justify-content: space-between; font-size: 11.5px; font-weight: 600; color: var(--text-muted); margin-bottom: 4px;">
-            <span>🔒 更强隐私（ε较小，噪声更大）</span>
-            <span id="preset-active-label" style="color: var(--primary);">当前选择：推荐平衡 (ε = 1.0)</span>
-            <span>📊 更高精度（ε较大，噪声更小）</span>
-          </div>
-          <div class="tradeoff-track" style="height: 6px; background: #e2e8f0; border-radius: 3px; position: relative; overflow: hidden;">
-            <div id="tradeoff-fill" class="tradeoff-fill" style="position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: linear-gradient(90deg, #10b981, #3b82f6, #f59e0b);"></div>
-          </div>
-          <div id="tradeoff-desc" style="font-size: 11px; color: var(--text-light); margin-top: 6px;">
-            推荐平衡：在统计可用性与企业员工隐私保护间取得最佳平衡。
-          </div>
-        </div>
-
-        <!-- Advanced Privacy Settings (Collapsible / hidden by default) -->
-        <div id="advanced-privacy-panel" style="display: none; background: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; margin-bottom: 12px;">
-          <div class="grid-two-col">
-            <div class="form-group">
-              <label class="form-label">隐私参数 ε（Epsilon > 0）</label>
-              <input type="number" id="input-epsilon" class="form-input" step="0.1" min="0.01" value="1.0">
-              <p class="form-hint" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">
-                单次请求 ε 用于校准本次高斯噪声，不等于累计 lifetime ε；累计值由 RDP accountant 对全部历史发布进行组合后计算。
-              </p>
+        <!-- Optional Collapsible Manual Override (for testing/diagnostics) -->
+        <details class="collapsible-box" id="advanced-privacy-panel" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
+          <summary style="cursor: pointer; color: var(--text-light); font-size: 11px;">[高级选项] 实验性手动参数覆盖（仅供对比测试，默认关闭）</summary>
+          <div style="margin-top: 8px; background: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
+            <div style="margin-bottom: 8px;">
+              <label style="cursor: pointer; font-size: 11.5px; font-weight: 600;">
+                <input type="checkbox" id="chk-manual-override" style="margin-right: 4px;"> 启用手动 &epsilon; 参数覆盖（跳过 Epoch 自动分配）
+              </label>
             </div>
-            <div class="form-group">
-              <label class="form-label">隐私参数 δ（0 < Delta < 1）</label>
-              <input type="number" id="input-delta" class="form-input" step="1e-7" min="1e-10" max="0.999" value="1e-6">
-              <p class="form-hint" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">
-                用于转换单次高斯发布噪声尺度与 RDP 预算。
-              </p>
+            <div class="grid-two-col">
+              <div class="form-group">
+                <label class="form-label">手动隐私参数 ε（Epsilon > 0）</label>
+                <input type="number" id="input-epsilon" class="form-input" step="0.1" min="0.01" value="1.0">
+              </div>
+              <div class="form-group">
+                <label class="form-label">手动隐私参数 δ（0 < Delta < 1）</label>
+                <input type="number" id="input-delta" class="form-input" step="1e-7" min="1e-10" max="0.999" value="1e-6">
+              </div>
             </div>
           </div>
-        </div>
+        </details>
       </div>
 
       <!-- Display Filters -->
@@ -444,8 +526,8 @@
           <span id="res-cache-status" class="badge badge-primary" style="margin-left: 8px;">已发布</span>
         </div>
         <div class="btn-group" style="margin: 0;">
-          <button id="btn-download-csv" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">下载 CSV</button>
-          <button id="btn-download-json" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">下载 JSON</button>
+          <button id="btn-download-csv" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" disabled title="请先执行差分隐私发布">下载 CSV</button>
+          <button id="btn-download-json" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" disabled title="请先执行差分隐私发布">下载 JSON</button>
         </div>
       </div>
 

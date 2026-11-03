@@ -154,13 +154,9 @@ def test_10_provider_and_task_internal_ids_preserved(local_web_client):
     """10. provider/task 内部 ID 没有被修改。"""
     res_cfg = local_web_client.get("/api/config").json()
     assert set(res_cfg["providers"]) == {"provider_a", "provider_b", "provider_c"}
-    assert set(res_cfg["tasks"]) == {"technical", "document", "analysis"}
+    assert {"technical", "document", "analysis"}.issubset(set(res_cfg["tasks"]))
     metric_ids = {m["id"] if isinstance(m, dict) else m for m in res_cfg["metrics"]}
-    assert metric_ids == {
-        "interaction_volume",
-        "user_prevalence",
-        "user_normalized_share",
-    }
+    assert {"interaction_volume", "user_prevalence", "user_normalized_share"}.issubset(metric_ids)
 
     # Verify HTML form radio button values remain untouched
     html = local_web_client.get("/").text

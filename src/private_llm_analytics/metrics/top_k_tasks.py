@@ -30,11 +30,19 @@ class TopKTasksMetric(BaseMetric):
             threshold=self.threshold,
         )
 
-    def compute_exact(self, user_matrix: UserMatrix) -> np.ndarray:
-        return self.profile.compute_exact(user_matrix)
+    def compute_exact(
+        self,
+        user_matrix: UserMatrix,
+        allowed_providers: Optional[List[str]] = None,
+    ) -> np.ndarray:
+        return self.profile.compute_exact(user_matrix, allowed_providers=allowed_providers)
 
-    def build_user_contributions(self, user_matrix: UserMatrix) -> np.ndarray:
-        return self.profile.build_user_contributions(user_matrix)
+    def build_user_contributions(
+        self,
+        user_matrix: UserMatrix,
+        allowed_providers: Optional[List[str]] = None,
+    ) -> np.ndarray:
+        return self.profile.build_user_contributions(user_matrix, allowed_providers=allowed_providers)
 
     def get_sensitivity(self, mechanism_type: str = "gaussian") -> float:
         return self.profile.sensitivity()
@@ -43,19 +51,22 @@ class TopKTasksMetric(BaseMetric):
         self,
         dp_vector: np.ndarray,
         user_matrix: UserMatrix,
+        k: Optional[int] = None,
     ) -> Dict[str, Any]:
-        return self.profile.post_process(dp_vector, user_matrix)
+        return self.profile.post_process(dp_vector, user_matrix, k=k)
 
     def release_dp(
         self,
         user_matrix: UserMatrix,
         mechanism: DPMechanism,
         rng: Optional[np.random.Generator] = None,
+        allowed_providers: Optional[List[str]] = None,
+        k: Optional[int] = None,
     ) -> DPReleaseResult:
-        contributions = self.build_user_contributions(user_matrix)
+        contributions = self.build_user_contributions(user_matrix, allowed_providers=allowed_providers)
         bounded_sum = np.sum(contributions, axis=0)
         noisy_vec = mechanism.add_noise(bounded_sum, rng=rng)
-        post_processed = self.post_process(noisy_vec, user_matrix)
+        post_processed = self.post_process(noisy_vec, user_matrix, k=k)
 
         return DPReleaseResult(
             metric_name=self.name,

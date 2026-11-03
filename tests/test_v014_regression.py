@@ -384,10 +384,11 @@ def test_v014_f3_exact_decimal_accounting_no_drift(tmp_path):
         )
 
 
-def test_v014_f3_accountant_exact_decimal_check():
+def test_v014_f3_accountant_exact_decimal_check(tmp_path):
     """F3: BasicAccountant.check_budget_available uses exact Decimal."""
     accountant = BasicAccountant(
         global_budget=PrivacyBudget(epsilon=4.0, delta=0.0),
+        state_manager=PrivacyStateManager(tmp_path / "f3_state.db"),
         allow_budget_overrun=False,
     )
     # delta > 0 must be rejected when global delta == 0

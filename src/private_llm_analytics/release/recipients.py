@@ -110,7 +110,7 @@ def filter_release_for_recipient(
                     cell_k: cell_v for cell_k, cell_v in v.items()
                     if any(cell_k.startswith(f"{p}:") for p in allowed_providers)
                 }
-        elif k in ("top_k", "selected_tasks", "all_noisy_counts", "k", "max_tasks_per_user", "threshold"):
+        elif k in ("top_k", "selected_tasks", "all_noisy_counts", "k", "effective_k", "max_tasks_per_user", "threshold", "public_population_size"):
             filtered_stats[k] = v
 
     output["results"] = filtered_stats

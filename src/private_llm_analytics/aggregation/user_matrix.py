@@ -64,6 +64,41 @@ class UserMatrix:
     def total_interactions(self) -> float:
         return float(self.matrix.sum())
 
+    def filter_providers(self, allowed_providers: List[str]) -> "UserMatrix":
+        """Return a new UserMatrix scoped strictly to authorized providers.
+
+        Ensures pre-aggregation provider isolation: users' interactions on unauthorized
+        providers are excluded before contribution bounding, sensitivity analysis, and DP noise.
+        """
+        if not allowed_providers or "*" in allowed_providers:
+            return self
+
+        prov_set = set(allowed_providers)
+        matching_col_indices = []
+        new_cell_names = []
+        new_cell_map = {}
+        for (p, t), idx in self.cell_map.items():
+            if p in prov_set:
+                new_idx = len(matching_col_indices)
+                matching_col_indices.append(idx)
+                new_cell_names.append(self.cell_names[idx])
+                new_cell_map[(p, t)] = new_idx
+
+        new_matrix = self.matrix[:, matching_col_indices] if matching_col_indices else np.zeros((self.n_users, 0), dtype=np.float64)
+        new_success = self.success_matrix[:, matching_col_indices] if self.success_matrix is not None and matching_col_indices else None
+        new_providers = [p for p in self.providers if p in prov_set]
+
+        return UserMatrix(
+            matrix=new_matrix,
+            user_ids=list(self.user_ids),
+            providers=new_providers,
+            tasks=list(self.tasks),
+            cell_names=new_cell_names,
+            cell_map=new_cell_map,
+            public_population_size=self.public_population_size,
+            success_matrix=new_success,
+        )
+
 
 def build_user_matrix(
     df: pd.DataFrame,

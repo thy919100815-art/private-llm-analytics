@@ -4,7 +4,7 @@ dataset:
 population:
   mode: fixed_public_population
   n_users: 50000
-  n_days: 30
+  n_days: 90
 
 providers:
   - provider_a
@@ -12,9 +12,18 @@ providers:
   - provider_c
 
 tasks:
-  - technical
   - document
+  - technical
   - analysis
+  - coding
+  - translation
+  - summarization
+  - customer_support
+  - creative_writing
+  - data_extraction
+  - qa
+  - code_review
+  - brainstorming
 
 usage_frequency:
   distribution: normal

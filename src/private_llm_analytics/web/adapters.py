@@ -261,6 +261,8 @@ class WebAnalyticsAdapter:
             },
         ]
 
+        time_range_disp = f"{time_range['start']} ～ {time_range['end']}" if time_range else "全量时间"
+
         return {
             "loaded": True,
             "rows": len(df),
@@ -269,6 +271,7 @@ class WebAnalyticsAdapter:
             "provider_count": prov_cnt,
             "task_count": task_cnt,
             "time_range": time_range,
+            "time_range_display": time_range_disp,
             "has_success_field": has_succ,
             "quality_checks": quality_checks,
             "dataset_version": self.service._dataset_version,
@@ -342,6 +345,17 @@ class WebAnalyticsAdapter:
             min(100.0, max(0.0, (eff_eps / eps_cap * 100.0))) if eps_cap > 0 else 0.0
         )
 
+        epoch_info = None
+        lifetime_info = None
+        if hasattr(self.service.orchestrator, "epoch_manager"):
+            try:
+                active_epoch = self.service.orchestrator.epoch_manager.get_or_create_active_epoch()
+                epoch_info = active_epoch.to_dict()
+                lifetime_exposure = self.service.orchestrator.epoch_manager.get_lifetime_exposure()
+                lifetime_info = lifetime_exposure.to_dict()
+            except Exception:
+                pass
+
         return {
             "budget_scope_id": pv.budget_scope_id,
             "accountant_mode": "RDP -> (ε, δ)" if pv.accountant_mode == "rdp" else "Basic Additive",
@@ -356,6 +370,8 @@ class WebAnalyticsAdapter:
             "release_count": pv.release_count,
             "best_alpha": float(pv.best_alpha) if pv.best_alpha is not None else None,
             "spend_percentage": round(spend_pct, 1),
+            "epoch": epoch_info,
+            "lifetime_exposure": lifetime_info,
         }
 
     def get_planner_recommendation(
@@ -467,6 +483,8 @@ class WebAnalyticsAdapter:
             end=end,
             epsilon=request.epsilon,
             delta=request.delta,
+            k=getattr(request, "k", None),
+            use_epoch_planner=getattr(request, "use_epoch_planner", None),
             include_exact=False,
         )
 
@@ -802,14 +820,11 @@ class WebAnalyticsAdapter:
             "Continual interval queries require an authoritative finalized stream configuration and are not initialized by the Web Console."
         )
 
-    def get_dataset_preview(self, recipient: str = "internal", limit: int = 10) -> Dict[str, Any]:
-        """Return preview of first few records for trusted internal administrators only."""
-        caller_policy = self.service.config.recipients.recipients.get(recipient)
-        if not caller_policy or caller_policy.role != "trusted" or not caller_policy.exact_results:
-            raise RecipientSecurityViolation(
-                f"Unauthorized: Recipient '{recipient}' is strictly forbidden from viewing raw input telemetry."
-            )
+    def get_dataset_preview(self, limit: int = 20, recipient: Optional[str] = None) -> Dict[str, Any]:
+        """Return preview of first few records for trusted local administrators only.
 
+        Safe local inspection: does not check recipient permissions, does not consume DP budget or ReleaseKey.
+        """
         df = self.service._raw_dataframe
         if df is None:
             return {

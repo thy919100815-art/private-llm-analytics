@@ -60,9 +60,10 @@ class SyntheticDataGenerator:
             rng=rng,
         )
 
-        # 3. Sample multinomial interaction counts across 9 cells for each user
+        # 3. Sample multinomial interaction counts across dynamic cells for each user
         # Vectorized batch processing
-        user_counts = np.zeros((sc.n_users, 9), dtype=np.int64)
+        n_cells = len(sc.providers) * len(sc.tasks)
+        user_counts = np.zeros((sc.n_users, n_cells), dtype=np.int64)
         for u in range(sc.n_users):
             user_counts[u] = rng.multinomial(interaction_counts[u], joint_probs[u])
 

@@ -31,7 +31,7 @@ def generate_interaction_dataframe(
     Optimized for high performance on large populations (up to N=100,000).
     """
     n_users, n_cells = user_counts.shape
-    assert n_cells == 9
+    assert n_cells == len(providers) * len(tasks), f"Expected {len(providers) * len(tasks)} cells, got {n_cells}" 
 
     # Mapping from cell index to (provider, task)
     cell_provider_task: List[Tuple[str, str]] = []

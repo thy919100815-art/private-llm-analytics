@@ -86,11 +86,16 @@ class GaussianMechanism(DPMechanism):
         delta: float,
         sensitivity: float,
         method: str = "analytic",
+        noise_scale: Optional[float] = None,
     ):
-        if method == "analytic":
-            noise_scale = calibrate_analytic_gaussian(epsilon, delta, sensitivity)
+        if noise_scale is not None and noise_scale > 0:
+            resolved_noise_scale = float(noise_scale)
+        elif method == "analytic":
+            resolved_noise_scale = calibrate_analytic_gaussian(epsilon, delta, sensitivity)
         elif method == "classical":
-            noise_scale = calibrate_classical_gaussian(epsilon, delta, sensitivity)
+            resolved_noise_scale = calibrate_classical_gaussian(epsilon, delta, sensitivity)
+        elif method in ("rdp", "direct") and noise_scale is not None:
+            resolved_noise_scale = float(noise_scale)
         else:
             raise ValueError(f"Unknown calibration method: '{method}'")
 
@@ -98,7 +103,7 @@ class GaussianMechanism(DPMechanism):
             epsilon=epsilon,
             delta=delta,
             sensitivity=sensitivity,
-            noise_scale=noise_scale,
+            noise_scale=resolved_noise_scale,
             mechanism_name="Gaussian",
         )
         self.calibration_method = method

@@ -163,11 +163,11 @@ class TestReleaseKeyParameterSensitivity:
 
     def test_release_key_varies_with_top_k_parameters(self):
         config1 = load_app_config("configs")
-        config1.metrics.metrics["top_k_tasks"].contribution.top_k = 3
+        config1.metrics.metrics["top_k_tasks"].contribution.max_tasks_per_user = 3
         p1 = AnalyticsPlanner(config1)
 
         config2 = load_app_config("configs")
-        config2.metrics.metrics["top_k_tasks"].contribution.top_k = 10
+        config2.metrics.metrics["top_k_tasks"].contribution.max_tasks_per_user = 10
         p2 = AnalyticsPlanner(config2)
 
         q = AnalyticsQuery(metric="top_k_tasks", recipient="internal", epsilon=1.0, delta=1e-6)
@@ -175,8 +175,8 @@ class TestReleaseKeyParameterSensitivity:
         plan2 = p2.create_plan(q, dataset_version="v1.0")
 
         assert plan1.release_key != plan2.release_key
-        assert plan1.canonical_semantics["top_k"] == 3
-        assert plan2.canonical_semantics["top_k"] == 10
+        assert plan1.canonical_semantics["max_tasks_per_user"] == 3
+        assert plan2.canonical_semantics["max_tasks_per_user"] == 10
 
     def test_release_key_deterministic_stable_replay(self):
         config = load_app_config("configs")

@@ -6,6 +6,15 @@ taxonomy:
     - provider_b
     - provider_c
   tasks:
-    - technical
     - document
+    - technical
     - analysis
+    - coding
+    - translation
+    - summarization
+    - customer_support
+    - creative_writing
+    - data_extraction
+    - qa
+    - code_review
+    - brainstorming

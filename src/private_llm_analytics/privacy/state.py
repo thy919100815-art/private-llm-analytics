@@ -809,6 +809,35 @@ class PrivacyStateManager:
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cem_stream_epoch ON continual_epoch_manifests (stream_fingerprint, epoch_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_cep_stream_epoch_day ON continual_epoch_partitions (stream_fingerprint, epoch_id, day)")
 
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS privacy_epochs (
+                    epoch_id TEXT PRIMARY KEY,
+                    epoch_start TEXT NOT NULL,
+                    epoch_end TEXT NOT NULL,
+                    epoch_days INTEGER NOT NULL DEFAULT 90,
+                    epsilon_cap TEXT NOT NULL,
+                    delta TEXT NOT NULL,
+                    rdp_orders_json TEXT NOT NULL,
+                    rdp_vector_json TEXT NOT NULL,
+                    workload_allocations_json TEXT NOT NULL,
+                    workload_spent_json TEXT NOT NULL,
+                    reserve_json TEXT NOT NULL,
+                    release_ids_json TEXT NOT NULL,
+                    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'CLOSED')),
+                    created_at TEXT NOT NULL,
+                    closed_at TEXT
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS lifetime_privacy_exposure (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    lifetime_rdp_json TEXT NOT NULL,
+                    total_epochs_count INTEGER NOT NULL DEFAULT 1,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_privacy_epochs_status ON privacy_epochs (status)")
+
             conn.commit()
 
     def _has_external_releases_or_reservations_tx(self, cursor: sqlite3.Cursor) -> bool:
@@ -2839,6 +2868,156 @@ class PrivacyStateManager:
             )
             return {int(row[0]) for row in cursor.fetchall()}
 
+    def get_active_epoch_record(self) -> Optional[Dict[str, Any]]:
+        """Return the currently active privacy epoch dictionary, or None."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT epoch_id, epoch_start, epoch_end, epoch_days, epsilon_cap, delta,
+                       rdp_orders_json, rdp_vector_json, workload_allocations_json,
+                       workload_spent_json, reserve_json, release_ids_json, status,
+                       created_at, closed_at
+                FROM privacy_epochs
+                WHERE status = 'ACTIVE'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """)
+            row = cursor.fetchone()
+            if not row:
+                return None
+            return {
+                "epoch_id": row[0],
+                "epoch_start": row[1],
+                "epoch_end": row[2],
+                "epoch_days": row[3],
+                "epsilon_cap": row[4],
+                "delta": row[5],
+                "rdp_orders_json": row[6],
+                "rdp_vector_json": row[7],
+                "workload_allocations_json": row[8],
+                "workload_spent_json": row[9],
+                "reserve_json": row[10],
+                "release_ids_json": row[11],
+                "status": row[12],
+                "created_at": row[13],
+                "closed_at": row[14],
+            }
+
+    def save_epoch_record(self, record: Dict[str, Any]) -> None:
+        """Insert or replace an epoch record in privacy_epochs."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT OR REPLACE INTO privacy_epochs (
+                    epoch_id, epoch_start, epoch_end, epoch_days, epsilon_cap, delta,
+                    rdp_orders_json, rdp_vector_json, workload_allocations_json,
+                    workload_spent_json, reserve_json, release_ids_json, status,
+                    created_at, closed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                record["epoch_id"],
+                record["epoch_start"],
+                record["epoch_end"],
+                int(record.get("epoch_days", 90)),
+                str(record["epsilon_cap"]),
+                str(record["delta"]),
+                record["rdp_orders_json"],
+                record["rdp_vector_json"],
+                record["workload_allocations_json"],
+                record["workload_spent_json"],
+                record["reserve_json"],
+                record["release_ids_json"],
+                record["status"],
+                record["created_at"],
+                record.get("closed_at"),
+            ))
+            conn.commit()
+
+    def close_epoch_record(self, epoch_id: str, closed_at: Optional[str] = None) -> None:
+        """Mark an epoch as CLOSED."""
+        c_at = closed_at or datetime.now(timezone.utc).isoformat()
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                UPDATE privacy_epochs
+                SET status = 'CLOSED', closed_at = ?
+                WHERE epoch_id = ?
+            """, (c_at, epoch_id))
+            conn.commit()
+
+    def list_all_epochs(self) -> List[Dict[str, Any]]:
+        """List all epochs in chronological order."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                SELECT epoch_id, epoch_start, epoch_end, epoch_days, epsilon_cap, delta,
+                       rdp_orders_json, rdp_vector_json, workload_allocations_json,
+                       workload_spent_json, reserve_json, release_ids_json, status,
+                       created_at, closed_at
+                FROM privacy_epochs
+                ORDER BY created_at ASC
+            """)
+            rows = cursor.fetchall()
+            return [
+                {
+                    "epoch_id": r[0],
+                    "epoch_start": r[1],
+                    "epoch_end": r[2],
+                    "epoch_days": r[3],
+                    "epsilon_cap": r[4],
+                    "delta": r[5],
+                    "rdp_orders_json": r[6],
+                    "rdp_vector_json": r[7],
+                    "workload_allocations_json": r[8],
+                    "workload_spent_json": r[9],
+                    "reserve_json": r[10],
+                    "release_ids_json": r[11],
+                    "status": r[12],
+                    "created_at": r[13],
+                    "closed_at": r[14],
+                }
+                for r in rows
+            ]
+
+    def get_lifetime_exposure_record(self) -> Dict[str, Any]:
+        """Get or initialize lifetime privacy exposure record."""
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT lifetime_rdp_json, total_epochs_count, updated_at FROM lifetime_privacy_exposure WHERE id = 1")
+            row = cursor.fetchone()
+            if row:
+                return {
+                    "lifetime_rdp_json": row[0],
+                    "total_epochs_count": row[1],
+                    "updated_at": row[2],
+                }
+            now_iso = datetime.now(timezone.utc).isoformat()
+            cursor.execute("""
+                INSERT OR IGNORE INTO lifetime_privacy_exposure (id, lifetime_rdp_json, total_epochs_count, updated_at)
+                VALUES (1, '{}', 1, ?)
+            """, (now_iso,))
+            conn.commit()
+            return {
+                "lifetime_rdp_json": "{}",
+                "total_epochs_count": 1,
+                "updated_at": now_iso,
+            }
+
+    def update_lifetime_exposure_record(self, lifetime_rdp_json: str, total_epochs_count: int) -> None:
+        """Update lifetime privacy exposure record atomically."""
+        now_iso = datetime.now(timezone.utc).isoformat()
+        with self._connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute("""
+                INSERT INTO lifetime_privacy_exposure (id, lifetime_rdp_json, total_epochs_count, updated_at)
+                VALUES (1, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    lifetime_rdp_json = excluded.lifetime_rdp_json,
+                    total_epochs_count = excluded.total_epochs_count,
+                    updated_at = excluded.updated_at
+            """, (lifetime_rdp_json, total_epochs_count, now_iso))
+            conn.commit()
+
     def clear(self) -> None:
         """Wipe all state (test-only helper)."""
         with self._connection() as conn:
@@ -2846,7 +3025,11 @@ class PrivacyStateManager:
             cursor.execute("DELETE FROM privacy_ledger")
             cursor.execute("DELETE FROM release_store")
             cursor.execute("DELETE FROM privacy_reservations")
-            for tbl in ["continual_query_log", "continual_level_exposures", "continual_epoch_manifests", "continual_nodes", "continual_streams", "privacy_policy_metadata"]:
+            for tbl in [
+                "continual_query_log", "continual_level_exposures", "continual_epoch_manifests",
+                "continual_nodes", "continual_streams", "privacy_policy_metadata",
+                "privacy_epochs", "lifetime_privacy_exposure"
+            ]:
                 cursor.execute(f"SELECT 1 FROM sqlite_master WHERE type='table' AND name='{tbl}'")
                 if cursor.fetchone():
                     cursor.execute(f"DELETE FROM {tbl}")

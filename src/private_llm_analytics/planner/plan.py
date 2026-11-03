@@ -24,4 +24,5 @@ class ExecutionPlan:
     profile_id: Optional[str] = None
     profile_version: Optional[str] = None
     profile_fingerprint: Optional[str] = None
-
+    noise_scale: Optional[float] = None
+    candidate_rdp: Optional[Dict[Any, Any]] = None

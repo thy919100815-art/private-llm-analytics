@@ -92,6 +92,17 @@ def create_app(
             },
         )
 
+    @app.exception_handler(PermissionError)
+    async def permission_error_handler(request: Any, exc: PermissionError):
+        return JSONResponse(
+            status_code=status.HTTP_403_FORBIDDEN,
+            content={
+                "error": str(exc),
+                "type": "PermissionError",
+                "details": "The recipient is not authorized for the requested metric or operation.",
+            },
+        )
+
     @app.exception_handler(ProductionSafetyConfigurationError)
     async def safety_config_handler(request: Any, exc: ProductionSafetyConfigurationError):
         return JSONResponse(
@@ -194,10 +205,10 @@ def create_app(
 
     @app.get("/api/dataset/preview", response_model=InputPreviewResponse)
     async def get_dataset_preview(
-        recipient: str = Query("internal", description="Requesting recipient ID (must be trusted)"),
-        limit: int = Query(10, ge=1, le=100, description="Number of preview records"),
+        limit: int = Query(20, ge=1, le=100, description="Number of preview records"),
+        recipient: Optional[str] = Query(None, description="Optional recipient parameter"),
     ):
-        return web_adapter.get_dataset_preview(recipient=recipient, limit=limit)
+        return web_adapter.get_dataset_preview(limit=limit, recipient=recipient)
 
     @app.post("/api/dataset/demo", response_model=DatasetStatusResponse)
     async def load_demo_data():
@@ -211,6 +222,14 @@ def create_app(
     @app.get("/api/privacy/status", response_model=PrivacyStatusResponse)
     async def get_privacy_status(recipient: str = Query("provider_a")):
         return web_adapter.get_privacy_status(recipient=recipient)
+
+    @app.post("/api/privacy/epoch/advance")
+    async def advance_privacy_epoch():
+        """Advance to a new 90-day Privacy Epoch."""
+        if hasattr(web_adapter.service.orchestrator, "epoch_manager"):
+            new_epoch = web_adapter.service.orchestrator.epoch_manager.advance_to_new_epoch()
+            return new_epoch.to_dict()
+        raise HTTPException(status_code=400, detail="Epoch manager not initialized.")
 
     @app.post("/api/planner/recommend", response_model=PlannerRecommendResponse)
     async def get_planner_recommendation(payload: PlannerRecommendRequest):
