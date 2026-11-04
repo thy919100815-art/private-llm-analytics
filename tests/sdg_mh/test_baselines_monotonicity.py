@@ -81,8 +81,8 @@ def test_epoch90_monotonicity_and_boundary_crossing():
 
 
 def test_wbd_vs_wba_distinct_profiles():
-    """Verify W-BD and W-BA have distinct profiles and monotonic behavior."""
-    w = 30
+    """Verify W-BD and W-BA have distinct profiles, sliding window modeling, and monotonic behavior."""
+    w = 7
     rho_w = 0.03
     C = 50.0
     daily_wbd_rho = rho_w / w
@@ -91,22 +91,30 @@ def test_wbd_vs_wba_distinct_profiles():
     ledger_wbd = UnifiedPrivacyLedger(delta=1e-6)
     ledger_wba = UnifiedPrivacyLedger(delta=1e-6)
 
-    # W-BD: releases every day
-    for t in range(1, 61):
-        ledger_wbd.record_gaussian_release(f"wbd_{t}", [t], sensitivity=C, sigma=sigma_wbd)
+    # W-BD: sliding window releases every day
+    for t in range(1, 21):
+        days = list(range(max(1, t - w + 1), t + 1))
+        ledger_wbd.record_gaussian_release(f"wbd_{t}", days, sensitivity=C, sigma=sigma_wbd)
 
-    # W-BA: test release every day, but release only occurs on ~65% of days (absorption on 35%)
+    # W-BA: test release every day, but publication occurs on ~67% of days (absorption on 33%)
     sigma_test = C / math.sqrt(2.0 * (daily_wbd_rho * 0.5))
     sigma_rel = C / math.sqrt(2.0 * (daily_wbd_rho * 0.5))
-    for t in range(1, 61):
-        ledger_wba.record_gaussian_release(f"wba_test_{t}", [t], sensitivity=C, sigma=sigma_test)
+    for t in range(1, 21):
+        days = list(range(max(1, t - w + 1), t + 1))
+        ledger_wba.record_gaussian_release(f"wba_test_{t}", days, sensitivity=C, sigma=sigma_test)
         if t % 3 != 0:  # 1/3 absorbed, 2/3 released
-            ledger_wba.record_gaussian_release(f"wba_rel_{t}", [t], sensitivity=C, sigma=sigma_rel)
+            ledger_wba.record_gaussian_release(f"wba_rel_{t}", days, sensitivity=C, sigma=sigma_rel)
 
-    for h in [1, 7, 14, 30]:
+    prev_wbd = 0.0
+    prev_wba = 0.0
+    for h in [1, 3, 7, 10]:
         r_wbd = ledger_wbd.compute_rho(h)
         r_wba = ledger_wba.compute_rho(h)
         assert r_wbd > r_wba, f"W-BA should expend less budget due to absorption: wbd={r_wbd}, wba={r_wba}"
+        assert r_wbd >= prev_wbd, f"W-BD monotonicity violation: {r_wbd} < {prev_wbd}"
+        assert r_wba >= prev_wba, f"W-BA monotonicity violation: {r_wba} < {prev_wba}"
+        prev_wbd = r_wbd
+        prev_wba = r_wba
 
 
 def test_all_11_calibrated_baselines_strictly_monotonic():

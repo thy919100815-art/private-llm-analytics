@@ -95,8 +95,9 @@ def run_rq6_turnover():
     # Compute individual lifetime exposure under SDG-MH vs Epoch90
     records = []
     # Epoch90 global accumulation over 3 years (1095 days = 12.16 epochs ~ 12 epochs)
-    # Each epoch consumes up to 0.506589
-    epoch90_daily_global_rho = (12.0 * 0.506589) / total_days
+    # Each epoch consumes up to rho_epoch_cap = 0.2532945 (eps ~ 4.0, delta=1e-6)
+    rho_epoch_cap = 0.2532945
+    epoch90_daily_global_rho = (12.0 * rho_epoch_cap) / total_days
 
     departed_frozen_verified = True
     rng_activity = np.random.default_rng(54321)
@@ -146,8 +147,8 @@ def run_rq6_turnover():
                 departed_frozen_verified = False
 
         # Epoch90 Global exposure (user's apparent exposure under global lifetime accountant)
-        # Global exposure does not freeze at departure; continues rising to 12 epochs
-        epoch90_apparent_rho = 12.0 * 0.506589
+        # Global exposure does not freeze at departure; continues rising across 12 epochs to ~16.0
+        epoch90_apparent_rho = 12.0 * rho_epoch_cap
         epoch90_apparent_eps = rho_to_epsilon(epoch90_apparent_rho)
 
         # Group by tenure
@@ -250,7 +251,7 @@ def run_rq6_turnover():
 
         # Epoch90 global accountant rises with total epochs
         n_ep = (d / 90.0)
-        epoch90_traj.append(rho_to_epsilon(n_ep * 0.506589))
+        epoch90_traj.append(rho_to_epsilon(n_ep * rho_epoch_cap))
 
     ax2.plot(days_axis, sdg_traj_rep, "b-", linewidth=2.5, label="SDG-MH (Replacement Worst-Case)")
     ax2.plot(days_axis, sdg_traj_del, "g--", linewidth=2.0, label="SDG-MH (Deletion Actual Active)")

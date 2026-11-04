@@ -139,8 +139,9 @@ def run_rq5_query_reuse():
     # 2. Setup Baselines
     epoch90 = Epoch90Baseline(epoch_days=90, eps_cap_epoch=4.0, rho_per_query=0.02, C=50.0)
 
-    # LifetimeDecay releases each day once
-    decay_daily_rhos = [0.506589 * 6.0 / ((math.pi**2) * (max(1, t)**2)) for t in range(1, n_days + 1)]
+    # LifetimeDecay releases each day once (rho_max = 0.2532945)
+    rho_epoch_cap = 0.2532945
+    decay_daily_rhos = [rho_epoch_cap * 6.0 / ((math.pi**2) * (max(1, t)**2)) for t in range(1, n_days + 1)]
 
     # Group queries by day
     queries_by_day = {}
@@ -176,16 +177,16 @@ def run_rq5_query_reuse():
             30, DEFAULT_CALENDAR_B, delta_sq=11.0
         )
         # Epoch90 30-day exposure:
-        # If in Epoch 1 (day <= 90): exposure is spend in Epoch 1 (capped at 0.506589)
+        # If in Epoch 1 (day <= 90): exposure is spend in Epoch 1 (capped at rho_epoch_cap ~ 0.2533)
         # If crossing Epoch boundary (days 91 to 120): a 30-day window accesses releases in both Epoch 1 and Epoch 2!
         # If day > 120: a 30-day window lies entirely within Epoch 2.
         if day <= 90:
-            rho_epoch90_30 = min(0.506589, epoch90.current_epoch_spend)
+            rho_epoch90_30 = min(rho_epoch_cap, epoch90.current_epoch_spend)
         elif day <= 120:
-            # Boundary crossing: touches both Epoch 1 (full 0.506589 spent) and active Epoch 2 spend
-            rho_epoch90_30 = 0.506589 + min(0.506589, epoch90.current_epoch_spend)
+            # Boundary crossing: touches both Epoch 1 (full epoch cap spent) and active Epoch 2 spend
+            rho_epoch90_30 = rho_epoch_cap + min(rho_epoch_cap, epoch90.current_epoch_spend)
         else:
-            rho_epoch90_30 = min(0.506589, epoch90.current_epoch_spend)
+            rho_epoch90_30 = min(rho_epoch_cap, epoch90.current_epoch_spend)
 
         # LifetimeDecay: rolling 30-day sum of daily rhos
         rho_decay_cum = sum(decay_daily_rhos[max(0, day - 30) : day])

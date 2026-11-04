@@ -37,7 +37,7 @@ class Epoch90Baseline(BaseDPBaseline):
     """90-day Privacy Epoch with Lifetime Exposure accounting.
 
     - Fixed 90-day cycles.
-    - Global budget per epoch: eps_epoch = 4.0, delta = 1e-6 => rho_epoch ~ 0.506589.
+    - Global budget per epoch: eps_epoch = 4.0, delta = 1e-6 => rho_epoch ~ 0.253294.
     - When queries within an epoch exhaust the budget, subsequent queries are REJECTED.
     - Across epochs, lifetime exposure accumulates monotonically without replenishment.
     """
@@ -55,8 +55,8 @@ class Epoch90Baseline(BaseDPBaseline):
         self.epoch_days = int(epoch_days)
         self.eps_cap_epoch = float(eps_cap_epoch)
         self.delta = float(delta)
-        # Convert eps_cap to zCDP rho: for eps=4.0, delta=1e-6, rho_epoch ~ 0.506589
-        self.rho_epoch_cap = 0.506589
+        # Convert eps_cap to zCDP rho: for eps=4.0, delta=1e-6, R(alpha) = alpha * 0.506589 / 2 => rho_epoch ~ 0.2532945
+        self.rho_epoch_cap = 0.2532945
         self.rho_per_query = float(rho_per_query)
         self.C = float(C)
 
@@ -117,7 +117,10 @@ class Epoch90Baseline(BaseDPBaseline):
         # 3. Serve fresh query and deduct budget
         self.queries_served += 1
         self.current_epoch_spend += self.rho_per_query
-        sigma = self.C / math.sqrt(2.0 * self.rho_per_query)
+        w_len = max(1, window_end - window_start + 1)
+        # Under daily clipping C, user sensitivity across w days is w * C
+        sens_w = float(w_len) * self.C
+        sigma = sens_w / math.sqrt(2.0 * self.rho_per_query)
 
         if rng is None:
             rng = np.random.default_rng(seed)
@@ -129,7 +132,7 @@ class Epoch90Baseline(BaseDPBaseline):
         self.ledger.record_gaussian_release(
             release_id=f"epoch90_q{self.queries_attempted}_{release_key}",
             days_accessed=days_accessed,
-            sensitivity=self.C,
+            sensitivity=sens_w,
             sigma=sigma,
             tag="epoch90_query",
         )
@@ -164,7 +167,7 @@ class LifetimeDecayBaseline(BaseDPBaseline):
 
     def __init__(
         self,
-        rho_max: float = 0.506589,  # Corresponds to eps ~ 4.0, delta=1e-6
+        rho_max: float = 0.2532945,  # Corresponds to eps ~ 4.0, delta=1e-6 (R(alpha)=alpha*0.506589/2)
         C: float = 50.0,
         delta: float = 1e-6,
     ):

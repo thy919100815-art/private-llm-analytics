@@ -34,29 +34,44 @@ target_rho_30_add = sdg["target_rho_30_add"]
 
 # 2. Additive Baselines Unscaled Profiles
 # LifetimeDecay: sum_{t=1}^h rho_max * 6 / (pi^2 * t^2)
-rho_max_add = 0.227965
+# Under verified existing system zCDP parameter: rho_epoch_cap = 0.2532945 (eps ~ 4.0, delta=1e-6)
+rho_max_add = 0.2532945
 import math
 lifetime_unscaled = {
     h: sum(rho_max_add * 6.0 / (math.pi**2 * t**2) for t in range(1, h + 1))
     for h in HORIZONS
 }
 
-# Epoch90: intra-epoch density, spanning up to 5 epochs across 365 days
+# Epoch90: window query aggregation (single day change affects entire window sum)
+# Within 90-day epoch, 30-day window query has rho(1) = rho(7) = rho(30) = target_rho_30_add.
+# Across 90 days and 365 days (5 epochs), exposure scales with epoch cap.
 epoch90_unscaled = {
-    1: 0.227965 * (1.0 / 90.0),
-    7: 0.227965 * (7.0 / 90.0),
-    30: 0.227965 * (30.0 / 90.0),
-    90: 0.227965 * 1.0,
-    365: 0.227965 * 5.0,
+    1: target_rho_30_add,
+    7: target_rho_30_add,
+    30: target_rho_30_add,
+    90: rho_max_add,
+    365: rho_max_add * 5.0,
 }
 
-# W-BD w=7, 30: daily budget allocation
-wbd7_unscaled = {h: h * (target_rho_30_add / 7.0) for h in HORIZONS}
-wbd30_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
+# W-BD w=7, 30: exact sliding window privacy loss (Kellaris et al., VLDB 2014)
+# Interval of length h intersects h + w - 1 overlapping sliding windows
+def compute_wbd_profile(w: int, rho_target: float) -> dict:
+    prof = {}
+    rho_rel = rho_target / float(w)
+    for h in HORIZONS:
+        if h <= w:
+            sum_sq = 2 * sum(j**2 for j in range(1, h)) + (w - h + 1) * (h**2)
+        else:
+            sum_sq = 2 * sum(j**2 for j in range(1, w)) + (h - w + 1) * (w**2)
+        prof[h] = sum_sq * rho_rel
+    return prof
 
-# W-BA w=7, 30: empirical absorption factor ~0.825 of W-BD expenditure
-wba7_unscaled = {h: h * (target_rho_30_add / 7.0) * 0.825 for h in HORIZONS}
-wba30_unscaled = {h: h * (target_rho_30_add / 30.0) * 0.825 for h in HORIZONS}
+wbd7_unscaled = compute_wbd_profile(7, target_rho_30_add)
+wbd30_unscaled = compute_wbd_profile(30, target_rho_30_add)
+
+# W-BA w=7, 30: budget absorption reduces release frequency by factor ~0.825
+wba7_unscaled = {h: val * 0.825 for h, val in wbd7_unscaled.items()}
+wba30_unscaled = {h: val * 0.825 for h, val in wbd30_unscaled.items()}
 
 # Tree variants: quadratic form growth across horizons
 tree_u_unscaled = {
