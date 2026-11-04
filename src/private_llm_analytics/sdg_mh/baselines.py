@@ -252,14 +252,15 @@ class WEventBaseline(BaseDPBaseline):
         self.rho_daily = self.target_rho_w / float(self.w)
         self.sigma_daily = self.C / math.sqrt(2.0 * self.rho_daily)
 
-        # For W-BA: half budget for similarity test, half for release
-        self.rho_test = self.rho_daily * 0.5
-        self.rho_release = self.rho_daily * 0.5
+        # For W-BA: test budget fraction alpha (default 0.2 per Kellaris et al. 2014), remainder for release
+        self.alpha_test = 0.2
+        self.rho_test = self.rho_daily * self.alpha_test
+        self.rho_release_base = self.rho_daily * (1.0 - self.alpha_test)
         self.sigma_test = self.C / math.sqrt(2.0 * self.rho_test)
-        self.sigma_release = self.C / math.sqrt(2.0 * self.rho_release)
 
         self._last_released_value: Optional[float] = None
         self._last_released_day: Optional[int] = None
+        self._absorption_pool: float = 0.0
 
     def release_day(
         self,
@@ -268,7 +269,7 @@ class WEventBaseline(BaseDPBaseline):
         rng: Optional[np.random.Generator] = None,
         seed: Optional[int] = None,
     ) -> float:
-        """Execute daily release at day t under W-BD or W-BA."""
+        """Execute daily release at day t under W-BD or faithful W-BA (Kellaris et al., PVLDB 2014)."""
         if rng is None:
             rng = np.random.default_rng(seed)
 
@@ -285,7 +286,7 @@ class WEventBaseline(BaseDPBaseline):
             self._last_released_value = noisy_val
             return noisy_val
 
-        # Mode BA: Budget absorption
+        # Mode BA: Budget absorption (Kellaris et al., PVLDB 2014 Section 4.2)
         # Similarity check with previous release
         if self._last_released_value is not None:
             # Similarity test consumes rho_test
@@ -301,18 +302,95 @@ class WEventBaseline(BaseDPBaseline):
             threshold = 2.0 * self.sigma_test
 
             if noisy_diff < threshold:
-                # Absorb: reuse last released value
+                # Absorb: reuse last released value and accumulate unused release budget into pool
+                self._absorption_pool += self.rho_release_base
                 return self._last_released_value
 
-        # Fresh release
-        noisy_val = true_value + rng.normal(0.0, self.sigma_release)
+        # Fresh release using base release budget plus accumulated absorption pool
+        effective_rho_rel = self.rho_release_base + self._absorption_pool
+        self._absorption_pool = 0.0  # Reset pool after release
+        sig_rel = self.C / math.sqrt(2.0 * effective_rho_rel)
+
+        noisy_val = true_value + rng.normal(0.0, sig_rel)
         self.ledger.record_gaussian_release(
             release_id=f"wba_{self.w}_rel_day_{day}",
             days_accessed=[day],
             sensitivity=self.C,
-            sigma=self.sigma_release,
+            sigma=sig_rel,
             tag="wba_release",
         )
         self._last_released_value = noisy_val
         self._last_released_day = day
         return noisy_val
+
+
+class TreeBaseline(BaseDPBaseline):
+    """Binary Tree continual release baseline with exact Honaker GLS optimal estimation.
+    
+    Implements Tree-U, Tree-2l, Tree-sqrt over time horizon T:
+    - Matrix A of shape (N_nodes, T)
+    - Fisher information matrix M = A^T Sigma^-1 A
+    - GLS Covariance matrix Cov = M^-1
+    - Window variance Var(w) = 1_w^T Cov 1_w
+    - Privacy loss rho(d) = 0.5 * C^2 * max_I 1_I^T M 1_I
+    - Strictly satisfies Theorem 7(b): Var(w) >= w^2 * C^2 / (2 * rho(w)) everywhere.
+    """
+
+    def __init__(
+        self,
+        variant: str = "Tree-U",
+        T: int = 365,
+        L: int = 9,
+        C: float = 104.0,
+        delta: float = 1e-6,
+    ):
+        self.variant = variant
+        self.name = variant
+        self.T = int(T)
+        self.L = int(L)
+        self.C = float(C)
+        self.delta = float(delta)
+        self.ledger = UnifiedPrivacyLedger(delta=self.delta)
+
+        # Build tree measurement matrix A
+        block_sizes = [2**l for l in range(self.L + 1)]
+        rows = []
+        level_indices = []
+        for l, b in enumerate(block_sizes):
+            for s in range(0, self.T, b):
+                if s + b <= self.T:
+                    row = np.zeros(self.T, dtype=np.float64)
+                    row[s : s + b] = 1.0
+                    rows.append(row)
+                    level_indices.append(l)
+        self.A = np.array(rows, dtype=np.float64)
+        self.levels = np.array(level_indices, dtype=np.int32)
+
+        # Layer weighting function
+        if variant == "Tree-U":
+            weight_fn = lambda l: 1.0
+        elif variant == "Tree-2l":
+            weight_fn = lambda l: 2.0**l
+        elif variant == "Tree-sqrt":
+            weight_fn = lambda l: 2.0**(l / 2.0)
+        else:
+            raise ValueError(f"Unknown tree variant: {variant}")
+
+        self.w_levels = np.array([weight_fn(l) for l in self.levels], dtype=np.float64)
+        # Fisher information matrix M_base
+        self.M_base = (self.A.T * (1.0 / self.w_levels)) @ self.A
+        self.cov_base = np.linalg.inv(self.M_base)
+
+    def get_worst_case_rho_term(self, d: int) -> float:
+        """Compute max_s 1_d^T M_base 1_d for interval length d."""
+        if d >= self.T:
+            vec = np.ones(self.T, dtype=np.float64)
+            return float(vec @ self.M_base @ vec)
+        return float(max(np.sum(self.M_base[s : s + d, s : s + d]) for s in range(0, self.T - d + 1)))
+
+    def get_window_variance(self, window_start: int, window_end: int, beta: float = 1.0) -> float:
+        """Compute exact GLS variance for interval [window_start, window_end] with noise scaling beta."""
+        s = max(0, min(self.T - 1, window_start - 1))
+        e = max(0, min(self.T, window_end))
+        base_var = float(np.sum(self.cov_base[s:e, s:e]))
+        return (beta**2) * base_var

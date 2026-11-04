@@ -11,7 +11,7 @@ Specification (Section 4):
    - Weekday to weekend activity ratio = 4:1.
    - Seasonal wave: 1.0 + 0.15 * cos(2 * pi * day_of_year / 365.25).
 3. Failure Behavior:
-   - Individual user failure probability f_u ~ Beta(3, 97) (mean ~ 3%).
+   - Individual user failure probability f_u ~ Beta(1.78, 98.22) (mean ~ 1.78%, matching BurstGPT empirical baseline).
 4. Domain Taxonomy:
    - 5 Services, chosen via Zipf(s=1.2).
    - 20 Tasks, chosen via Zipf(s=1.0).
@@ -89,7 +89,7 @@ class SyntheticTelemetryGenerator:
         for i in range(1, self.n_initial_users + 1):
             uid = f"emp_{i:06d}"
             p_act = float(self.rng.beta(2.0, 2.0))
-            f_rate = float(self.rng.beta(3.0, 97.0))
+            f_rate = float(self.rng.beta(1.78, 98.22))
             employees[uid] = EmployeeState(
                 user_id=uid,
                 p_active=p_act,
@@ -136,7 +136,7 @@ class SyntheticTelemetryGenerator:
                 uid = f"emp_{next_user_seq:06d}"
                 next_user_seq += 1
                 p_act = float(self.rng.beta(2.0, 2.0))
-                f_rate = float(self.rng.beta(3.0, 97.0))
+                f_rate = float(self.rng.beta(1.78, 98.22))
                 employees[uid] = EmployeeState(
                     user_id=uid,
                     p_active=p_act,

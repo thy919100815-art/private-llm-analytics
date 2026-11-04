@@ -144,3 +144,27 @@ def test_all_11_calibrated_baselines_strictly_monotonic():
             assert epss[i + 1] >= epss[i] - 1e-9, (
                 f"[{method} {caliber}] eps({h2})={epss[i+1]} < eps({h1})={epss[i]}"
             )
+
+
+def test_tree_gls_satisfies_theorem_7b():
+    """Verify Theorem 7(b) holds everywhere: Var_tree(w) >= w^2 * C^2 / (2 * rho(w)) for all variants and positions."""
+    from private_llm_analytics.sdg_mh.baselines import TreeBaseline
+
+    C = 104.0
+    T = 365
+    for variant in ["Tree-U", "Tree-2l", "Tree-sqrt"]:
+        tree = TreeBaseline(variant=variant, T=T, L=9, C=C)
+        for w in [1, 7, 30, 90, 365]:
+            max_rho_term = tree.get_worst_case_rho_term(w)
+            rho_w = 0.5 * (C**2) * max_rho_term
+            theoretical_lower_bound = (w**2 * C**2) / (2.0 * rho_w)
+
+            # Test multiple start positions across the year
+            step = max(1, (T - w) // 10) if T > w else 1
+            for s in range(0, T - w + 1, step):
+                var_pos = tree.get_window_variance(s + 1, s + w)
+                assert var_pos >= theoretical_lower_bound - 1e-6, (
+                    f"[{variant}] Theorem 7(b) violation at w={w}, pos={s}: "
+                    f"Var={var_pos:.4f} < LowerBound={theoretical_lower_bound:.4f}"
+                )
+

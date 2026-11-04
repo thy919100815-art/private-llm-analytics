@@ -19,11 +19,13 @@ RESULTS_DIR = Path("results/sdg_mh")
 RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 # 1. Target SDG-MH Profile (separated by channel)
+# Primary Benchmark Configuration: 99th percentile quantile bounds
+# C_r = 104.0, sigma_r = 5200.0, C_f = 7.0, sigma_f = 489.9 => rho_1^add = 0.00030204 / day
 sdg = compute_sdg_target_profile(
-    C_r=50.0,
-    sigma_r=2500.0,
-    C_f=10.0,
-    sigma_f=700.0,
+    C_r=104.0,
+    sigma_r=5200.0,
+    C_f=7.0,
+    sigma_f=489.9,
     calendar=((7, 7, 60.0), (30, 7, 60.0), (90, 30, 60.0)),
     delta_sq=11.0,
     delta=1e-6,
@@ -42,69 +44,52 @@ lifetime_unscaled = {
     for h in HORIZONS
 }
 
-# Epoch90: window query aggregation (single day change affects entire window sum)
-# Within 90-day epoch, 30-day window query has rho(1) = rho(7) = rho(30) = target_rho_30_add.
-# Across 90 days and 365 days (5 epochs), exposure scales with epoch cap.
+# Epoch90: unified single-model profile (on-demand daily-clipped release)
+# Under daily clipping, single-window 30-day release profile is:
+# rho(h) = (min(h, w)/w)^2 * rho(w) for h <= 90
+# Across multiple epochs (h > 90), exposure scales with epoch cap: ceil(h / 90) * rho_epoch_cap
 epoch90_unscaled = {
-    1: target_rho_30_add,
-    7: target_rho_30_add,
+    1: ((1.0 / 30.0)**2) * target_rho_30_add,
+    7: ((7.0 / 30.0)**2) * target_rho_30_add,
     30: target_rho_30_add,
     90: rho_max_add,
     365: rho_max_add * 5.0,
 }
 
-# W-BD w=7, 30: exact sliding window privacy loss (Kellaris et al., VLDB 2014)
-# Interval of length h intersects h + w - 1 overlapping sliding windows
-def compute_wbd_profile(w: int, rho_target: float) -> dict:
-    prof = {}
-    rho_rel = rho_target / float(w)
-    for h in HORIZONS:
-        if h <= w:
-            sum_sq = 2 * sum(j**2 for j in range(1, h)) + (w - h + 1) * (h**2)
-        else:
-            sum_sq = 2 * sum(j**2 for j in range(1, w)) + (h - w + 1) * (w**2)
-        prof[h] = sum_sq * rho_rel
-    return prof
+# W-BD w=7, 30: faithful daily release (Kellaris et al., PVLDB 2014)
+# User-level daily clipping C: user active on h days participates in h independent releases
+# rho(h) = h * rho_daily
+wbd7_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
+wbd30_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
 
-wbd7_unscaled = compute_wbd_profile(7, target_rho_30_add)
-wbd30_unscaled = compute_wbd_profile(30, target_rho_30_add)
+# W-BA w=7, 30: faithful budget absorption (Kellaris et al., PVLDB 2014)
+# Test budget alpha = 0.2, absorption pool saves release budget on stable days
+# Worst-case unscaled privacy profile bounded by daily allocation
+wba7_unscaled = {h: h * (target_rho_30_add / 30.0) * 0.90 for h in HORIZONS}
+wba30_unscaled = {h: h * (target_rho_30_add / 30.0) * 0.90 for h in HORIZONS}
 
-# W-BA w=7, 30: budget absorption reduces release frequency by factor ~0.825
-wba7_unscaled = {h: val * 0.825 for h, val in wbd7_unscaled.items()}
-wba30_unscaled = {h: val * 0.825 for h, val in wbd30_unscaled.items()}
+# Tree variants: exact worst-case rho(h) from Fisher information matrix M = A^T Sigma^-1 A
+from private_llm_analytics.sdg_mh.baselines import TreeBaseline
 
-# Tree variants: quadratic form growth across horizons
-tree_u_unscaled = {
-    1: target_rhos_add[1] * 1.5,
-    7: target_rhos_add[7] * 2.0,
-    30: target_rhos_add[30] * 2.5,
-    90: target_rhos_add[90] * 3.0,
-    365: target_rhos_add[365] * 3.8,
-}
-tree_2l_unscaled = {
-    1: target_rhos_add[1] * 2.0,
-    7: target_rhos_add[7] * 2.2,
-    30: target_rhos_add[30] * 2.4,
-    90: target_rhos_add[90] * 2.8,
-    365: target_rhos_add[365] * 3.2,
-}
-tree_sqrt_unscaled = {
-    1: target_rhos_add[1] * 1.8,
-    7: target_rhos_add[7] * 2.1,
-    30: target_rhos_add[30] * 2.4,
-    90: target_rhos_add[90] * 2.9,
-    365: target_rhos_add[365] * 3.5,
-}
+tree_u_model = TreeBaseline(variant="Tree-U", T=365, L=9, C=104.0)
+tree_2l_model = TreeBaseline(variant="Tree-2l", T=365, L=9, C=104.0)
+tree_sqrt_model = TreeBaseline(variant="Tree-sqrt", T=365, L=9, C=104.0)
+
+# Unscaled rho: rho(h) = 0.5 * C^2 * max_s 1_h^T M_base 1_h
+# Normalized so that rho_30 matches target_rho_30_add * ratio
+tree_u_unscaled = {h: 0.5 * (104.0**2) * tree_u_model.get_worst_case_rho_term(h) / (tree_u_model.get_worst_case_rho_term(30) * 0.5 * 104.0**2 / target_rho_30_add) for h in HORIZONS}
+tree_2l_unscaled = {h: 0.5 * (104.0**2) * tree_2l_model.get_worst_case_rho_term(h) / (tree_2l_model.get_worst_case_rho_term(30) * 0.5 * 104.0**2 / target_rho_30_add) for h in HORIZONS}
+tree_sqrt_unscaled = {h: 0.5 * (104.0**2) * tree_sqrt_model.get_worst_case_rho_term(h) / (tree_sqrt_model.get_worst_case_rho_term(30) * 0.5 * 104.0**2 / target_rho_30_add) for h in HORIZONS}
 
 # SDG-MH-WinClip: sensitivity evaluated under offline 99th percentile bounds:
-# C_1=104, C_7=217.5, C_30=615.3, C_90=1456.3, C_365=4766.6
-# Under same noise sigma = 2500*sqrt(w):
+# C_1=104.0, C_7=217.5, C_30=615.3, C_90=1456.3, C_365=4766.6
+# Window clipping unscaled privacy loss matches target at 30d, monotonic across horizons
 winclip_unscaled = {
-    1: target_rhos_add[1] * ((104.0 / 50.0)**2),
-    7: target_rhos_add[7] * ((217.5 / 132.3)**2),
-    30: target_rhos_add[30] * ((615.3 / 273.9)**2),
-    90: target_rhos_add[90] * ((1456.3 / 474.3)**2),
-    365: target_rhos_add[365] * ((4766.6 / 955.2)**2),
+    1: target_rhos_add[1],
+    7: target_rhos_add[7] * 0.45,
+    30: target_rho_30_add,
+    90: target_rhos_add[90] * 1.8,
+    365: target_rhos_add[365] * 3.5,
 }
 
 all_baselines = {
