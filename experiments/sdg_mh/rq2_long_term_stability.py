@@ -43,63 +43,62 @@ def run_gh_archive_stream_benchmark(
     rho_max: float = 0.2532945,
     beta_decay: float = 5.2338,
 ) -> pd.DataFrame:
-    """Stream real developer activity from GH Archive sample and evaluate longitudinal DP stability."""
-    gh_file = Path("data/gharchive_sample.json.gz")
-    if not gh_file.exists():
-        print("GH Archive sample not found. Skipping real stream benchmark.")
+    """Evaluate longitudinal DP stability over 2 full years of real calendar developer activity (731 days)."""
+    parquet_file = Path("data/gharchive_2years_daily.parquet")
+    if not parquet_file.exists():
+        print("GH Archive 2-year parquet not found. Skipping benchmark.")
         return pd.DataFrame()
 
-    print("[RQ2 GH Archive] Streaming real developer activity from GH Archive...")
-    records = []
-    with gzip.open(gh_file, "rt", encoding="utf-8") as f:
-        for line in f:
-            obj = json.loads(line)
-            records.append({
-                "actor": obj["actor"]["login"],
-                "type": obj["type"],
-                "created_at": obj["created_at"],
-            })
+    print("[RQ2 GH Archive] Evaluating real calendar developer activity stream across 2 full years...")
+    df = pd.read_parquet(parquet_file)
+    df["day"] = (df["date"] - df["date"].min()).dt.days + 1
+    total_events = int(df["event_count"].sum())
+    unique_devs = int(df["actor"].nunique())
+    print(f"  GH Archive 2-Year Stream: {total_events:,} events from {unique_devs:,} developers across 731 days.")
 
-    df_gh = pd.DataFrame(records)
-    total_events = len(df_gh)
-    unique_actors = df_gh["actor"].nunique()
-    print(f"  GH Archive real stream: {total_events} events across {unique_actors} active developers.")
+    # 8 quarterly 30-day windows across 2 full calendar years:
+    windows = [
+        ("Y1_Q1", 1, 30),
+        ("Y1_Q2", 91, 120),
+        ("Y1_Q3", 181, 210),
+        ("Y1_Q4", 271, 300),
+        ("Y2_Q1", 366, 395),
+        ("Y2_Q2", 456, 485),
+        ("Y2_Q3", 546, 575),
+        ("Y2_Q4", 636, 665),
+    ]
 
-    # Partition stream into 10 sequential time intervals (representing longitudinal observation)
-    n_intervals = 10
-    events_per_interval = total_events // n_intervals
     rows = []
+    sdg_sigma_w = sigma_1 * math.sqrt(30)  # Constant 5203.4
 
-    for idx in range(n_intervals):
-        interval_id = idx + 1
-        sub_events = df_gh.iloc[idx * events_per_interval : (idx + 1) * events_per_interval]
-        raw_vol = float(len(sub_events))
+    for label, s, e in windows:
+        sub = df[(df["day"] >= s) & (df["day"] <= e)]
+        raw_vol = float(sub["event_count"].sum())
+        # Daily clipping at c_r:
+        clipped_vol = float(
+            sub.groupby(["day", "actor"])["event_count"].sum().apply(lambda x: min(x, c_r)).sum()
+        )
 
-        # User clipping
-        actor_counts = sub_events["actor"].value_counts().values
-        clipped_vol = float(sum(min(cnt, c_r) for cnt in actor_counts))
-
-        # SDG-MH noise: constant across all intervals
-        sdg_sigma = sigma_1
-        # LifetimeDecay noise: decays as 1/t^2 => noise grows as t
-        decay_sigma = beta_decay * (c_r * math.pi * interval_id) / math.sqrt(12.0 * rho_max)
+        sum_t_sq = sum(t**2 for t in range(s, e + 1))
+        decay_sigma_w = beta_decay * (c_r * math.pi / math.sqrt(12.0 * rho_max)) * math.sqrt(sum_t_sq)
 
         sdg_errs = []
         decay_errs = []
         for tr in range(30):
-            seed = 800000 + interval_id * 37 + tr * 13
-            n_sdg = sample_discrete_gaussian(sdg_sigma, seed=seed)
-            n_decay = sample_discrete_gaussian(decay_sigma, seed=seed + 1)
-
+            seed = 800000 + s * 37 + tr * 13
+            n_sdg = sample_discrete_gaussian(sdg_sigma_w, seed=seed)
+            n_decay = sample_discrete_gaussian(decay_sigma_w, seed=seed + 1)
             sdg_errs.append(abs(n_sdg) / clipped_vol)
             decay_errs.append(abs(n_decay) / clipped_vol)
 
         rows.append({
-            "interval": interval_id,
-            "raw_volume": raw_vol,
-            "clipped_volume": clipped_vol,
-            "sdg_noise_sigma": round(sdg_sigma, 1),
-            "decay_noise_sigma": round(decay_sigma, 1),
+            "quarter": label,
+            "day_start": s,
+            "day_end": e,
+            "raw_events": int(raw_vol),
+            "clipped_events": int(clipped_vol),
+            "sdg_noise_sigma": round(sdg_sigma_w, 1),
+            "decay_noise_sigma": round(decay_sigma_w, 1),
             "sdg_mape_mean": float(np.mean(sdg_errs)),
             "sdg_mape_std": float(np.std(sdg_errs)),
             "sdg_mape_median": float(np.median(sdg_errs)),
@@ -113,6 +112,8 @@ def run_gh_archive_stream_benchmark(
 
     df_res = pd.DataFrame(rows)
     df_res.to_csv(RESULTS_DIR / "rq2_gh_archive_stream.csv", index=False)
+    print("  Saved rq2_gh_archive_stream.csv successfully.")
+    return df_res
     print("  Saved rq2_gh_archive_stream.csv successfully.")
     return df_res
 
@@ -152,9 +153,9 @@ def main():
             var_factor = (C_r**2 * math.pi**2) / (12.0 * rho_max_add)
             decay_rmse_analytical = beta_decay * math.sqrt(var_factor * sum_t_sq)
 
-            # Ground truth volume for 30 days under turnover
-            # Baseline expected daily requests ~ 27,800
-            expected_30d_volume = w_len * 27800.0
+            # Ground truth 30-day clipped volume under 99% quantile bounds (C_r=104.0)
+            # From rq1_clipping_statistics: 30d raw requests = 476,863.0, daily clipped = 462,352.0
+            expected_30d_volume = 462352.0
 
             trial_sdg_noises = []
             trial_decay_noises = []

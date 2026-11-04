@@ -168,3 +168,48 @@ def test_tree_gls_satisfies_theorem_7b():
                     f"Var={var_pos:.4f} < LowerBound={theoretical_lower_bound:.4f}"
                 )
 
+
+def test_empirical_rmse_matches_analytical_within_3pct():
+    """Verify that 1,000 Monte Carlo trials empirical RMSE matches analytical RMSE within 3% (Item 5)."""
+    from private_llm_analytics.sdg_mh.discrete_gaussian import sample_discrete_gaussian
+
+    # 1. SDG-MH 30-day window: C=104.0, sigma_r=5200.0, w=30
+    w_len = 30
+    sigma_r = 5200.0
+    analytical_sdg_rmse = sigma_r * math.sqrt(w_len)  # 28,481.57
+
+    rng = np.random.default_rng(20261104)
+    n_mc_trials = 1000
+    sdg_noises = [
+        sample_discrete_gaussian(analytical_sdg_rmse, seed=int(rng.integers(1, 100000000)))
+        for _ in range(n_mc_trials)
+    ]
+    empirical_sdg_rmse = math.sqrt(sum(n**2 for n in sdg_noises) / n_mc_trials)
+    rel_error_sdg = abs(empirical_sdg_rmse - analytical_sdg_rmse) / analytical_sdg_rmse
+
+    assert rel_error_sdg < 0.03, (
+        f"SDG Empirical RMSE {empirical_sdg_rmse:.1f} differs from analytical {analytical_sdg_rmse:.1f} "
+        f"by {rel_error_sdg * 100:.2f}% (must be < 3%)"
+    )
+
+    # 2. LifetimeDecay Year 1 window [1, 30]
+    C_r = 104.0
+    rho_max = 0.2532945
+    beta_decay = 5.2338
+    sum_t_sq = sum(t**2 for t in range(1, 31))
+    var_factor = (C_r**2 * math.pi**2) / (12.0 * rho_max)
+    analytical_decay_rmse = beta_decay * math.sqrt(var_factor * sum_t_sq)
+
+    decay_noises = [
+        sample_discrete_gaussian(analytical_decay_rmse, seed=int(rng.integers(1, 100000000)))
+        for _ in range(n_mc_trials)
+    ]
+    empirical_decay_rmse = math.sqrt(sum(n**2 for n in decay_noises) / n_mc_trials)
+    rel_error_decay = abs(empirical_decay_rmse - analytical_decay_rmse) / analytical_decay_rmse
+
+    assert rel_error_decay < 0.03, (
+        f"Decay Empirical RMSE {empirical_decay_rmse:.1f} differs from analytical {analytical_decay_rmse:.1f} "
+        f"by {rel_error_decay * 100:.2f}% (must be < 3%)"
+    )
+
+

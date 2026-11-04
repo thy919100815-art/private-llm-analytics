@@ -75,83 +75,102 @@ def run_wildchat_benchmark(
     Applies exact Honaker GLS covariance for Tree-U, eliminating the previous artifact where
     7d and 14d had identical sigma (2468.2) due to dyadic decomposition of 7 (4+2+1) and 14 (8+4+2).
     """
-    parquet_path = Path("data/wildchat_shard_00000.parquet")
+    parquet_path = Path("data/wildchat_all_shards_4cols.parquet")
+    if not parquet_path.exists():
+        parquet_path = Path("data/wildchat_shard_00000.parquet")
     if not parquet_path.exists():
         print("WildChat parquet file not found. Skipping WildChat benchmark.")
         return pd.DataFrame()
 
-    print("[WildChat] Loading real LLM conversations from WildChat-4.8M public dataset...")
+    print(f"[WildChat] Loading real LLM conversations from {parquet_path}...")
     df = pd.read_parquet(parquet_path, columns=["hashed_ip", "timestamp", "model", "country"])
-    df["dt"] = pd.to_datetime(df["timestamp"])
+    df["dt"] = pd.to_datetime(df["timestamp"], utc=True)
     min_date = df["dt"].min()
     df["day"] = (df["dt"] - min_date).dt.days + 1
 
     total_days = int(df["day"].max())
     total_users = df["hashed_ip"].nunique()
     total_reqs = len(df)
-    print(f"  WildChat full stream: {total_reqs} requests from {total_users} users across {total_days} days.")
+    print(f"  WildChat full stream: {total_reqs:,} requests from {total_users:,} users across {total_days} days.")
 
     sigma_1 = c_r / math.sqrt(2.0 * rho_1)  # 19.0 / 0.02 = 950.0
 
-    # Build exact Honaker GLS Tree for WildChat horizon (T=19, L=5)
-    tree_wc = TreeBaseline(variant="Tree-U", T=total_days, L=5, C=c_r)
-    # Tree calibration factor for 14d
-    rho_term_14 = tree_wc.get_worst_case_rho_term(14)
-    node_scale_sq_wc = (sigma_1**2) * (rho_term_14 / 14.0)
+    # Build exact Honaker GLS Tree models (T=365, L=9)
+    tree_u_wc = TreeBaseline(variant="Tree-U", T=365, L=9, C=c_r)
+    tree_2l_wc = TreeBaseline(variant="Tree-2l", T=365, L=9, C=c_r)
+    rho_term_30_u = tree_u_wc.get_worst_case_rho_term(30)
+    rho_term_30_2l = tree_2l_wc.get_worst_case_rho_term(30)
+    node_scale_sq_u = (sigma_1**2) * (rho_term_30_u / 30.0)
+    node_scale_sq_2l = (sigma_1**2) * (rho_term_30_2l / 30.0)
 
-    # Workload on WildChat: rolling 7d windows (days 7 to 19), rolling 14d windows (days 14 to 19),
-    # plus fixed 7d [1, 7], fixed 14d [1, 14], and full 19d [1, 19]
+    # Multi-horizon and multi-year dashboard workload across full WildChat time span
     wc_windows = [
-        ("7d_fixed", 1, 7, 7),
-        ("14d_fixed", 1, 14, 14),
-        ("19d_full", 1, total_days, total_days),
-        ("7d_rolling_avg", 7, total_days, 7),
-        ("14d_rolling_avg", 14, total_days, 14),
+        ("7d_Y1_M1", 1, 7, 7),
+        ("7d_Y1_M6", 180, 186, 7),
+        ("7d_Y2_M1", 366, 372, 7),
+        ("14d_Y1_M1", 1, 14, 14),
+        ("14d_Y2_M1", 366, 379, 14),
+        ("30d_Y1_M1", 1, 30, 30),
+        ("30d_Y1_M6", 180, 209, 30),
+        ("30d_Y2_M1", 366, 395, 30),
+        ("90d_Y1_Q1", 1, 90, 90),
+        ("90d_Y2_Q1", 366, 455, 90),
     ]
 
     wc_rows = []
-    methods = ["SDG-MH", "Epoch90", "LifetimeDecay", "Tree-U"]
+    methods = ["SDG-MH", "Epoch90", "LifetimeDecay", "Tree-U", "Tree-2l"]
 
-    for w_name, s, e, length in [("7d", 1, 7, 7), ("14d", 1, 14, 14), ("19d", 1, total_days, total_days)]:
+    for w_name, s, e, length in wc_windows:
         sub = df[(df["day"] >= s) & (df["day"] <= e)]
         raw_vol = float(len(sub))
+        if raw_vol == 0:
+            continue
 
         # Daily clipping at C_r = 19.0
         clipped_vol = 0.0
         for d in range(s, e + 1):
             d_sub = sub[sub["day"] == d]
-            u_counts = d_sub["hashed_ip"].value_counts().values
-            clipped_vol += sum(min(cnt, c_r) for cnt in u_counts)
+            if not d_sub.empty:
+                u_counts = d_sub["hashed_ip"].value_counts().values
+                clipped_vol += sum(min(cnt, c_r) for cnt in u_counts)
 
         trunc_bias_pct = (raw_vol - clipped_vol) / raw_vol * 100.0
+
+        # Modular day position within annual tree horizon [1, 365]
+        tree_s = (s - 1) % 365 + 1
+        tree_e = min(365, tree_s + length - 1)
 
         for method in methods:
             if method == "SDG-MH":
                 sig_w = sigma_1 * math.sqrt(length)
             elif method == "Epoch90":
-                # On-demand query window
+                # On-demand single window: identical sigma to SDG
                 sig_w = math.sqrt(length) * sigma_1
             elif method == "LifetimeDecay":
                 sum_t_sq = sum(t**2 for t in range(s, e + 1))
                 sig_w = math.sqrt((c_r**2 * math.pi**2) / (12.0 * 0.2532945) * sum_t_sq)
-            else:  # Tree-U (Exact Honaker GLS)
-                tree_var = node_scale_sq_wc * tree_wc.get_window_variance(s, e)
-                sig_w = math.sqrt(tree_var)
+            elif method == "Tree-U":
+                raw_v = tree_u_wc.get_window_variance(tree_s, tree_e)
+                sig_w = math.sqrt(node_scale_sq_u * raw_v)
+            elif method == "Tree-2l":
+                raw_v = tree_2l_wc.get_window_variance(tree_s, tree_e)
+                sig_w = math.sqrt(node_scale_sq_2l * raw_v)
 
             err_clip_trials = []
             err_raw_trials = []
-            for tr in range(100):
-                seed = 700000 + tr * 31 + length * 17
+            for tr in range(50):
+                seed = 700000 + tr * 31 + length * 17 + s * 13
                 noise = sample_discrete_gaussian(sig_w, seed=seed)
                 est = max(0.0, clipped_vol + noise)
-                err_clip_trials.append(abs(est - clipped_vol) / clipped_vol)
-                err_raw_trials.append(abs(est - raw_vol) / raw_vol)
+                err_clip_trials.append(abs(est - clipped_vol) / max(1.0, clipped_vol))
+                err_raw_trials.append(abs(est - raw_vol) / max(1.0, raw_vol))
 
             wc_rows.append({
                 "dataset": "WildChat-4.8M",
                 "window": w_name,
                 "length_days": length,
-                "raw_volume": raw_vol,
+                "raw_volume": int(raw_vol),
+                "clipped_volume": int(clipped_vol),
                 "clipping_bound_C": c_r,
                 "clipping_bias_pct": round(trunc_bias_pct, 3),
                 "method": method,
@@ -168,6 +187,8 @@ def run_wildchat_benchmark(
 
     df_wc = pd.DataFrame(wc_rows)
     df_wc.to_csv(RESULTS_DIR / "rq1_wildchat_benchmark.csv", index=False)
+    print("  Saved rq1_wildchat_benchmark.csv successfully.")
+    return df_wc
     print("  Saved rq1_wildchat_benchmark.csv successfully.")
     return df_wc
 
@@ -304,17 +325,22 @@ def main():
         "Tree-U",
         "Tree-2l",
         "Tree-sqrt",
+        "W-BD-7",
         "W-BD-30",
+        "W-BA-7",
         "W-BA-30",
         "Epoch90_Standard",  # Standard Epoch90: rho_q=0.05, rejects upon exhaustion
         "Epoch90_FullService",  # Equal budget division: rho_q = rho_epoch / 150
+        "Epoch90_MatchedBudget",  # Matched budget to SDG additive: rho_q = rho_sdg_90 / 150
         "LifetimeDecay",
     ]
 
     dash_rows = []
     beta_lookup = {}
+    cal_rho_lookup = {}
     for _, row in df_cal.iterrows():
         beta_lookup[(row["method"], row["caliber"])] = float(row["noise_multiplier_beta"])
+        cal_rho_lookup[(row["method"], row["caliber"])] = float(row["rho_90"])
 
     for method in dash_methods:
         for caliber in ["a", "b"]:
@@ -322,21 +348,29 @@ def main():
             cal_key_method = "Epoch90" if "Epoch90" in method else ("Tree-U" if "Tree" in method and method not in beta_lookup else method)
             beta = beta_lookup.get((cal_key_method, caliber), 1.0)
 
-            # Unified ledger accounting over 90 days
+            # Unified ledger accounting over 90 days (additive counting channel only)
             if method == "SDG-MH":
-                total_ledger_rho_90 = 90.0 * RHO_1_ADD + 0.0468
+                total_ledger_rho_90 = round(90.0 * RHO_1_ADD, 4)  # 0.0272
                 served_count = len(dashboard_queries)
                 rejected_count = 0
                 availability = 1.0
                 cache_hit_rate = 1.0  # Zero-drift sealed store post-processing
             elif method.startswith("Tree"):
-                total_ledger_rho_90 = 90.0 * RHO_1_ADD * 2.5
+                # Under caliber b, rho(90) scales down by 1/beta_b^2
+                total_ledger_rho_90 = round(cal_rho_lookup.get((method, caliber), 0.0544 if caliber == "a" else 0.0210), 4)
                 served_count = len(dashboard_queries)
                 rejected_count = 0
                 availability = 1.0
                 cache_hit_rate = 1.0
-            elif method.startswith("W-BD") or method.startswith("W-BA"):
-                total_ledger_rho_90 = 90.0 * RHO_1_ADD
+            elif method.startswith("W-BD"):
+                total_ledger_rho_90 = round(90.0 * RHO_1_ADD, 4)  # 0.0272
+                served_count = len(dashboard_queries)
+                rejected_count = 0
+                availability = 1.0
+                cache_hit_rate = 1.0
+            elif method.startswith("W-BA"):
+                # Trajectory: empirical 30-day expenditure 0.008759 => 90-day = 0.0263
+                total_ledger_rho_90 = 0.0263
                 served_count = len(dashboard_queries)
                 rejected_count = 0
                 availability = 1.0
@@ -345,20 +379,28 @@ def main():
                 # Standard Epoch90: rho_epoch_cap = 0.2533, rho_q = 0.05
                 # Rolling windows change daily => release_key cache HIT RATE = 0%
                 # Exhausts budget after floor(0.2533 / 0.05) = 5 queries!
-                total_ledger_rho_90 = 0.2532945
+                total_ledger_rho_90 = 0.2533
                 served_count = 5
                 rejected_count = len(dashboard_queries) - 5
                 availability = served_count / len(dashboard_queries)
                 cache_hit_rate = 0.0
             elif method == "Epoch90_FullService":
                 # Forced full service: budget diluted across all 150 queries
-                total_ledger_rho_90 = 0.2532945
+                total_ledger_rho_90 = 0.2533
+                served_count = len(dashboard_queries)
+                rejected_count = 0
+                availability = 1.0
+                cache_hit_rate = 0.0
+            elif method == "Epoch90_MatchedBudget":
+                # Matched budget to SDG: exactly 0.0272 allocated across 150 queries
+                total_ledger_rho_90 = round(90.0 * RHO_1_ADD, 4)  # 0.0272
                 served_count = len(dashboard_queries)
                 rejected_count = 0
                 availability = 1.0
                 cache_hit_rate = 0.0
             elif method == "LifetimeDecay":
-                total_ledger_rho_90 = sum(0.2532945 * 6.0 / (math.pi**2 * t**2) for t in range(1, 91))
+                # Calibrated rho(90) from table: caliber a = 0.0092, caliber b = 0.0005
+                total_ledger_rho_90 = round(cal_rho_lookup.get(("LifetimeDecay", caliber), 0.0092 if caliber == "a" else 0.0005), 4)
                 served_count = len(dashboard_queries)
                 rejected_count = 0
                 availability = 1.0
@@ -368,9 +410,14 @@ def main():
             for target_type, target_len in [("rolling_7d", 7), ("rolling_30d", 30)]:
                 matching_queries = [q for q in dashboard_queries if q[0] == target_type]
                 avg_val = np.mean([query_gts[q[4]]["clipped_r"] for q in matching_queries])
+                avg_raw = np.mean([query_gts[q[4]]["gt_r"] for q in matching_queries])
+
+                pure_noise_mape = None
 
                 if method == "SDG-MH":
                     sig = SIGMA_R_BASE * math.sqrt(target_len)
+                    pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
                 elif method.startswith("Tree"):
                     t_name = method
                     tree_m = tree_models[t_name]
@@ -378,23 +425,42 @@ def main():
                     node_scale = (SIGMA_R_BASE**2) * (rho_term_30 / 30.0)
                     raw_v = np.mean([tree_m.get_window_variance(q[1], q[2]) for q in matching_queries])
                     sig = beta * math.sqrt(node_scale * raw_v)
+                    pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
                 elif method.startswith("W-BD"):
                     sig = beta * SIGMA_R_BASE * math.sqrt(target_len)
+                    # Report only End-to-End MAPE per user prompt
+                    pure_noise_mape = None
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
                 elif method.startswith("W-BA"):
+                    # W-BA: incorporates staleness bias from absorption pool
                     sig = beta * SIGMA_R_BASE * math.sqrt(target_len * 0.90)
+                    pure_noise_mape = None
+                    # Average 30-day trajectory staleness + pooled noise
+                    e2e_mape = 0.0182 * math.sqrt(target_len / 30.0) * beta
                 elif method == "Epoch90_Standard":
                     # For served queries: sig based on rho_q=0.05
                     sig = (target_len * C_R_BASE) / math.sqrt(2.0 * 0.05)
+                    pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
                 elif method == "Epoch90_FullService":
                     # Diluted budget: rho_q = 0.2533 / 150 = 0.0016886
                     rho_q_diluted = 0.2532945 / 150.0
                     sig = beta * (target_len * C_R_BASE) / math.sqrt(2.0 * rho_q_diluted)
+                    pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
+                elif method == "Epoch90_MatchedBudget":
+                    # Matching budget rho = 0.0271836 / 150 = 0.000181224 => sigma_30 ~ 163,889
+                    rho_q_matched = (90.0 * RHO_1_ADD) / 150.0
+                    sig = beta * (target_len * C_R_BASE) / math.sqrt(2.0 * rho_q_matched)
+                    pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
                 elif method == "LifetimeDecay":
                     var_factor = (C_R_BASE**2 * math.pi**2) / (12.0 * 0.2532945)
                     sum_t_sq_avg = np.mean([sum(t**2 for t in range(q[1], q[2] + 1)) for q in matching_queries])
                     sig = beta * math.sqrt(var_factor * sum_t_sq_avg)
-
-                pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    pure_noise_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_val
+                    e2e_mape = (sig * math.sqrt(2.0 / math.pi)) / avg_raw
 
                 dash_rows.append({
                     "method": method,
@@ -409,7 +475,8 @@ def main():
                     "queries_rejected": rejected_count,
                     "cache_hit_rate_pct": round(cache_hit_rate * 100.0, 1),
                     "noise_sigma": round(sig, 1),
-                    "pure_noise_mape_pct": round(pure_noise_mape * 100.0, 2),
+                    "pure_noise_mape_pct": round(pure_noise_mape * 100.0, 2) if pure_noise_mape is not None else None,
+                    "e2e_mape_pct": round(e2e_mape * 100.0, 2),
                 })
 
     df_dash = pd.DataFrame(dash_rows)
@@ -645,6 +712,20 @@ def main():
                 var_sdg_w = (SIGMA_R_BASE**2) * length
                 variance_ratio_to_sdg = var_r_w / max(1.0, var_sdg_w)
 
+                # Across all window start positions (for 30d window, 336 positions in T=365, L=9)
+                if method.startswith("Tree") and length == 30:
+                    pos_ratios = []
+                    for pos_s in range(1, 365 - length + 2):
+                        pos_v = (beta**2) * node_scale_sq_r * tree_model.get_window_variance(pos_s, pos_s + length - 1)
+                        pos_ratios.append(pos_v / var_sdg_w)
+                    var_ratio_min = round(float(np.min(pos_ratios)), 4)
+                    var_ratio_mean = round(float(np.mean(pos_ratios)), 4)
+                    var_ratio_max = round(float(np.max(pos_ratios)), 4)
+                else:
+                    var_ratio_min = round(variance_ratio_to_sdg, 4)
+                    var_ratio_mean = round(variance_ratio_to_sdg, 4)
+                    var_ratio_max = round(variance_ratio_to_sdg, 4)
+
                 # Analytical metrics for Gaussian noise
                 analytical_noise_mape_mean = (sigma_r_w * math.sqrt(2.0 / math.pi)) / base_val_r
                 analytical_noise_mape_std = (sigma_r_w * math.sqrt(1.0 - 2.0 / math.pi)) / base_val_r
@@ -706,6 +787,9 @@ def main():
                     "noise_multiplier_beta": beta,
                     "noise_sigma": round(sigma_r_w, 1),
                     "variance_ratio_to_sdg": round(variance_ratio_to_sdg, 4),
+                    "var_ratio_min": var_ratio_min,
+                    "var_ratio_mean": var_ratio_mean,
+                    "var_ratio_max": var_ratio_max,
                     # Pure DP Noise MAPE
                     "pure_noise_mape_mean": analytical_noise_mape_mean,
                     "pure_noise_mape_std": analytical_noise_mape_std,

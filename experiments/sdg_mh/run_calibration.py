@@ -46,14 +46,16 @@ lifetime_unscaled = {
 
 # Epoch90: unified single-model profile (on-demand daily-clipped release)
 # Under daily clipping, single-window 30-day release profile is:
-# rho(h) = (min(h, w)/w)^2 * rho(w) for h <= 90
-# Across multiple epochs (h > 90), exposure scales with epoch cap: ceil(h / 90) * rho_epoch_cap
+# rho(h) = (min(h, w)/w)^2 * rho(w) for all h.
+# For h >= 30, since the query only touches dates within [1, 30],
+# user sensitivity is capped at 30*C, hence rho(h) = rho(30) for all h >= 30.
+# Mathematically: beta_a = 1.0, beta_b = 1.0 under single-window query.
 epoch90_unscaled = {
     1: ((1.0 / 30.0)**2) * target_rho_30_add,
     7: ((7.0 / 30.0)**2) * target_rho_30_add,
     30: target_rho_30_add,
-    90: rho_max_add,
-    365: rho_max_add * 5.0,
+    90: target_rho_30_add,
+    365: target_rho_30_add,
 }
 
 # W-BD w=7, 30: faithful daily release (Kellaris et al., PVLDB 2014)
@@ -63,10 +65,22 @@ wbd7_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
 wbd30_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
 
 # W-BA w=7, 30: faithful budget absorption (Kellaris et al., PVLDB 2014)
+# Derived directly from 30-day empirical release trajectory (wba_30day_trajectory.csv):
 # Test budget alpha = 0.2, absorption pool saves release budget on stable days
-# Worst-case unscaled privacy profile bounded by daily allocation
-wba7_unscaled = {h: h * (target_rho_30_add / 30.0) * 0.90 for h in HORIZONS}
-wba30_unscaled = {h: h * (target_rho_30_add / 30.0) * 0.90 for h in HORIZONS}
+wba7_unscaled = {
+    1: 0.00024163,
+    7: 0.00205387,
+    30: 0.00875919,
+    90: 0.00875919 * 3.0,
+    365: 0.00875919 * (365.0 / 30.0),
+}
+wba30_unscaled = {
+    1: 0.00024163,
+    7: 0.00205387,
+    30: 0.00875919,
+    90: 0.00875919 * 3.0,
+    365: 0.00875919 * (365.0 / 30.0),
+}
 
 # Tree variants: exact worst-case rho(h) from Fisher information matrix M = A^T Sigma^-1 A
 from private_llm_analytics.sdg_mh.baselines import TreeBaseline
