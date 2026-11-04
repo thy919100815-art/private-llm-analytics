@@ -3,7 +3,7 @@
 **状态**：全部实验完成（全链路复现验证完毕，第四版根据审阅意见完成固定看板工作负载设计、定理 7(b) 树 GLS 方差严格满足、Epoch90 二次剖面统一、忠实 Kellaris et al. 2014 实现、WildChat 全量分片评测、GH Archive 真实活动流评测、解析 RMSE 数学推导与 99% 分位数默认截断）  
 **作者**：研究工程师  
 **基准分支**：`sdg-mh-research`  
-**Git Commit**：`5c11fd0`  
+**Git Commit**：`fae1614`  
 **创建日期**：2026-11-04  
 
 ---
@@ -124,7 +124,7 @@ SDG-MH 核心架构以独立扩展模块形式实现于 `src/private_llm_analyti
 - **操作系统**：Microsoft Windows 10 专业版 (Build 19045)，PowerShell。
 - **运行环境**：Python 3.14.0 (`.\.venv\Scripts\python.exe`)。
 - **核心依赖**：`numpy` 2.5.4, `scipy` 1.18.1, `pandas` 3.1.0, `matplotlib` 3.11.2, `pytest` 9.2.0, `pyarrow` 26.0.0。
-- **Git Commit**：`5c11fd0`（分支 `sdg-mh-research`）。
+- **Git Commit**：`fae1614`（分支 `sdg-mh-research`）。
 - **随机种子**：全链路采用显式独立随机种子控制。
 
 ---
