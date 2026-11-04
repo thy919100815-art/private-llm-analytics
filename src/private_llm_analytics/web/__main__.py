@@ -27,7 +27,17 @@ def main():
         default="configs",
         help="Path to YAML configuration directory (default: configs)",
     )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help="Enable local demo mode with reset capabilities (sets APP_ENV=local-demo DEMO_MODE=true)",
+    )
     args = parser.parse_args()
+
+    if args.demo:
+        import os
+        os.environ["APP_ENV"] = "local-demo"
+        os.environ["DEMO_MODE"] = "true"
 
     if args.host not in ("127.0.0.1", "localhost", "::1"):
         print(

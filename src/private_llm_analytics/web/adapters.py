@@ -1,8 +1,10 @@
 """Adapters connecting the local Web Console to authoritative backend services in v0.5 / v1.0 / v1.1."""
 
 from datetime import datetime, timezone
+from decimal import Decimal
 import io
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
@@ -27,6 +29,7 @@ from private_llm_analytics.privacy.exceptions import (
     ProductionSafetyConfigurationError,
     RecipientSecurityViolation,
 )
+from private_llm_analytics.privacy.rdp import compose_rdp_vectors, to_decimal
 from private_llm_analytics.release.exporter import (
     build_internal_comparison_csv_string,
     build_release_csv_string,
@@ -167,6 +170,7 @@ class WebAnalyticsAdapter:
             "privacy_policy": privacy_policy,
             "continual_enabled": continual_enabled,
             "granularities": ["full_9_cell", "provider_3_cell", "task_3_cell", "overall_1_cell"],
+            "demo_mode": self.is_demo_mode(),
         }
 
     def get_dataset_sample_template(self) -> Tuple[str, str]:
@@ -259,9 +263,22 @@ class WebAnalyticsAdapter:
                 "passed": has_succ,
                 "details": "可用于成功率统计" if has_succ else "缺少 success 字段（成功率统计不可用）",
             },
+            {
+                "name": "无明文 Prompt",
+                "passed": not ("prompt" in df.columns or "text" in df.columns),
+                "details": "日志仅包含聚合元数据，无输入输出明文 Prompt" if not ("prompt" in df.columns or "text" in df.columns) else "发现明文 prompt/text 列",
+            },
         ]
 
-        time_range_disp = f"{time_range['start']} ～ {time_range['end']}" if time_range else "全量时间"
+        time_range_disp = "全量时间"
+        if time_range:
+            try:
+                d1 = datetime.strptime(time_range["start"][:10], "%Y-%m-%d")
+                d2 = datetime.strptime(time_range["end"][:10], "%Y-%m-%d")
+                days_diff = (d2 - d1).days + 1
+                time_range_disp = f"{days_diff} 天 ({time_range['start']} ～ {time_range['end']})"
+            except Exception:
+                time_range_disp = f"{time_range['start']} ～ {time_range['end']}"
 
         return {
             "loaded": True,
@@ -279,8 +296,31 @@ class WebAnalyticsAdapter:
         }
 
     def load_demo_data(self) -> Dict[str, Any]:
-        """Generate demo synthetic telemetry using existing scenario generator."""
-        self.service.generate_synthetic_data()
+        """Generate demo synthetic telemetry using scenario generator with fast parquet cache."""
+        if self._dataset_source == "demo" and self.service._raw_dataframe is not None:
+            return self.get_dataset_status()
+
+        cache_dir = Path("results")
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        sc_cfg = self.service.config.scenario
+        seed = sc_cfg.random_seed
+        n_users = sc_cfg.population.n_users
+        cache_file = cache_dir / f"demo_synthetic_seed_{seed}_n_{n_users}.parquet"
+
+        if cache_file.exists():
+            try:
+                df = pd.read_parquet(cache_file)
+                self.service.set_data(df, dataset_version=f"synthetic_seed_{seed}_n_{n_users}")
+                self._dataset_source = "demo"
+                return self.get_dataset_status()
+            except Exception:
+                pass
+
+        df = self.service.generate_synthetic_data()
+        try:
+            df.to_parquet(cache_file, index=False)
+        except Exception:
+            pass
         self._dataset_source = "demo"
         return self.get_dataset_status()
 
@@ -533,6 +573,7 @@ class WebAnalyticsAdapter:
             )
             items.append({
                 "release_id": e.release_id,
+                "release_key": getattr(e, "release_key", e.release_id),
                 "timestamp": e.timestamp,
                 "metric": e.metric,
                 "recipient": e.recipient,
@@ -654,6 +695,25 @@ class WebAnalyticsAdapter:
             raise RecipientSecurityViolation(f"Unknown or unauthorized recipient '{recipient}'.")
 
         row = self.service.orchestrator.state_manager.get_committed_release_record(release_id)
+        if not row and hasattr(self.service.orchestrator, "ledger") and self.service.orchestrator.ledger:
+            for e in self.service.orchestrator.ledger.get_entries():
+                if getattr(e, "release_id", None) == release_id or getattr(e, "release_key", None) == release_id:
+                    row = {
+                        "release_id": e.release_id,
+                        "release_key": getattr(e, "release_key", release_id),
+                        "metric": e.metric,
+                        "recipient": e.recipient,
+                        "budget_scope_id": getattr(e, "budget_scope_id", "global_external"),
+                        "epsilon": float(e.epsilon),
+                        "delta": float(e.delta),
+                        "mechanism": getattr(e, "mechanism", "gaussian"),
+                        "noise_scale": getattr(e, "noise_scale", 0.0),
+                        "window_start": getattr(e, "window_start", None),
+                        "window_end": getattr(e, "window_end", None),
+                        "dataset_version": getattr(e, "dataset_version", "v1.0"),
+                        "cache_hit": getattr(e, "cache_hit", False),
+                    }
+                    break
         if not row:
             raise ValueError(f"Release '{release_id}' not found in committed release store or ledger.")
 
@@ -670,6 +730,8 @@ class WebAnalyticsAdapter:
 
         release_key = row.get("release_key", release_id)
         committed_result = self.service.orchestrator.state_manager.get_committed_release(release_key)
+        if not committed_result and hasattr(self.service.orchestrator, "cache") and self.service.orchestrator.cache:
+            committed_result = self.service.orchestrator.cache.get(release_key)
         if committed_result:
             post_proc = committed_result.post_processed
             metric = committed_result.metric_name
@@ -959,3 +1021,141 @@ class WebAnalyticsAdapter:
         json_content = json.dumps(eval_res, indent=2, ensure_ascii=False)
         filename = f"INTERNAL_accuracy_evaluation_{metric}_{release_id[:8]}.json"
         return json_content, filename
+
+    def is_demo_mode(self) -> bool:
+        """Check if environment and configuration explicitly enable demo mode (Fail-Closed default)."""
+        demo_mode = os.environ.get("DEMO_MODE", "false").strip().lower() == "true"
+        app_env = os.environ.get("APP_ENV", "production").strip().lower()
+        return demo_mode and (app_env in ("local-demo", "demo"))
+
+    def _verify_demo_mode_allowed(self) -> None:
+        """Enforce strict demo mode access control (fail-closed)."""
+        if not self.is_demo_mode():
+            raise RecipientSecurityViolation(
+                "Demo reset operations are strictly forbidden in production mode or when demo mode is not explicitly enabled (Fail-Closed)."
+            )
+        state_mgr = getattr(self.service.orchestrator, "state_manager", None)
+        db_path = str(getattr(state_mgr, "db_path", ""))
+        if "prod" in db_path.lower():
+            raise RecipientSecurityViolation(
+                f"Demo reset cannot be performed on production database: {db_path}"
+            )
+
+    def reset_demo_epoch(self) -> Dict[str, Any]:
+        """Reset current active 90-day demo epoch state and associated demo releases."""
+        self._verify_demo_mode_allowed()
+
+        orchestrator = self.service.orchestrator
+        epoch_mgr = getattr(orchestrator, "epoch_manager", None)
+        state_mgr = getattr(orchestrator, "state_manager", None)
+        ledger = getattr(orchestrator, "ledger", None)
+
+        if not epoch_mgr or not state_mgr:
+            raise RuntimeError("Epoch budget manager or state manager not available.")
+
+        active = epoch_mgr.get_or_create_active_epoch()
+        active_id = active.epoch_id
+        start_date = active.epoch_start
+        days = active.epoch_days
+        rel_ids = list(active.release_ids)
+
+        with state_mgr._connection() as conn:
+            cur = conn.cursor()
+            if rel_ids:
+                placeholders = ",".join("?" for _ in rel_ids)
+                cur.execute(f"DELETE FROM privacy_ledger WHERE release_id IN ({placeholders})", rel_ids)
+                cur.execute(f"DELETE FROM release_store WHERE release_id IN ({placeholders})", rel_ids)
+            cur.execute("DELETE FROM privacy_reservations")
+            cur.execute("DELETE FROM privacy_epochs WHERE epoch_id = ?", (active_id,))
+            conn.commit()
+
+        if ledger is not None:
+            with ledger._connection() as lconn:
+                if rel_ids:
+                    placeholders = ",".join("?" for _ in rel_ids)
+                    lconn.execute(f"DELETE FROM privacy_ledger WHERE release_id IN ({placeholders})", rel_ids)
+                lconn.commit()
+
+        if hasattr(orchestrator.cache, "_memory_cache"):
+            orchestrator.cache._memory_cache.clear()
+
+        # Recompute lifetime RDP from remaining closed epochs
+        all_epochs = state_mgr.list_all_epochs()
+        closed_epochs = [e for e in all_epochs if e.get("status") == "CLOSED"]
+        if closed_epochs:
+            orders = epoch_mgr.planner.orders
+            composed = {alpha: to_decimal("0.0") for alpha in orders}
+            for ce in closed_epochs:
+                vec_raw = json.loads(ce.get("rdp_vector_json", "{}"))
+                ce_vec = {to_decimal(k): to_decimal(v) for k, v in vec_raw.items()}
+                composed = compose_rdp_vectors([composed, ce_vec], orders=orders)
+            state_mgr.update_lifetime_exposure_record(
+                lifetime_rdp_json=json.dumps({str(k): str(v) for k, v in composed.items()}),
+                total_epochs_count=len(closed_epochs),
+            )
+        else:
+            orders = epoch_mgr.planner.orders
+            zero_rdp = {alpha: to_decimal("0.0") for alpha in orders}
+            state_mgr.update_lifetime_exposure_record(
+                lifetime_rdp_json=json.dumps({str(k): str(v) for k, v in zero_rdp.items()}),
+                total_epochs_count=1,
+            )
+
+        fresh_epoch = epoch_mgr.planner.create_epoch(
+            epoch_id=active_id,
+            start_date=start_date,
+            epoch_days=days,
+        )
+        state_mgr.save_epoch_record(epoch_mgr._epoch_to_record(fresh_epoch))
+
+        return {
+            "success": True,
+            "message": "演示 Epoch 已重置",
+            "epoch_id": active_id,
+            "effective_epsilon": 0.0,
+        }
+
+    def reset_demo_all(self) -> Dict[str, Any]:
+        """Completely reset local demo environment: epochs, lifetime exposure, ledgers, and reload demo data."""
+        self._verify_demo_mode_allowed()
+
+        orchestrator = self.service.orchestrator
+        epoch_mgr = getattr(orchestrator, "epoch_manager", None)
+        state_mgr = getattr(orchestrator, "state_manager", None)
+        ledger = getattr(orchestrator, "ledger", None)
+
+        if not epoch_mgr or not state_mgr:
+            raise RuntimeError("Epoch budget manager or state manager not available.")
+
+        state_mgr.clear()
+
+        if ledger is not None:
+            with ledger._connection() as lconn:
+                lconn.execute("DELETE FROM privacy_ledger")
+                lconn.commit()
+
+        if hasattr(orchestrator.cache, "_memory_cache"):
+            orchestrator.cache._memory_cache.clear()
+
+        orders = epoch_mgr.planner.orders
+        zero_rdp = {alpha: to_decimal("0.0") for alpha in orders}
+        state_mgr.update_lifetime_exposure_record(
+            lifetime_rdp_json=json.dumps({str(k): str(v) for k, v in zero_rdp.items()}),
+            total_epochs_count=1,
+        )
+
+        fresh_epoch = epoch_mgr.planner.create_epoch(
+            epoch_id="epoch_001",
+            start_date="2026-10-01",
+            epoch_days=epoch_mgr.epoch_days,
+        )
+        state_mgr.save_epoch_record(epoch_mgr._epoch_to_record(fresh_epoch))
+
+        self.load_demo_data()
+
+        return {
+            "success": True,
+            "message": "演示环境已恢复初始状态",
+            "epoch_id": "epoch_001",
+            "effective_epsilon": 0.0,
+        }

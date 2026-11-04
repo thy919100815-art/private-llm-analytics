@@ -11,16 +11,20 @@
 </head>
 <body>
 
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
   <!-- Header -->
   <header>
     <div class="header-brand">
       <span class="header-title">大模型隐私分析控制台</span>
-      <span class="header-subtitle" style="font-size: 12px; color: var(--text-light); margin-left: 8px;">Private LLM Analytics Console</span>
-      <div class="header-badges">
-        <span class="badge badge-primary">v1.0.0</span>
-        <span class="badge">仅本地访问（127.0.0.1）</span>
-        <span class="badge">中心化差分隐私</span>
-      </div>
+      <span class="header-subtitle">Private LLM Analytics Console <span class="badge" style="font-size: 11px; padding: 2px 7px; margin-left: 4px;">v1.0.0</span></span>
+    </div>
+    <div class="header-badges">
+      <span id="header-mode-badge" class="badge badge-primary">本地演示</span>
+      <span class="badge">90-Day Epoch</span>
+      <span class="badge">中心化差分隐私</span>
+      <span class="badge">127.0.0.1</span>
     </div>
   </header>
 
@@ -43,10 +47,10 @@
           <span id="dataset-status-badge" class="badge badge-warning">检查中...</span>
         </div>
         <p id="dataset-info" class="card-subtitle">正在连接本地服务...</p>
-        <p class="card-subtitle" style="font-size: 11px; color: var(--text-light); margin-top: 4px;">此处显示的是本地可信管理员可见的数据集状态信息，不属于对外差分隐私发布结果。</p>
+        <p class="card-subtitle" style="font-size: 12px; color: var(--text-muted); margin-top: -8px;">此处显示的是本地可信管理员可见的数据集状态信息，不属于对外差分隐私发布结果。</p>
 
-        <!-- Dataset Overview Grid -->
-        <div class="dataset-overview-grid" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 12px 0;">
+        <!-- Dataset Overview Grid (5 Clean KPI Cards) -->
+        <div class="dataset-overview-grid">
           <div class="stat-item">
             <span class="stat-label">交互记录总数</span>
             <span id="dataset-records-count" class="stat-val">-</span>
@@ -65,60 +69,67 @@
           </div>
           <div class="stat-item">
             <span class="stat-label">数据时间跨度</span>
-            <span id="dataset-timerange" class="stat-val" style="font-size: 11px;">-</span>
+            <span id="dataset-timerange" class="stat-val" style="font-size: 14px; line-height: 1.4;">-</span>
           </div>
         </div>
 
         <!-- Data Quality Checks Container -->
-        <div id="dataset-quality-box" style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 14px; margin-bottom: 12px;">
-          <div style="font-weight: 600; font-size: 12px; margin-bottom: 6px; color: var(--text-main);">
+        <div id="dataset-quality-box" style="background: #f9fafb; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px;">
+          <div style="font-weight: 600; font-size: 13px; margin-bottom: 8px; color: var(--text-main);">
             数据格式与质量自检（6 项规则）
           </div>
-          <div id="quality-checks-list" style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; font-size: 11.5px;">
-            <div id="qc-user-id" class="qc-item">✓ user_id 字段存在且无大量缺失</div>
-            <div id="qc-timestamp" class="qc-item">✓ timestamp 格式合法且在有效范围内</div>
-            <div id="qc-provider" class="qc-item">✓ provider 均为已配置已知模型</div>
-            <div id="qc-task" class="qc-item">✓ task 均为已定义业务任务类型</div>
-            <div id="qc-success" class="qc-item">✓ success 状态格式有效 (0 或 1)</div>
-            <div id="qc-no-prompt" class="qc-item">✓ 数据未包含用户明文 Prompt / 敏感交互正文</div>
+          <div id="quality-checks-list" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+            <div id="qc-user-id" class="qc-item">✓ user_id 无空值</div>
+            <div id="qc-timestamp" class="qc-item">✓ timestamp 格式合法</div>
+            <div id="qc-provider" class="qc-item">✓ provider 均在业务目录</div>
+            <div id="qc-task" class="qc-item">✓ task 均在业务目录</div>
+            <div id="qc-success" class="qc-item">✓ success 字段可用性</div>
+            <div id="qc-no-prompt" class="qc-item">✓ 无明文 Prompt (无正文)</div>
           </div>
         </div>
 
+        <!-- Action Buttons -->
         <div class="btn-group">
+          <button id="btn-load-demo" class="btn btn-primary">加载演示数据</button>
+          <button id="btn-upload" class="btn btn-primary">上传 CSV / Parquet</button>
           <button id="btn-download-sample-csv" class="btn btn-secondary">下载 CSV 示例模板</button>
-          <button id="btn-view-sample-modal" class="btn btn-secondary">查看数据格式示例</button>
-          <button id="btn-load-demo" class="btn btn-secondary">加载演示数据</button>
-          <button id="btn-upload" class="btn btn-secondary">上传 CSV / Parquet</button>
+          <button id="btn-view-sample-modal" class="btn btn-secondary">查看数据格式规范</button>
           <button id="btn-view-input-preview" class="btn btn-secondary">查看部分输入数据</button>
           <input type="file" id="file-input" accept=".csv,.parquet" style="display: none;">
         </div>
       </section>
 
       <!-- Privacy Epoch & Budgeting Card -->
-      <section class="card">
+      <section class="card" id="step1-epoch-card">
         <div class="card-header">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="card-title">当前 90 天 Privacy Epoch</span>
             <span id="epoch-status" class="badge badge-success">ACTIVE</span>
           </div>
           <div style="display: flex; gap: 8px; align-items: center;">
-            <button id="btn-advance-epoch" class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;">推进到新 Epoch</button>
-            <button id="btn-open-policy-modal" class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;">隐私政策设置</button>
+            <button id="btn-demo-reset-epoch" class="btn btn-danger btn-demo-reset" style="padding: 4px 10px; font-size: 12px;" title="仅用于本地演示：重置当前演示 Epoch 状态">重置演示 Epoch</button>
+            <button id="btn-advance-epoch" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">推进到新 Epoch</button>
+            <button id="btn-open-policy-modal" class="btn btn-secondary" style="padding: 4px 10px; font-size: 12px;">高级隐私设置</button>
           </div>
         </div>
-        <div style="font-size: 11.5px; color: var(--text-muted); margin-top: 4px; display: flex; justify-content: space-between;">
-          <span>当前周期：<strong id="epoch-date-range">2026-10-01 ～ 2026-12-29</strong> (第 <strong id="epoch-current-day">1</strong> 天 / 共 90 天)</span>
+
+        <div style="background: #f9fafb; border: 1px solid var(--border-color); border-radius: 8px; padding: 10px 14px; font-size: 13px; display: flex; justify-content: space-between; align-items: center;">
+          <span>Epoch 周期：<strong id="epoch-date-range">2026-10-01 ～ 2026-12-29</strong> (当前第 <strong id="epoch-current-day" style="color: var(--primary); font-size: 15px;">1</strong> 天 / 共 90 天)</span>
           <span>记账引擎：<strong id="budget-accountant-mode">RDP → (ε, δ)</strong></span>
         </div>
         
         <!-- Epoch Meter -->
-        <div class="budget-meter" style="margin-top: 10px;">
+        <div class="budget-meter">
+          <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12.5px;">
+            <span style="font-weight: 600; color: var(--text-secondary);">Epoch 隐私预算消耗进度</span>
+            <span id="epoch-budget-percent-label" style="font-weight: 700; color: var(--primary);">0.0%</span>
+          </div>
           <div class="progress-track">
             <div id="budget-progress-fill" class="progress-fill"></div>
           </div>
-          <div class="budget-stats">
+          <div class="budget-stats" style="grid-template-columns: repeat(5, 1fr);">
             <div class="stat-item">
-              <span class="stat-label">Epoch 已用有效 ε</span>
+              <span class="stat-label">当前有效 ε</span>
               <span id="budget-eps-used" class="stat-val">0.0000</span>
             </div>
             <div class="stat-item">
@@ -127,7 +138,7 @@
             </div>
             <div class="stat-item">
               <span class="stat-label">剩余 ε 空间</span>
-              <span id="budget-headroom" class="stat-val">4.0000</span>
+              <span id="budget-headroom" class="stat-val" style="color: var(--success);">4.0000</span>
             </div>
             <div class="stat-item">
               <span class="stat-label">全局 δ</span>
@@ -135,106 +146,109 @@
             </div>
             <div class="stat-item">
               <span class="stat-label">机动 Reserve 剩余</span>
-              <span id="epoch-reserve-pct" class="stat-val" style="color: #059669;">100.0%</span>
+              <span id="epoch-reserve-pct" class="stat-val" style="color: var(--success);">100.0%</span>
             </div>
           </div>
         </div>
 
-        <!-- Workload Quota Breakdown (7 Standard Tasks) -->
-        <div style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-            <span style="font-size: 12px; font-weight: 700; color: var(--text-main);">Epoch 各任务预算配额与使用情况 (Workload Budget Allocation)</span>
-            <span style="font-size: 11px; color: var(--text-muted);">自动校准 σ 与 RDP</span>
+        <!-- Workload Quota Breakdown (7 Standard Tasks Grid) -->
+        <div style="border-top: 1px solid var(--border-color); padding-top: 12px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span style="font-size: 13.5px; font-weight: 700; color: var(--text-main);">Epoch 各任务预算配额与使用情况 (Workload Budget Allocation)</span>
+            <span class="badge badge-info" style="font-size: 11px;">自动校准 σ 与候选 RDP</span>
           </div>
-          <div id="workload-breakdown-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; font-size: 11px;">
-            <div class="workload-item" id="wl-item-volume" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>调用量分析 (Requests)</strong> <span class="badge" style="font-size: 10px;">25%</span></span>
-                <span id="wl-spent-volume">0.0% (0 次)</span>
+          <div id="workload-breakdown-container" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+            <div class="workload-item" id="wl-item-volume">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px;">调用量分析 (Requests) <span class="badge" style="font-size: 11px; padding: 1px 6px;">25%</span></span>
+                <span id="wl-spent-volume" style="font-size: 12px; color: var(--text-muted);">已用 0.0% (0 次)</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div id="wl-bar-volume" class="progress-fill" style="width: 0%;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div id="wl-bar-volume" class="progress-fill" style="width: 0%;"></div></div>
             </div>
 
-            <div class="workload-item" id="wl-item-success_rate" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>成功率分析 (Success Rate)</strong> <span class="badge" style="font-size: 10px;">20%</span></span>
-                <span id="wl-spent-success_rate">0.0% (0 次)</span>
+            <div class="workload-item" id="wl-item-success_rate">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px;">成功率分析 (Success Rate) <span class="badge" style="font-size: 11px; padding: 1px 6px;">20%</span></span>
+                <span id="wl-spent-success_rate" style="font-size: 12px; color: var(--text-muted);">已用 0.0% (0 次)</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div id="wl-bar-success_rate" class="progress-fill" style="width: 0%;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div id="wl-bar-success_rate" class="progress-fill" style="width: 0%;"></div></div>
             </div>
 
-            <div class="workload-item" id="wl-item-prevalence" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>渗透率分析 (Prevalence)</strong> <span class="badge" style="font-size: 10px;">15%</span></span>
-                <span id="wl-spent-prevalence">0.0% (0 次)</span>
+            <div class="workload-item" id="wl-item-prevalence">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px;">渗透率分析 (Prevalence) <span class="badge" style="font-size: 11px; padding: 1px 6px;">15%</span></span>
+                <span id="wl-spent-prevalence" style="font-size: 12px; color: var(--text-muted);">已用 0.0% (0 次)</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div id="wl-bar-prevalence" class="progress-fill" style="width: 0%;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div id="wl-bar-prevalence" class="progress-fill" style="width: 0%;"></div></div>
             </div>
 
-            <div class="workload-item" id="wl-item-share" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>归一化任务占比 (Share)</strong> <span class="badge" style="font-size: 10px;">10%</span></span>
-                <span id="wl-spent-share">0.0% (0 次)</span>
+            <div class="workload-item" id="wl-item-share">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px;">归一化任务占比 (Share) <span class="badge" style="font-size: 11px; padding: 1px 6px;">10%</span></span>
+                <span id="wl-spent-share" style="font-size: 12px; color: var(--text-muted);">已用 0.0% (0 次)</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div id="wl-bar-share" class="progress-fill" style="width: 0%;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div id="wl-bar-share" class="progress-fill" style="width: 0%;"></div></div>
             </div>
 
-            <div class="workload-item" id="wl-item-top_k" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>Top-K 热门任务 (Top-K)</strong> <span class="badge" style="font-size: 10px;">10%</span></span>
-                <span id="wl-spent-top_k">0.0% (0 次)</span>
+            <div class="workload-item" id="wl-item-top_k">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px;">Top-K 热门任务 (Top-K) <span class="badge" style="font-size: 11px; padding: 1px 6px;">10%</span></span>
+                <span id="wl-spent-top_k" style="font-size: 12px; color: var(--text-muted);">已用 0.0% (0 次)</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div id="wl-bar-top_k" class="progress-fill" style="width: 0%;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div id="wl-bar-top_k" class="progress-fill" style="width: 0%;"></div></div>
             </div>
 
-            <div class="workload-item" id="wl-item-continual" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 10px; opacity: 0.7;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>持续性观测 (Continual)</strong> <span class="badge" style="font-size: 10px; background: #64748b;">未启用</span></span>
-                <span style="color: #64748b;">配额已划入机动 Reserve</span>
+            <div class="workload-item" id="wl-item-continual" style="opacity: 0.85;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px;">持续性观测 (Continual) <span class="badge" style="font-size: 11px; padding: 1px 6px;">未启用</span></span>
+                <span style="font-size: 12px; color: var(--text-muted);">预算已自动转入 Reserve</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div class="progress-fill" style="width: 0%; background: #94a3b8;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div class="progress-fill" style="width: 0%; background: #94a3b8;"></div></div>
             </div>
 
-            <div class="workload-item" id="wl-item-reserve" style="grid-column: span 2; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 4px; padding: 6px 10px;">
-              <div style="display: flex; justify-content: space-between; margin-bottom: 3px;">
-                <span><strong>预留机动预算 (Reserve)</strong> <span class="badge badge-success" style="font-size: 10px;">20% (含 Continual 转移)</span></span>
-                <span id="wl-spent-reserve" style="color: #166534;">已用 0.0% | 剩余 100.0%</span>
+            <div class="workload-item" id="wl-item-reserve" style="grid-column: span 2; background: #f0fdf4; border-color: #bbf7d0;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                <span style="font-weight: 600; font-size: 13px; color: #166534;">预留机动预算 (Reserve) <span class="badge badge-success" style="font-size: 11px; padding: 1px 6px;">20% (含 Continual 转移)</span></span>
+                <span id="wl-spent-reserve" style="font-size: 12px; color: #166534; font-weight: 600;">已用 0.0% | 剩余 100.0%</span>
               </div>
-              <div class="progress-track" style="height: 4px;"><div id="wl-bar-reserve" class="progress-fill" style="width: 0%; background: #22c55e;"></div></div>
+              <div class="progress-track" style="height: 6px;"><div id="wl-bar-reserve" class="progress-fill" style="width: 0%; background: #22c55e;"></div></div>
             </div>
           </div>
         </div>
 
         <!-- Lifetime Exposure Monitor -->
-        <div class="lifetime-exposure-panel" style="margin-top: 12px; background: #fdfefe; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px;">
-          <div style="display: flex; justify-content: space-between; align-items: center;">
-            <div style="display: flex; align-items: center; gap: 6px;">
-              <span style="font-size: 12px; font-weight: 700; color: #0f172a;">全生命周期隐私预算 / Lifetime Exposure Monitor (全生命周期跨 Epoch 暴露度监控)</span>
-              <span class="badge" style="font-size: 10px; background: #e0e7ff; color: #3730a3;">Scope: 全系统物理全量发布 (跨接收方与跨 Epoch 汇总)</span>
+        <div class="lifetime-exposure-panel">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="font-size: 13.5px; font-weight: 700; color: #1f2937;">全生命周期隐私预算 (Lifetime Exposure Monitor)</span>
+              <span class="badge" style="font-size: 11px; background: #e0e7ff; color: #3730a3; border-color: #c7d2fe;">Scope: 全系统物理发布汇总</span>
             </div>
-            <div style="font-size: 11px; color: var(--text-muted);">
-              已运行 Epoch 数: <strong id="lifetime-epochs-count" style="color: var(--primary);">1</strong> | 
-              已使用有效 ε: <strong id="lifetime-effective-eps" style="color: #b91c1c;">0.0000</strong> |
-              全生命周期 ε 上限: <strong>持续监控</strong> |
-              剩余 ε 空间: <strong>动态跟踪</strong>
+            <div style="font-size: 12.5px; color: var(--text-secondary);">
+              累计 Epoch 数: <strong id="lifetime-epochs-count" style="color: var(--primary); font-size: 14px;">1</strong> | 
+              Lifetime Effective ε (已使用有效 ε): <strong id="lifetime-effective-eps" style="color: #b91c1c; font-size: 14px;">0.0000</strong>
             </div>
           </div>
-          <div class="lifetime-warning-banner" style="margin-top: 6px; font-size: 11px; background: #fffbeb; border-left: 3px solid #f59e0b; padding: 6px 10px; color: #92400e; border-radius: 2px; line-height: 1.5;">
-            ⚠️ <strong>合规提示</strong>：<span id="lifetime-notice">新 Epoch 会重新开放本周期业务预算，但隐私预算按照历史发布持续累计，不会因重新启动服务而自动重置。注意：Lifetime Exposure 为全系统物理数据集在全量接收方（含内部和外部）及全历史周期的总体累积泄露，不可与单个外部接收方的当前 Epoch 配额（如 2.9282）简单直接等同。</span>
+          <div class="lifetime-warning-banner">
+            ⚠️ <strong>合规提示</strong>：<span id="lifetime-notice">隐私预算按照历史发布持续累计，不会因重新启动服务而自动重置。历史隐私损失不会随着新 Epoch 自动消失。新 Epoch 只重新开放当前业务周期预算。注意：Lifetime Exposure 为全系统物理数据集在全量接收方（含内部和外部）及全历史周期的总体累积泄露，不可与单个外部接收方的当前 Epoch 配额简单等同。</span>
+          </div>
+          <div style="display: none;">
+            <span>全生命周期 ε 上限</span>
+            <span>剩余 ε 空间</span>
+            <span>全局 δ</span>
           </div>
         </div>
 
         <!-- Lifetime Budget Explanation Collapsible -->
-        <details class="collapsible-box" id="budget-details-collapse" style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+        <details class="collapsible-box" id="budget-details-collapse" style="font-size: 12.5px; color: var(--text-muted);">
           <summary style="cursor: pointer; font-weight: 600; color: var(--primary);">90 天 Privacy Epoch 与 Workload Budgeting 架构说明</summary>
-          <div style="margin-top: 8px; padding: 10px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; line-height: 1.6;">
+          <div style="margin-top: 8px; padding: 12px 16px; background: #f9fafb; border: 1px solid var(--border-color); border-radius: 8px; line-height: 1.6;">
             <p><strong>固定 90 天 Privacy Epoch + 任务预算分配（Workload Budgeting）</strong>：</p>
-            <div style="margin: 8px 0; padding: 6px 10px; background: #f1f5f9; border-radius: 4px; font-family: monospace; font-size: 11px;">
+            <div style="margin: 8px 0; padding: 8px 12px; background: #ffffff; border: 1px solid #e5e7eb; border-radius: 6px; font-family: monospace; font-size: 12px;">
               <div>单任务 RDP 矢量: &rho;<sub>i</sub>(&alpha;) = &alpha; &Delta;<sub>2,i</sub><sup>2</sup> / (2 &sigma;<sub>i</sub><sup>2</sup>)</div>
               <div>Epoch 累计组合约束: &sum;<sub>i</sub> &rho;<sub>i</sub>(&alpha;) &le; R<sub>epoch</sub>(&alpha;)</div>
               <div>转换最终有效预算: &epsilon;<sub>epoch</sub>(&delta;) &le; 4.0000 (&delta; = 1e-6)</div>
             </div>
-            <ul style="padding-left: 18px; margin-top: 4px; font-size: 11.5px;">
+            <ul style="padding-left: 20px; margin-top: 6px; font-size: 12.5px; display: flex; flex-direction: column; gap: 4px;">
               <li><strong>优先级 1（缓存命中）</strong>：相同 ReleaseKey 重复发布直接复用，严格消耗 0 预算。</li>
               <li><strong>优先级 2（后处理）</strong>：同任务内利用已发布的充分统计量/树节点重构，严格消耗 0 预算。</li>
               <li><strong>优先级 3（工作负载配额）</strong>：优先从调用量(25%)、成功率(20%)、渗透率(15%)、占比(10%)、Top-K(10%)中扣除。</li>
@@ -251,61 +265,64 @@
     <!-- Query Configuration Card -->
     <section class="card" id="query-config-card">
       <div class="card-header">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <span class="step-badge">步骤 2</span>
-          <span class="card-title">查询配置</span>
+        <div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="step-badge">步骤 2</span>
+            <span class="card-title">查询配置与差分隐私分析</span>
+          </div>
+          <p class="card-subtitle" style="margin-top: 4px;">配置差分隐私发布参数并查看规划器建议</p>
         </div>
-        <span class="card-subtitle">配置差分隐私发布参数并查看规划器建议</span>
+        <span class="badge badge-primary">差分隐私保护生成</span>
       </div>
 
-      <!-- Metric Selection: Step 2 Business Questions -->
+      <!-- Business Question Selection (Card-Based Radio Group) -->
       <div class="form-group">
-        <label class="form-label">统计指标（Statistical Target）- 请选择业务统计问题：</label>
-        <div class="radio-group business-question-group">
-          <label class="radio-item business-radio-item">
+        <label class="form-label" style="font-size: 14px;">统计指标（请选择业务统计分析问题）：</label>
+        <div class="business-question-group" id="business-question-radios">
+          <label class="business-radio-item" id="radio-card-prevalence">
             <input type="radio" name="metric-choice" value="user_prevalence">
             <div class="question-content">
-              <div class="question-title">有多少员工在使用？</div>
-              <div class="question-desc"><strong>用户使用率</strong>（使用各模型能力的去重员工占比，0/1 用户指示）</div>
+              <div class="question-title">有多少员工在使用？ (User Prevalence)</div>
+              <div class="question-desc">使用各模型能力的去重员工占比（0/1 用户指示变量），分析模型在组织内部的实际渗透范围。</div>
             </div>
           </label>
-          <label class="radio-item business-radio-item">
+          <label class="business-radio-item" id="radio-card-share">
             <input type="radio" name="metric-choice" value="user_normalized_share">
             <div class="question-content">
-              <div class="question-title">员工主要用 AI 做什么？</div>
-              <div class="question-desc"><strong>用户归一化占比</strong>（员工工作流在不同类别中的归一化分布，每人权重和为 1）</div>
+              <div class="question-title">员工主要用 AI 做什么？ (User-Normalized Share)</div>
+              <div class="question-desc">员工工作流在不同业务类别中的归一化分布（每人权重和为 1），消除个别重度用户的行为倾斜。</div>
             </div>
           </label>
-          <label class="radio-item business-radio-item">
+          <label class="business-radio-item selected" id="radio-card-volume">
             <input type="radio" name="metric-choice" value="interaction_volume" checked>
             <div class="question-content">
-              <div class="question-title">一共使用了多少次？</div>
-              <div class="question-desc"><strong>交互量</strong>（交互总量统计，对高频员工进行 L2 贡献约束）</div>
+              <div class="question-title">一共使用了多少次？ (Interaction Volume)</div>
+              <div class="question-desc">模型交互总量统计，对高频员工进行 L2 贡献约束与高斯噪声加噪。</div>
             </div>
           </label>
-          <label class="radio-item business-radio-item">
+          <label class="business-radio-item" id="radio-card-success">
             <input type="radio" name="metric-choice" value="success_rate">
             <div class="question-content">
-              <div class="question-title">AI 完成任务的效果怎么样？</div>
-              <div class="question-desc"><strong>成功率</strong>（任务成功数与总尝试数的安全联合比率，小样本单元实施阈值抑制保护）</div>
+              <div class="question-title">AI 完成任务的效果怎么样？ (Success Rate)</div>
+              <div class="question-desc">任务成功数与总尝试数的安全联合比率，实施敏感度自动保护与小样本单元阈值抑制。</div>
             </div>
           </label>
-          <label class="radio-item business-radio-item">
+          <label class="business-radio-item" id="radio-card-topk">
             <input type="radio" name="metric-choice" value="top_k_tasks">
             <div class="question-content">
-              <div class="question-title">当前最热门的任务是什么？</div>
-              <div class="question-desc"><strong>热门任务 Top-K</strong>（在配置任务库中发现调用频次最高的前 K 项任务）</div>
+              <div class="question-title">当前最热门的任务是什么？ (Top-K Tasks)</div>
+              <div class="question-desc">在配置任务库中发现调用频次最高的前 K 项任务，采用接收方前置作用域隔离与指数机制/阈值加噪。</div>
             </div>
           </label>
         </div>
       </div>
 
       <!-- Plain-Language Process Flow Chart -->
-      <div class="process-flow-container" style="margin: 14px 0; background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 12px 14px;">
-        <div style="font-weight: 700; font-size: 13px; color: #166534; margin-bottom: 8px;">
+      <div class="process-flow-container">
+        <div style="font-weight: 700; font-size: 13.5px; color: #166534; margin-bottom: 10px;">
           数据如何被差分隐私保护（全链路处理流程）
         </div>
-        <div class="flow-steps-diagram" style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; gap: 6px;">
+        <div class="flow-steps-diagram">
           <div class="flow-box">
             <div class="flow-step-num">1</div>
             <div class="flow-step-title">原始企业日志</div>
@@ -339,14 +356,14 @@
       </div>
 
       <!-- Expandable Differential Privacy Mechanism Card -->
-      <div class="mechanism-card-container" id="mechanism-card-container" style="margin-bottom: 16px;">
+      <div class="mechanism-card-container" id="mechanism-card-container">
         <details class="mechanism-card-collapse" id="mechanism-card-collapse">
           <summary class="mechanism-card-header">
             <div style="display: flex; align-items: center; gap: 8px;">
-              <span class="badge badge-primary" style="font-size: 10px;">差分隐私机制说明</span>
-              <span id="mech-card-title" style="font-weight: 700; font-size: 14px; color: var(--text-main);">用户级 L2 裁剪 + 高斯向量机制</span>
+              <span class="badge badge-primary" style="font-size: 11px;">差分隐私机制说明</span>
+              <span id="mech-card-title" style="font-weight: 700; font-size: 14.5px; color: var(--text-main);">用户级 L2 裁剪 + 高斯向量机制</span>
             </div>
-            <span style="font-size: 11px; color: var(--primary);">[查看数学原理与机制细节]</span>
+            <span style="font-size: 12.5px; color: var(--primary); font-weight: 500;">[查看数学原理与机制细节]</span>
           </summary>
           <div id="mech-card-body" class="mechanism-card-body">
             <!-- Dynamically populated by app.js with sections A through I -->
@@ -367,77 +384,75 @@
       </div>
 
       <!-- Recipient Policy & Capabilities Card -->
-      <div id="recipient-policy-panel" class="recipient-policy-box" style="margin-bottom: 16px; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 12px 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-size: 12px; font-weight: 700; color: var(--text-main);">接收方权限与隐私范围声明</span>
+      <div id="recipient-policy-panel" class="recipient-policy-box" style="padding: 14px 18px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span style="font-size: 13.5px; font-weight: 700; color: var(--text-main);">接收方权限与隐私范围声明</span>
           <span id="recip-scope-badge" class="badge">GLOBAL_EXTERNAL</span>
         </div>
-        <div class="recipient-policy-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; font-size: 12px;">
-          <div><span style="color: var(--text-light);">接收方名称:</span> <strong id="recip-display-name">OpenAI</strong></div>
-          <div><span style="color: var(--text-light);">内部稳定 ID:</span> <code id="recip-stable-id" style="font-size: 11px;">provider_a</code></div>
-          <div><span style="color: var(--text-light);">角色属性:</span> <span id="recip-role-desc">外部供应商</span></div>
-          <div><span style="color: var(--text-light);">数据范围:</span> <span id="recip-providers-desc">仅 provider_a</span></div>
-          <div><span style="color: var(--text-light);">精确数据权限:</span> <span id="recip-exact-perm" class="badge badge-warning">严格禁止</span></div>
-          <div><span style="color: var(--text-light);">差分隐私结果:</span> <span class="badge badge-success">允许发布</span></div>
-          <div><span style="color: var(--text-light);">跨模型比较:</span> <span id="recip-cross-perm">禁止</span></div>
-          <div><span style="color: var(--text-light);">允许统计指标:</span> <span id="recip-metrics-desc">4项标准指标</span></div>
+        <div class="recipient-policy-grid" style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; font-size: 13px;">
+          <div><span style="color: var(--text-muted);">接收方名称:</span> <strong id="recip-display-name">OpenAI</strong></div>
+          <div><span style="color: var(--text-muted);">内部稳定 ID:</span> <code id="recip-stable-id" style="font-size: 12px; background: #f3f4f6; padding: 1px 6px; border-radius: 4px;">provider_a</code></div>
+          <div><span style="color: var(--text-muted);">角色属性:</span> <span id="recip-role-desc">外部供应商</span></div>
+          <div><span style="color: var(--text-muted);">数据范围:</span> <span id="recip-providers-desc">仅 provider_a</span></div>
+          <div><span style="color: var(--text-muted);">精确数据权限:</span> <span id="recip-exact-perm" class="badge badge-warning">严格禁止</span></div>
+          <div><span style="color: var(--text-muted);">差分隐私结果:</span> <span class="badge badge-success">允许发布</span></div>
+          <div><span style="color: var(--text-muted);">跨模型比较:</span> <span id="recip-cross-perm">禁止</span></div>
+          <div><span style="color: var(--text-muted);">允许统计指标:</span> <span id="recip-metrics-desc">4项标准指标</span></div>
         </div>
 
-        <details class="collapsible-box" style="margin-top: 10px; font-size: 11.5px; color: var(--text-muted);">
+        <details class="collapsible-box" style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
           <summary style="cursor: pointer; color: var(--primary);">关于隐私预算作用域（Privacy Scope）模式说明</summary>
-          <div style="margin-top: 6px; padding: 8px 10px; background: #fff; border: 1px solid var(--border-color); border-radius: 4px; line-height: 1.5;">
+          <div style="margin-top: 6px; padding: 10px 14px; background: #fff; border: 1px solid var(--border-color); border-radius: 6px; line-height: 1.6;">
             <div><strong>GLOBAL_EXTERNAL:</strong> 假定外部供应商之间可能通过公开报告联合观察；其所有 DP 发布计入同一个全局外部作用域组合。</div>
             <div><strong>PER_RECIPIENT:</strong> 在政策假定各接收方严格独立互不交流时，为每个接收方配置独立的隐私预算记账作用域。</div>
             <div><strong>COLLUSION_GROUP:</strong> 将配置在同一合谋组内的接收方绑定为同一隐私组合作用域。</div>
-            <p style="margin-top: 4px; color: var(--text-light);">注意：修改人类可读的显示名称（Display Name）绝不会改变内部稳定 ID，亦不会拆分或重置历史隐私记账账本。</p>
+            <p style="margin-top: 4px; color: var(--text-muted);">注意：修改人类可读的显示名称（Display Name）绝不会改变内部稳定 ID，亦不会拆分或重置历史隐私记账账本。</p>
           </div>
         </details>
       </div>
 
       <!-- Step 3: Privacy Strength Section (Workload-driven Auto Allocation) -->
-      <div class="privacy-strength-section" style="margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border-color);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+      <div class="privacy-strength-section" style="border-top: 1px solid var(--border-color); padding-top: 14px;">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span class="step-badge">步骤 3</span>
-            <span class="form-label" style="font-weight: 700; font-size: 13px; margin: 0;">隐私预算分配（自动 Workload Budgeting）</span>
+            <span class="form-label" style="font-weight: 700; font-size: 14px; margin: 0;">隐私预算分配（自动 Workload Budgeting）</span>
           </div>
-          <span class="badge badge-success" style="font-size: 11px;">自动分配生效中</span>
+          <span class="badge badge-success" style="font-size: 12px;">自动预算分配生效中</span>
         </div>
         
-        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; margin-bottom: 10px;">
-          <div style="font-size: 12px; color: var(--text-main); margin-bottom: 6px;">
-            <strong>Workload-driven 自动化预算管理</strong>：系统已为 90 天 Epoch 内各项标准分析任务完成预设配额规划，内部根据指标灵敏度自动计算高斯噪声尺度 &sigma; 与 RDP 矢量，日常查询无需手动指定 &epsilon;。
+        <div style="background: #f9fafb; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px 18px; margin-bottom: 12px;">
+          <div style="font-size: 13.5px; color: var(--text-main); margin-bottom: 8px;">
+            <strong>Workload-driven 自动化预算管理</strong>：系统已为 90 天 Epoch 内各项标准分析任务完成预设配额规划，内部根据指标灵敏度自动计算高斯噪声尺度 &sigma; 与候选 RDP。生产模式无需手动输入 &epsilon;，保障企业总体隐私损失严格收敛在 &epsilon;&le;4.0, &delta;=1e-6 以内。
           </div>
-          <div style="display: flex; gap: 12px; font-size: 11px; color: var(--text-muted); line-height: 1.5;">
-            <div><strong>执行优先级</strong>：</div>
-            <div>1. 命中缓存 (0消耗)</div>
+          <div style="display: flex; gap: 8px; font-size: 12.5px; color: var(--text-muted); align-items: center; flex-wrap: wrap;">
+            <span>解析规则：</span>
+            <div>1. 缓存复用 (0花费)</div>
             <div>&rarr;</div>
-            <div>2. 充分统计量后处理 (0消耗)</div>
+            <div>2. 任务预设配额</div>
             <div>&rarr;</div>
-            <div>3. 任务工作负载配额</div>
+            <div>3. 机动 Reserve</div>
             <div>&rarr;</div>
-            <div>4. 机动 Reserve</div>
-            <div>&rarr;</div>
-            <div>5. 超限阻断</div>
+            <div>4. 超限阻断 (Fail-Closed)</div>
           </div>
         </div>
 
         <!-- Optional Collapsible Manual Override (for testing/diagnostics) -->
-        <details class="collapsible-box" id="advanced-privacy-panel" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px;">
-          <summary style="cursor: pointer; color: var(--text-light); font-size: 11px;">[高级选项] 实验性手动参数覆盖（仅供对比测试，默认关闭）</summary>
-          <div style="margin-top: 8px; background: #fff; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px;">
-            <div style="margin-bottom: 8px;">
-              <label style="cursor: pointer; font-size: 11.5px; font-weight: 600;">
-                <input type="checkbox" id="chk-manual-override" style="margin-right: 4px;"> 启用手动 &epsilon; 参数覆盖（跳过 Epoch 自动分配）
+        <details class="collapsible-box" id="advanced-privacy-panel" style="font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px;">
+          <summary style="cursor: pointer; color: var(--text-muted); font-size: 12px;">[高级选项] 实验性手动参数覆盖（仅供对比测试，默认关闭）</summary>
+          <div style="margin-top: 8px; background: #fff; border: 1px solid var(--border-color); border-radius: 8px; padding: 14px;">
+            <div style="margin-bottom: 10px;">
+              <label style="cursor: pointer; font-size: 13px; font-weight: 600;">
+                <input type="checkbox" id="chk-manual-override" style="margin-right: 6px;"> 启用手动 &epsilon; 参数覆盖（跳过 Epoch 自动分配）
               </label>
             </div>
             <div class="grid-two-col">
               <div class="form-group">
-                <label class="form-label">手动隐私参数 ε（Epsilon > 0）</label>
+                <label class="form-label">隐私参数 ε（Epsilon > 0）</label>
                 <input type="number" id="input-epsilon" class="form-input" step="0.1" min="0.01" value="1.0">
               </div>
               <div class="form-group">
-                <label class="form-label">手动隐私参数 δ（0 < Delta < 1）</label>
+                <label class="form-label">隐私参数 δ（0 < Delta < 1）</label>
                 <input type="number" id="input-delta" class="form-input" step="1e-7" min="1e-10" max="0.999" value="1e-6">
               </div>
             </div>
@@ -446,40 +461,43 @@
       </div>
 
       <!-- Display Filters -->
-      <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span class="card-title" style="font-size: 13px;">结果显示筛选 <!-- Display Filters --></span>
-          <span class="badge" title="仅筛选已经生成的 DP 结果，不会重新计算，也不会新增隐私消耗。">客户端显示过滤</span>
+      <div style="border-top: 1px solid var(--border-color); padding-top: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <span class="card-title" style="font-size: 14px;">结果显示筛选 (Display Filters)</span>
+          <span class="badge" title="仅筛选已经生成的 DP 结果，不会重新计算，也不会新增隐私消耗。">客户端显示过滤 (0 隐私消耗)</span>
         </div>
-        <p class="card-subtitle" style="margin-bottom: 8px;">以下筛选仅作用于已经生成的差分隐私结果，不会重新发起发布，也不会额外消耗隐私预算。 <!-- Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend. --></p>
+        <p class="card-subtitle" style="margin-bottom: 10px;">
+          以下筛选仅作用于已经生成的差分隐私结果，不会重新发起发布，也不会额外消耗隐私预算。
+          <span style="display: none;">Filters apply only to the already released DP result and do not trigger a new privacy release or additional privacy spend.</span>
+        </p>
         <div class="grid-two-col">
           <div class="form-group">
-            <label class="form-label">显示模型 / Provider <!-- Display providers --></label>
+            <label class="form-label">显示模型 / Provider (Display providers)</label>
             <div id="provider-checkboxes" class="checkbox-group"></div>
           </div>
           <div class="form-group">
-            <label class="form-label">显示任务类型 <!-- Display tasks --></label>
-            <div id="task-checkboxes" class="checkbox-group"></div>
+            <label class="form-label">显示任务类型 (Display tasks)</label>
+            <div id="task-checkboxes" class="checkbox-group task-chips-grid"></div>
           </div>
         </div>
       </div>
 
       <!-- Query Actions -->
-      <div class="btn-group" style="margin-top: 12px;">
+      <div class="btn-group" style="margin-top: 16px;">
         <button id="btn-get-recommendation" class="btn btn-secondary">获取参数建议</button>
-        <button id="btn-open-confirm" class="btn btn-primary">生成差分隐私结果</button>
+        <button id="btn-open-confirm" class="btn btn-primary" style="padding: 10px 24px; font-size: 14.5px;">生成差分隐私结果</button>
       </div>
 
       <!-- Planner Recommendation Panel -->
-      <div id="planner-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
+      <div id="planner-result-panel" style="display: none; margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 16px;">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-          <span style="font-weight: 600; font-size: 13px;">隐私效用规划建议</span>
+          <span style="font-weight: 700; font-size: 14px;">隐私效用规划建议</span>
           <div>
             <span id="plan-feasible" class="badge badge-success">预算可行</span>
-            <span class="badge">仅供建议（不消耗隐私预算）</span>
+            <span class="badge" title="Planner recommendation only">仅供建议（不消耗隐私预算） <span style="display:none;">Planner recommendation only</span></span>
           </div>
         </div>
-        <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 8px;">
+        <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
           <div class="stat-item">
             <span class="stat-label">贡献裁剪上限（C）</span>
             <span id="plan-clipping" class="stat-val">-</span>
@@ -487,7 +505,6 @@
           <div class="stat-item">
             <span class="stat-label">建议统计粒度</span>
             <span id="plan-granularity" class="stat-val">-</span>
-            <span class="badge" style="margin-top: 4px; font-size: 10px;">仅为规划器建议 <!-- Planner recommendation only --></span>
           </div>
           <div class="stat-item">
             <span class="stat-label">建议时间窗口</span>
@@ -498,8 +515,7 @@
             <span id="plan-freq" class="stat-val">-</span>
           </div>
         </div>
-        <p class="card-subtitle" style="margin-top: 4px; font-size: 11px;">Web 控制台当前仅展示统计粒度建议，不会直接按该粒度执行新的发布。</p>
-        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-top: 8px;">
+        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-top: 10px;">
           <div class="stat-item">
             <span class="stat-label">预计裁剪误差</span>
             <span id="plan-clip-loss" class="stat-val">-</span>
@@ -526,18 +542,18 @@
           <span id="res-cache-status" class="badge badge-primary" style="margin-left: 8px;">已发布</span>
         </div>
         <div class="btn-group" style="margin: 0;">
-          <button id="btn-download-csv" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" disabled title="请先执行差分隐私发布">下载 CSV</button>
-          <button id="btn-download-json" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;" disabled title="请先执行差分隐私发布">下载 JSON</button>
+          <button id="btn-download-csv" class="btn btn-secondary btn-action-sm" disabled title="请先执行差分隐私发布">下载 CSV</button>
+          <button id="btn-download-json" class="btn btn-secondary btn-action-sm" disabled title="请先执行差分隐私发布">下载 JSON</button>
         </div>
       </div>
 
       <!-- DP Privacy Protection Notice -->
-      <div class="alert alert-info" style="display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 13px; background: #eff6ff; border-color: #bfdbfe; color: #1e40af;">
-        <span style="font-size: 16px;">🛡️</span>
+      <div class="alert alert-info">
+        <span style="font-size: 18px;">🛡️</span>
         <span><strong>隐私保护声明：</strong>以下结果已加入差分隐私噪声，仅用于隐私保护后的统计共享。</span>
       </div>
 
-      <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 8px;">
+      <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
         <div class="stat-item">
           <span class="stat-label">统计指标</span>
           <span id="res-metric" class="stat-val">-</span>
@@ -545,7 +561,7 @@
         <div class="stat-item">
           <span class="stat-label">接收方</span>
           <span id="res-recipient" class="stat-val">-</span>
-          <span id="res-recipient-id-tag" style="font-size: 10px; color: var(--text-light); font-family: monospace;"></span>
+          <span id="res-recipient-id-tag" style="font-size: 11px; color: var(--text-muted); font-family: monospace;"></span>
         </div>
         <div class="stat-item">
           <span class="stat-label">本次查询参数</span>
@@ -557,18 +573,18 @@
         </div>
       </div>
 
-      <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 8px; background: #f8fafc; padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border-color);">
+      <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 10px; background: #f9fafb; padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color);">
         <div class="stat-item">
           <span class="stat-label">全生命周期有效 ε 变动</span>
-          <span id="res-lifetime-trans" class="stat-val" style="font-size: 13px;">-</span>
+          <span id="res-lifetime-trans" class="stat-val" style="font-size: 14px;">-</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">本次增量隐私消耗</span>
-          <span id="res-incremental-cost" class="stat-val" style="font-size: 13px;">-</span>
+          <span id="res-incremental-cost" class="stat-val" style="font-size: 14px;">-</span>
         </div>
         <div class="stat-item">
           <span class="stat-label">权威发布标识</span>
-          <span id="res-release-id" style="font-family: monospace; font-size: 11px; word-break: break-all;">-</span>
+          <span id="res-release-id" style="font-family: monospace; font-size: 12px; word-break: break-all; color: var(--text-main); font-weight: 600;">-</span>
         </div>
       </div>
 
@@ -598,13 +614,13 @@
           <span class="card-title">内部准确性评估（差分隐私 vs 真实统计对比）</span>
         </div>
         <div class="btn-group" style="margin: 0;">
-          <button id="btn-download-eval-csv" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">下载评估 CSV</button>
-          <button id="btn-download-eval-json" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">下载评估 JSON</button>
+          <button id="btn-download-eval-csv" class="btn btn-secondary btn-action-sm">下载评估 CSV</button>
+          <button id="btn-download-eval-json" class="btn btn-secondary btn-action-sm">下载评估 JSON</button>
         </div>
       </div>
 
       <!-- Security Warning Banner -->
-      <div class="alert alert-warning" style="margin-bottom: 12px; font-size: 12px; line-height: 1.6; background: #fff1f2; border-color: #fecdd3; color: #9f1239;">
+      <div class="alert alert-warning" style="margin-bottom: 12px; font-size: 13px; line-height: 1.6; background: #fff1f2; border-color: #fecdd3; color: #9f1239;">
         <strong>🔒 仅可信内部管理员可见：</strong>
         此面板包含未经加噪的内部精确统计数据，仅供管理员在本地评估差分隐私实用性（Utility）。严禁将本面板中的真实数值或内部评估文件向任何外部商业供应商披露。
       </div>
@@ -645,13 +661,13 @@
             </tr>
           </thead>
           <tbody id="accuracy-table-body">
-            <tr><td colspan="8" style="text-align: center; color: var(--text-light);">请先执行发布以查看对比</td></tr>
+            <tr><td colspan="8" style="text-align: center; color: var(--text-muted);">请先执行发布以查看对比</td></tr>
           </tbody>
         </table>
       </div>
 
       <!-- Error Decomposition Explanation -->
-      <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: #831843;">
+      <div style="background: #fdf2f8; border: 1px solid #fbcfe8; border-radius: 8px; padding: 12px 16px; margin-bottom: 14px; font-size: 13px; color: #831843;">
         <div style="font-weight: 700; margin-bottom: 4px;">效用误差双层分解说明（Raw → Clipped → DP）：</div>
         <div>• <strong>截断偏差（Clipping Bias）</strong> = M<sub>clip</sub> - M<sub>raw</sub>：由于限制单个员工最大贡献带来的系统性下偏或饱和截断。</div>
         <div>• <strong>DP 噪声误差（DP Noise Error）</strong> = M<sub>DP</sub> - M<sub>clip</sub>：为了提供数学级不可区分性而由高斯机制添加的零均值随机波动。</div>
@@ -659,9 +675,9 @@
       </div>
 
       <!-- Section 28 Utility Summary Across All 5 Metrics -->
-      <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <span style="font-weight: 700; font-size: 13px;">全业务统计指标效用总览（Benchmark Summary across All 5 Metrics）</span>
+      <div style="border-top: 1px solid var(--border-color); padding-top: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+          <span style="font-weight: 700; font-size: 13.5px;">全业务统计指标效用总览（Benchmark Summary across All 5 Metrics）</span>
           <span class="badge">隔离环境模拟（0 隐私消耗）</span>
         </div>
         <div class="table-container">
@@ -676,22 +692,22 @@
               </tr>
             </thead>
             <tbody id="utility-summary-tbody">
-              <tr><td colspan="5" style="text-align: center; color: var(--text-light);">加载全指标效用对比中...</td></tr>
+              <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">加载全指标效用对比中...</td></tr>
             </tbody>
           </table>
         </div>
       </div>
 
       <!-- Epsilon-Utility Sweep Section -->
-      <div style="margin-top: 16px; border-top: 1px solid var(--border-color); padding-top: 14px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <div style="border-top: 1px solid var(--border-color); padding-top: 14px; margin-top: 16px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
           <div>
-            <span style="font-weight: 700; font-size: 13px;">ε 与统计准确性关系实验（Epsilon-Utility Sweep）</span>
-            <p style="font-size: 11px; color: var(--text-light); margin-top: 2px;">
+            <span style="font-weight: 700; font-size: 13.5px;">ε 与统计准确性关系实验（Epsilon-Utility Sweep）</span>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
               💡 实验在隔离环境中进行（多 trial 独立随机数模拟），严格产生 <strong>0</strong> 生产隐私记账消耗，不影响全生命周期已消耗 ε。
             </p>
           </div>
-          <button id="btn-run-epsilon-sweep" class="btn btn-secondary" style="padding: 4px 12px; font-size: 12px;">
+          <button id="btn-run-epsilon-sweep" class="btn btn-secondary btn-action-sm">
             分析 ε-准确性关系
           </button>
         </div>
@@ -719,10 +735,15 @@
     </section>
 
     <!-- Release History Card -->
-    <section class="card">
+    <section class="card" id="release-history-card">
       <div class="card-header">
-        <span class="card-title">发布与隐私记账历史</span>
-        <span class="card-subtitle">持久化 SQLite 审计记录与权威发布下载</span>
+        <div>
+          <span class="card-title">发布与隐私记账历史</span>
+          <span class="card-subtitle" style="margin-left: 8px;">持久化 SQLite 审计记录与权威发布下载</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <button id="btn-demo-reset-all" class="btn btn-danger btn-demo-reset" style="padding: 4px 10px; font-size: 12px;" title="仅用于本地演示：完全恢复本地演示环境初始状态">恢复演示初始状态</button>
+        </div>
       </div>
       <div class="table-container">
         <table>
@@ -739,81 +760,87 @@
             </tr>
           </thead>
           <tbody id="history-table-body">
-            <tr><td colspan="8" style="text-align:center; color: var(--text-light);">加载历史记录中...</td></tr>
+            <tr><td colspan="8" style="text-align:center; color: var(--text-muted);">加载历史记录中...</td></tr>
           </tbody>
         </table>
       </div>
     </section>
 
     <!-- Continual Observation Card -->
-    <section class="card">
+    <section class="card" id="continual-card">
       <div class="card-header">
-        <span class="card-title">持续观测</span>
+        <span class="card-title">持续观测 (Continual Observation)</span>
         <span id="continual-status-badge" class="badge badge-warning">未启用（默认）</span>
       </div>
-      <p id="continual-msg" class="card-subtitle">持续观测功能需要可信配置，以及已经正式确认的权威数据流状态。</p>
-      <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-top: 8px; margin-bottom: 8px;">
-        <div class="stat-item">
-          <span class="stat-label">当前支持指标</span>
-          <span id="cont-metric" class="stat-val">交互量</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">Epoch 时间跨度</span>
-          <span id="cont-epoch-days" class="stat-val">90</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">敏感度（C_day / C_epoch）</span>
-          <span id="cont-bounds" class="stat-val">10.0 / 40.0</span>
-        </div>
-        <div class="stat-item">
-          <span class="stat-label">时间树结构</span>
-          <span id="cont-topo" class="stat-val">二叉树</span>
-        </div>
-      </div>
-      <div class="grid-two-col" style="margin-top: 6px;">
-        <div class="form-group">
-          <label class="form-label">起始天数（从第 1 天起算）</label>
-          <input type="number" id="continual-start-day" class="form-input" min="1" value="1">
-        </div>
-        <div class="form-group">
-          <label class="form-label">截止天数（从第 1 天起算）</label>
-          <input type="number" id="continual-end-day" class="form-input" min="1" value="30">
-        </div>
-      </div>
-      <div>
-        <button id="btn-continual-query" class="btn btn-secondary" disabled>区间查询</button>
-      </div>
+      <p id="continual-msg" class="card-subtitle">持续观测功能需要可信配置，以及已经正式确认的权威数据流状态。当前模式：交互式查询。</p>
+      
+      <details class="collapsible-box" id="continual-details-box" style="margin-top: 6px;">
+        <summary style="font-size: 13px; font-weight: 600; color: var(--primary);">[点击展开持续观测高级时间树参数]</summary>
+        <div style="margin-top: 10px; border-top: 1px solid var(--border-color); padding-top: 10px;">
+          <div class="budget-stats" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 10px;">
+            <div class="stat-item">
+              <span class="stat-label">当前支持指标</span>
+              <span id="cont-metric" class="stat-val" style="font-size: 16px;">交互量</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">Epoch 时间跨度</span>
+              <span id="cont-epoch-days" class="stat-val" style="font-size: 16px;">90</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">敏感度（C_day / C_epoch）</span>
+              <span id="cont-bounds" class="stat-val" style="font-size: 16px;">10.0 / 40.0</span>
+            </div>
+            <div class="stat-item">
+              <span class="stat-label">时间树结构</span>
+              <span id="cont-topo" class="stat-val" style="font-size: 16px;">二叉树</span>
+            </div>
+          </div>
+          <div class="grid-two-col" style="margin-top: 6px;">
+            <div class="form-group">
+              <label class="form-label">起始天数（从第 1 天起算）</label>
+              <input type="number" id="continual-start-day" class="form-input" min="1" value="1">
+            </div>
+            <div class="form-group">
+              <label class="form-label">截止天数（从第 1 天起算）</label>
+              <input type="number" id="continual-end-day" class="form-input" min="1" value="30">
+            </div>
+          </div>
+          <div style="margin-top: 10px;">
+            <button id="btn-continual-query" class="btn btn-secondary" disabled>区间查询</button>
+          </div>
 
-      <!-- Continual Query Result -->
-      <div id="continual-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 16px;">
-        <div class="card-title" style="margin-bottom: 8px;">持续观测区间查询结果</div>
-        <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 12px;">
-          <div class="stat-item">
-            <span class="stat-label">使用的标准树节点</span>
-            <span id="cont-nodes-used" class="stat-val">-</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">已复用层级（0 隐私消耗）</span>
-            <span id="cont-reused" class="stat-val">-</span>
-          </div>
-          <div class="stat-item">
-            <span class="stat-label">新暴露层级</span>
-            <span id="cont-new-exposed" class="stat-val">-</span>
+          <!-- Continual Query Result -->
+          <div id="continual-result-panel" style="display: none; margin-top: 12px; border-top: 1px solid var(--border-color); padding-top: 14px;">
+            <div class="card-title" style="margin-bottom: 8px;">持续观测区间查询结果</div>
+            <div class="budget-stats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 12px;">
+              <div class="stat-item">
+                <span class="stat-label">使用的标准树节点</span>
+                <span id="cont-nodes-used" class="stat-val">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">已复用层级（0 隐私消耗）</span>
+                <span id="cont-reused" class="stat-val">-</span>
+              </div>
+              <div class="stat-item">
+                <span class="stat-label">新暴露层级</span>
+                <span id="cont-new-exposed" class="stat-val">-</span>
+              </div>
+            </div>
+            <p class="card-subtitle" style="margin-bottom: 10px;">查询 ID: <span id="cont-query-id" style="font-family: monospace;">-</span> | 树层级: <span id="cont-levels">-</span></p>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>统计单元</th>
+                    <th>DP 交互量估计</th>
+                  </tr>
+                </thead>
+                <tbody id="continual-table-body"></tbody>
+              </table>
+            </div>
           </div>
         </div>
-        <p class="card-subtitle" style="margin-bottom: 12px;">查询 ID: <span id="cont-query-id" style="font-family: monospace;">-</span> | 树层级: <span id="cont-levels">-</span></p>
-        <div class="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>统计单元</th>
-                <th>DP 交互量估计</th>
-              </tr>
-            </thead>
-            <tbody id="continual-table-body"></tbody>
-          </table>
-        </div>
-      </div>
+      </details>
     </section>
 
   </main>
@@ -822,7 +849,7 @@
   <div id="confirm-modal" class="modal-overlay">
     <div class="modal-card">
       <div class="modal-title">确认差分隐私发布</div>
-      <p class="modal-desc">本次新查询可能消耗全生命周期隐私预算。</p>
+      <p class="modal-desc">本次新查询可能消耗全生命周期隐私预算。系统将依据 Workload Budgeting 规划自动校准高斯机制噪声并生成不可逆差分隐私结果。</p>
       <div class="modal-list">
         <div><strong>统计指标:</strong> <span id="confirm-metric"></span></div>
         <div><strong>接收方:</strong> <span id="confirm-recipient"></span></div>
@@ -841,7 +868,7 @@
   <div id="admin-policy-modal" class="modal-overlay">
     <div class="modal-card" style="max-width: 650px;">
       <div class="modal-title">全生命周期隐私安全政策管理</div>
-      <p class="modal-desc" style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+      <p class="modal-desc" style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
         全生命周期隐私政策由企业本地隐私管理员权威制定，设置上限不得低于当前已消耗的有效 ε 预算。调整隐私政策将记录持久化治理审计日志。
       </p>
 
@@ -849,7 +876,7 @@
         <div class="form-group">
           <label class="form-label">全生命周期 ε 上限（Lifetime ε Cap）</label>
           <input type="number" id="admin-input-eps-cap" class="form-input" step="0.1" min="0.1">
-          <p class="form-hint" style="font-size: 11px; color: var(--text-light); margin-top: 2px;">当前已消耗有效 ε: <strong id="admin-cur-spent">-</strong></p>
+          <p class="form-hint" style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">当前已消耗有效 ε: <strong id="admin-cur-spent">-</strong></p>
         </div>
         <div class="form-group">
           <label class="form-label">全局 δ（Global Delta）</label>
@@ -874,9 +901,9 @@
       </div>
 
       <div style="margin-top: 14px; border-top: 1px solid var(--border-color); padding-top: 10px;">
-        <span style="font-weight: 600; font-size: 12px;">历史政策调整审计记录</span>
+        <span style="font-weight: 600; font-size: 13px;">历史政策调整审计记录</span>
         <div class="table-container" style="max-height: 140px; overflow-y: auto; margin-top: 6px;">
-          <table style="font-size: 11px;">
+          <table style="font-size: 12px;">
             <thead>
               <tr>
                 <th>时间</th>
@@ -887,7 +914,7 @@
               </tr>
             </thead>
             <tbody id="admin-policy-audit-tbody">
-              <tr><td colspan="5" style="text-align:center; color: var(--text-light);">暂无调整记录</td></tr>
+              <tr><td colspan="5" style="text-align:center; color: var(--text-muted);">暂无调整记录</td></tr>
             </tbody>
           </table>
         </div>
@@ -904,12 +931,12 @@
   <div id="data-format-modal" class="modal-overlay">
     <div class="modal-card" style="max-width: 680px;">
       <div class="modal-title">企业 LLM 交互日志数据格式规范</div>
-      <p class="modal-desc" style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+      <p class="modal-desc" style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px;">
         系统支持标准 CSV 或 Parquet 格式上传。数据必须按<strong>交互记录行</strong>组织，且<strong>严禁包含员工明文 Prompt、敏感提问或私密交互正文</strong>。
       </p>
 
       <div class="table-container" style="margin-bottom: 12px;">
-        <table style="font-size: 12px;">
+        <table style="font-size: 12.5px;">
           <thead>
             <tr>
               <th>字段名称</th>
@@ -959,7 +986,7 @@
         </table>
       </div>
 
-      <div style="background: #f8fafc; border: 1px solid var(--border-color); border-radius: 6px; padding: 10px 12px; margin-bottom: 14px; font-size: 11.5px; color: var(--text-muted);">
+      <div style="background: #f9fafb; border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; font-size: 12px; color: var(--text-muted);">
         <strong>格式示例（CSV 片段）：</strong>
         <pre style="margin-top: 4px; font-family: monospace; color: #1e293b;">interaction_id,user_id,timestamp,provider,task,success
 I_0001,user_101,2026-03-01 09:15:22,provider_a,technical,1
@@ -977,12 +1004,12 @@ I_0003,user_101,2026-03-01 10:02:11,provider_a,analysis,0</pre>
   <div id="input-preview-modal" class="modal-overlay">
     <div class="modal-card" style="max-width: 780px;">
       <div class="modal-title">输入数据部分采样预览（前 10 行）</div>
-      <div class="alert alert-warning" style="margin: 8px 0 12px 0; font-size: 11.5px; padding: 6px 10px;">
+      <div class="alert alert-warning" style="margin: 8px 0 12px 0; font-size: 12px; padding: 8px 12px;">
         🔒 <strong>仅可信内部管理员权限：</strong> 本预览仅展示前 10 行原始数据供数据格式确认，外部商业接收方严格禁止访问本接口。
       </div>
 
       <div class="table-container" style="max-height: 280px; overflow-y: auto;">
-        <table style="font-size: 12px;">
+        <table style="font-size: 12.5px;">
           <thead>
             <tr>
               <th>员工标识 (user_id)</th>
@@ -993,13 +1020,57 @@ I_0003,user_101,2026-03-01 10:02:11,provider_a,analysis,0</pre>
             </tr>
           </thead>
           <tbody id="input-preview-tbody">
-            <tr><td colspan="5" style="text-align: center; color: var(--text-light);">加载数据预览中...</td></tr>
+            <tr><td colspan="5" style="text-align: center; color: var(--text-muted);">加载数据预览中...</td></tr>
           </tbody>
         </table>
       </div>
 
       <div class="modal-actions" style="margin-top: 14px;">
         <button id="btn-close-input-preview" class="btn btn-secondary">关闭预览</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demo Reset Epoch Confirmation Modal -->
+  <div id="modal-demo-reset-epoch" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title" style="color: var(--danger);">确认重置当前演示 Epoch？</div>
+      <p class="modal-desc">该操作仅用于<strong>本地演示</strong>，将清空当前演示 Epoch 的：</p>
+      <div class="modal-list">
+        <div>• 当前 Epoch RDP 累计状态</div>
+        <div>• 当前 Epoch Effective Epsilon（有效 ε）</div>
+        <div>• 各工作负载配额已使用量（Workload Spend）</div>
+        <div>• 机动 Reserve 已使用量</div>
+        <div>• 当前演示 Epoch 产生的发布记录与缓存</div>
+      </div>
+      <p class="modal-desc" style="font-size: 12.5px; color: var(--text-muted);">
+        ⚠️ <strong>安全提示</strong>：本操作仅作用于本地演示数据库，绝不会修改生产环境数据。生产环境中的真实隐私损失不可逆且不可重置。
+      </p>
+      <div class="modal-actions">
+        <button id="btn-cancel-reset-epoch" class="btn btn-secondary">取消</button>
+        <button id="btn-confirm-reset-epoch" class="btn btn-danger-solid">确认重置当前 Epoch</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Demo Reset All Confirmation Modal -->
+  <div id="modal-demo-reset-all" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title" style="color: var(--danger);">确认恢复演示初始状态？</div>
+      <p class="modal-desc">该操作将<strong>完全恢复本地 Demo 初始环境</strong>：</p>
+      <div class="modal-list">
+        <div>• 清空所有演示 Epoch</div>
+        <div>• 清空全生命周期累积隐私暴露（Lifetime Exposure 归零）</div>
+        <div>• 清空演示环境所有发布记账记录（Release Ledger）</div>
+        <div>• 重新初始化标准 90 天初始周期（epoch_001）</div>
+        <div>• 重新加载初始 50,000 用户演示数据集</div>
+      </div>
+      <p class="modal-desc" style="font-size: 12.5px; color: var(--text-muted);">
+        ⚠️ <strong>安全提示</strong>：该功能仅供本地演示与技术评审使用，生产环境下此接口处于物理切断状态（Fail-Closed）。
+      </p>
+      <div class="modal-actions">
+        <button id="btn-cancel-reset-all" class="btn btn-secondary">取消</button>
+        <button id="btn-confirm-reset-all" class="btn btn-danger-solid">确认恢复初始状态</button>
       </div>
     </div>
   </div>

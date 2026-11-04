@@ -8,6 +8,38 @@ let currentConfig = null;
 
 let lastReleaseData = null;
 
+function escapeHtml(str) {
+  if (str === null || str === undefined) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function showToast(message, type = "info") {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  const icon = type === "success" ? "✓" : type === "error" ? "✕" : "ℹ";
+  toast.innerHTML = `<span style="font-size: 16px; font-weight: 700;">${icon}</span><span>${escapeHtml(message)}</span>`;
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateX(20px)";
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+function showNotification(message, type = "info") {
+  showToast(message, type);
+}
+
+window.showToast = showToast;
+window.showNotification = showNotification;
+
 function setDownloadButtonsEnabled(enabled) {
 
   const btnCsv = document.getElementById("btn-download-csv");
@@ -300,13 +332,13 @@ async function triggerBlobDownload(url, defaultFilename) {
     a.download = filename;
 
     document.body.appendChild(a);
-
     a.click();
-
-    document.body.removeChild(a);
-
-    window.URL.revokeObjectURL(blobUrl);
-
+    setTimeout(() => {
+      try {
+        if (a.parentNode) a.parentNode.removeChild(a);
+        window.URL.revokeObjectURL(blobUrl);
+      } catch (_) {}
+    }, 1500);
     showNotification(`已下载: ${filename}`, "success");
 
   } catch (err) {
@@ -379,6 +411,21 @@ async function fetchConfig() {
 
     renderConfigOptions(currentConfig);
 
+    const isDemo = currentConfig.demo_mode !== false;
+    const modeBadge = document.getElementById("header-mode-badge");
+    if (modeBadge) {
+      if (isDemo) {
+        modeBadge.textContent = "本地演示";
+        modeBadge.className = "badge badge-primary";
+      } else {
+        modeBadge.textContent = "生产环境";
+        modeBadge.className = "badge badge-warning";
+      }
+    }
+    document.querySelectorAll(".btn-demo-reset").forEach((btn) => {
+      btn.style.display = isDemo ? "" : "none";
+    });
+
   } catch (err) {
 
     showError("无法从后端加载配置：" + (err.error || err.detail || err));
@@ -443,7 +490,7 @@ function renderConfigOptions(cfg) {
 
     const label = document.createElement("label");
 
-    label.className = "checkbox-item";
+    label.className = "checkbox-item chip-checkbox-label";
 
     const input = document.createElement("input");
 
@@ -461,7 +508,7 @@ function renderConfigOptions(cfg) {
 
     const pDisp = getProviderDisplayName(p);
 
-    label.appendChild(document.createTextNode(" " + pDisp + (pDisp !== p ? ` (${p})` : "")));
+    label.appendChild(document.createTextNode(" " + pDisp));
 
     provContainer.appendChild(label);
 
@@ -479,7 +526,7 @@ function renderConfigOptions(cfg) {
 
     const label = document.createElement("label");
 
-    label.className = "checkbox-item";
+    label.className = "checkbox-item chip-checkbox-label";
 
     const input = document.createElement("input");
 
@@ -495,9 +542,9 @@ function renderConfigOptions(cfg) {
 
     label.appendChild(input);
 
-    const displayTask = TASK_NAMES[t] || t;
+    const tDisp = TASK_NAMES[t] || t;
 
-    label.appendChild(document.createTextNode(" " + displayTask));
+    label.appendChild(document.createTextNode(" " + tDisp));
 
     taskContainer.appendChild(label);
 
@@ -987,7 +1034,10 @@ function renderRecipientPolicy(recipientId) {
 
   const provEl = document.getElementById("recip-providers-desc");
 
-  if (provEl) provEl.textContent = detail.providers.join(", ") === "*" ? "全部模型供应商" : detail.providers.join(", ");
+  if (provEl) {
+    const provs = detail.providers || [];
+    provEl.textContent = provs.join(", ") === "*" ? "全部模型供应商" : provs.join(", ");
+  }
 
 
 
@@ -1017,7 +1067,10 @@ function renderRecipientPolicy(recipientId) {
 
   const metricsEl = document.getElementById("recip-metrics-desc");
 
-  if (metricsEl) metricsEl.textContent = detail.metrics.join(", ") === "*" ? "全部指标" : `${detail.metrics.length} 项标准指标`;
+  if (metricsEl) {
+    const mets = detail.metrics || [];
+    metricsEl.textContent = mets.join(", ") === "*" ? "全部指标" : `${mets.length} 项标准指标`;
+  }
 
 
 
@@ -1205,7 +1258,13 @@ async function refreshPrivacyStatus() {
 
     const fillEl = document.getElementById("budget-progress-fill");
 
-    fillEl.style.width = `${Math.min(100, data.spend_percentage)}%`;
+    const spendPct = Math.min(100, Math.max(0, data.spend_percentage || 0));
+
+    fillEl.style.width = `${spendPct}%`;
+
+    const pctLabel = document.getElementById("epoch-budget-percent-label");
+
+    if (pctLabel) pctLabel.textContent = `${spendPct.toFixed(1)}%`;
 
 
 
@@ -1414,18 +1473,19 @@ async function refreshReleaseHistory() {
         <td>${statusBadge}</td>
 
         <td>
-
-          <button class="btn-action-sm" onclick="downloadReleaseCsv('${r.release_id || r.release_key}', '${r.recipient}')">CSV</button>
-
-          <button class="btn-action-sm" onclick="downloadReleaseJson('${r.release_id || r.release_key}', '${r.recipient}')">JSON</button>
-
+          <button class="btn-action-sm" onclick="downloadReleaseCsv('${r.release_id || r.release_key}', '${r.recipient}')" title="直接下载 CSV 文件">CSV</button>
+          <button class="btn-action-sm" onclick="downloadReleaseJson('${r.release_id || r.release_key}', '${r.recipient}')" title="直接下载 JSON 文件">JSON</button>
+          <button class="btn-action-sm" style="margin-left: 4px; background: var(--bg-hover);" onclick="loadAndDisplayRelease('${r.release_id || r.release_key}', '${r.recipient}')" title="载入并在上方步骤 4 中展示">查看</button>
         </td>
-
       `;
 
       tbody.appendChild(tr);
-
     });
+
+    if (!lastReleaseData && releases.length > 0) {
+      const latest = releases[0];
+      loadAndDisplayRelease(latest.release_id || latest.release_key, latest.recipient);
+    }
 
   } catch (err) {
 
@@ -1502,37 +1562,34 @@ async function refreshContinualStatus() {
 function setupEventListeners() {
 
   // Demo Data Load
-
-  document.getElementById("btn-load-demo").addEventListener("click", async () => {
-
+  const btnLoadDemo = document.getElementById("btn-load-demo");
+  btnLoadDemo.addEventListener("click", async () => {
+    if (btnLoadDemo.disabled) return;
+    btnLoadDemo.disabled = true;
+    const origText = btnLoadDemo.textContent;
+    btnLoadDemo.textContent = "正在加载演示数据...";
+    showNotification("正在加载 300 万条演示遥测数据，请稍候...", "info");
     clearAlerts();
 
     try {
-
       const res = await fetch("/api/dataset/demo", { method: "POST" });
-
       if (!res.ok) throw await res.json();
-
       const data = await res.json();
 
       lastReleaseData = null;
-
       setDownloadButtonsEnabled(false);
-
-      const resContainer = document.getElementById("release-result-card");
-
+      const resContainer = document.getElementById("release-result-panel") || document.getElementById("release-result-card");
       if (resContainer) resContainer.style.display = "none";
 
       await refreshDatasetStatus();
-
-      showSuccess(`演示遥测数据已成功加载。共加载 ${data.rows.toLocaleString()} 条记录。`);
-
+      showSuccess(`演示遥测数据已成功加载。共加载 ${data.rows.toLocaleString()} 条记录（覆盖 ${data.active_users.toLocaleString()} 名活跃员工）。`);
+      showNotification("演示遥测数据加载完成！", "success");
     } catch (err) {
-
-      showError("加载演示数据失败：" + (err.error || err.detail || err));
-
+      showError("加载演示数据失败：" + (err.error || err.detail || err.message || err));
+    } finally {
+      btnLoadDemo.disabled = false;
+      btnLoadDemo.textContent = origText;
     }
-
   });
 
 
@@ -1708,14 +1765,15 @@ function setupEventListeners() {
 
 
   // Toggle Advanced Privacy Settings
-
-  document.getElementById("btn-toggle-advanced-privacy").addEventListener("click", () => {
-
-    const panel = document.getElementById("advanced-privacy-panel");
-
-    panel.style.display = panel.style.display === "none" ? "block" : "none";
-
-  });
+  const btnToggleAdv = document.getElementById("btn-toggle-advanced-privacy");
+  if (btnToggleAdv) {
+    btnToggleAdv.addEventListener("click", () => {
+      const panel = document.getElementById("advanced-privacy-panel");
+      if (panel) {
+        panel.style.display = panel.style.display === "none" ? "block" : "none";
+      }
+    });
+  }
 
 
 
@@ -1839,7 +1897,15 @@ function setupEventListeners() {
 
     clearAlerts();
 
-
+    const openConfirmBtn = document.getElementById("btn-open-confirm");
+    const confirmReleaseBtn = document.getElementById("btn-confirm-release");
+    if (openConfirmBtn) {
+      openConfirmBtn.disabled = true;
+      openConfirmBtn.textContent = "正在生成差分隐私结果...";
+    }
+    if (confirmReleaseBtn) {
+      confirmReleaseBtn.disabled = true;
+    }
 
     const metric = getSelectedMetric();
 
@@ -1943,12 +2009,20 @@ function setupEventListeners() {
 
       setDownloadButtonsEnabled(false);
 
-      const resContainer = document.getElementById("release-result-card");
+      const resContainer = document.getElementById("release-result-panel") || document.getElementById("release-result-card");
 
       if (resContainer) resContainer.style.display = "none";
 
       showError(translateError(err) || "差分隐私发布失败。");
 
+    } finally {
+      if (openConfirmBtn) {
+        openConfirmBtn.disabled = false;
+        openConfirmBtn.textContent = "生成差分隐私结果";
+      }
+      if (confirmReleaseBtn) {
+        confirmReleaseBtn.disabled = false;
+      }
     }
 
   });
@@ -2165,6 +2239,124 @@ function setupEventListeners() {
 
     });
 
+  }
+
+  // Radio Card click handling
+  function setupRadioCards() {
+    const radioItems = document.querySelectorAll(".business-radio-item");
+    radioItems.forEach((item) => {
+      item.addEventListener("click", (e) => {
+        const radio = item.querySelector("input[type='radio']");
+        if (radio && e.target !== radio) {
+          radio.checked = true;
+          radio.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+      });
+    });
+
+    document.querySelectorAll("input[name='metric-choice']").forEach((radio) => {
+      radio.addEventListener("change", () => {
+        document.querySelectorAll(".business-radio-item").forEach((card) => {
+          card.classList.remove("selected");
+        });
+        const parentCard = radio.closest(".business-radio-item");
+        if (parentCard) parentCard.classList.add("selected");
+        renderMechanismCard(getSelectedMetric());
+      });
+    });
+  }
+  setupRadioCards();
+
+  // Reset Demo Epoch Modal & Action
+  const btnResetEpoch = document.getElementById("btn-demo-reset-epoch");
+  if (btnResetEpoch) {
+    btnResetEpoch.addEventListener("click", () => {
+      document.getElementById("modal-demo-reset-epoch").classList.add("active");
+    });
+  }
+  const btnCancelResetEpoch = document.getElementById("btn-cancel-reset-epoch");
+  if (btnCancelResetEpoch) {
+    btnCancelResetEpoch.addEventListener("click", () => {
+      document.getElementById("modal-demo-reset-epoch").classList.remove("active");
+    });
+  }
+  const btnConfirmResetEpoch = document.getElementById("btn-confirm-reset-epoch");
+  if (btnConfirmResetEpoch) {
+    btnConfirmResetEpoch.addEventListener("click", async () => {
+      btnConfirmResetEpoch.disabled = true;
+      btnConfirmResetEpoch.textContent = "正在重置 Epoch...";
+      try {
+        const res = await fetch("/api/demo/reset-epoch", { method: "POST" });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || errData.error || `HTTP ${res.status}`);
+        }
+        document.getElementById("modal-demo-reset-epoch").classList.remove("active");
+        showSuccess("演示 Epoch 已重置：已清空当前 Epoch RDP、有效 ε、工作负载配额已用量与发布历史。");
+
+        const resPanel = document.getElementById("release-result-panel");
+        if (resPanel) resPanel.style.display = "none";
+        const evalPanel = document.getElementById("internal-accuracy-panel");
+        if (evalPanel) evalPanel.style.display = "none";
+
+        await Promise.all([
+          refreshDatasetStatus(),
+          refreshPrivacyStatus(),
+          refreshReleaseHistory(),
+        ]);
+      } catch (err) {
+        showError("重置演示 Epoch 失败：" + (err.message || err));
+      } finally {
+        btnConfirmResetEpoch.disabled = false;
+        btnConfirmResetEpoch.textContent = "确认重置当前 Epoch";
+      }
+    });
+  }
+
+  // Reset Demo All Modal & Action
+  const btnResetAll = document.getElementById("btn-demo-reset-all");
+  if (btnResetAll) {
+    btnResetAll.addEventListener("click", () => {
+      document.getElementById("modal-demo-reset-all").classList.add("active");
+    });
+  }
+  const btnCancelResetAll = document.getElementById("btn-cancel-reset-all");
+  if (btnCancelResetAll) {
+    btnCancelResetAll.addEventListener("click", () => {
+      document.getElementById("modal-demo-reset-all").classList.remove("active");
+    });
+  }
+  const btnConfirmResetAll = document.getElementById("btn-confirm-reset-all");
+  if (btnConfirmResetAll) {
+    btnConfirmResetAll.addEventListener("click", async () => {
+      btnConfirmResetAll.disabled = true;
+      btnConfirmResetAll.textContent = "正在恢复初始状态...";
+      try {
+        const res = await fetch("/api/demo/reset-all", { method: "POST" });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.detail || errData.error || `HTTP ${res.status}`);
+        }
+        document.getElementById("modal-demo-reset-all").classList.remove("active");
+        showSuccess("演示环境已恢复初始状态：清空所有 Epoch、Lifetime Exposure 归零、重新初始化 Demo 数据。");
+
+        const resPanel = document.getElementById("release-result-panel");
+        if (resPanel) resPanel.style.display = "none";
+        const evalPanel = document.getElementById("internal-accuracy-panel");
+        if (evalPanel) evalPanel.style.display = "none";
+
+        await Promise.all([
+          refreshDatasetStatus(),
+          refreshPrivacyStatus(),
+          refreshReleaseHistory(),
+        ]);
+      } catch (err) {
+        showError("恢复演示初始状态失败：" + (err.message || err));
+      } finally {
+        btnConfirmResetAll.disabled = false;
+        btnConfirmResetAll.textContent = "确认恢复初始状态";
+      }
+    });
   }
 
 
@@ -3330,18 +3522,43 @@ function renderContinualResult(data) {
 
 
 function downloadReleaseCsv(relId, recipient) {
-
-  triggerBlobDownload(`/api/release/download/csv?release_id=${encodeURIComponent(relId)}&recipient=${encodeURIComponent(recipient)}`, `private_llm_analytics_release_${relId}.csv`);
-
+  triggerBlobDownload(`/api/release/download/csv?release_id=${encodeURIComponent(relId)}&recipient=${encodeURIComponent(recipient || "internal")}`, `private_llm_analytics_release_${relId}.csv`);
 }
-
-
 
 function downloadReleaseJson(relId, recipient) {
-
-  triggerBlobDownload(`/api/release/download/json?release_id=${encodeURIComponent(relId)}&recipient=${encodeURIComponent(recipient)}`, `private_llm_analytics_release_${relId}.json`);
-
+  triggerBlobDownload(`/api/release/download/json?release_id=${encodeURIComponent(relId)}&recipient=${encodeURIComponent(recipient || "internal")}`, `private_llm_analytics_release_${relId}.json`);
 }
+
+async function loadAndDisplayRelease(relId, recipient) {
+  try {
+    showNotification("正在加载发布结果...", "info");
+    const resp = await fetch(`/api/release/download/json?release_id=${encodeURIComponent(relId)}&recipient=${encodeURIComponent(recipient || "internal")}`);
+    if (!resp.ok) {
+      let errMsg = `加载发布失败 (HTTP ${resp.status})`;
+      try {
+        const errJson = await resp.json();
+        errMsg = errJson.error || errJson.detail || errMsg;
+      } catch (_) {}
+      throw new Error(errMsg);
+    }
+    const data = await resp.json();
+    lastReleaseData = data;
+    setDownloadButtonsEnabled(true);
+    renderReleaseResult(data);
+    const panel = document.getElementById("release-result-panel");
+    if (panel) {
+      panel.style.display = "block";
+      panel.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    showNotification("已成功载入该历史发布结果，可直接下载 CSV / JSON。", "success");
+  } catch (err) {
+    showError("载入历史发布结果失败：" + (err.message || err));
+  }
+}
+
+window.downloadReleaseCsv = downloadReleaseCsv;
+window.downloadReleaseJson = downloadReleaseJson;
+window.loadAndDisplayRelease = loadAndDisplayRelease;
 
 
 
@@ -3461,15 +3678,21 @@ function showError(msg) {
 
   const container = document.getElementById("alert-container");
 
-  container.textContent = "";
+  if (container) {
 
-  const div = document.createElement("div");
+    container.textContent = "";
 
-  div.className = "alert alert-danger";
+    const div = document.createElement("div");
 
-  div.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+    div.className = "alert alert-danger";
 
-  container.appendChild(div);
+    div.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+
+    container.appendChild(div);
+
+  }
+
+  showToast(typeof msg === "string" ? msg : JSON.stringify(msg), "error");
 
 }
 
@@ -3479,15 +3702,21 @@ function showSuccess(msg) {
 
   const container = document.getElementById("alert-container");
 
-  container.textContent = "";
+  if (container) {
 
-  const div = document.createElement("div");
+    container.textContent = "";
 
-  div.className = "alert alert-success";
+    const div = document.createElement("div");
 
-  div.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+    div.className = "alert alert-success";
 
-  container.appendChild(div);
+    div.textContent = typeof msg === "string" ? msg : JSON.stringify(msg);
+
+    container.appendChild(div);
+
+  }
+
+  showToast(typeof msg === "string" ? msg : JSON.stringify(msg), "success");
 
 }
 

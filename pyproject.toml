@@ -54,3 +54,4 @@ private_llm_analytics = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+pythonpath = [".", "src"]

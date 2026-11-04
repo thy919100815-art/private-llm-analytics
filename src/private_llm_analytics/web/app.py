@@ -23,6 +23,7 @@ from private_llm_analytics.web.schemas import (
     ContinualQueryRequest,
     ContinualStatusResponse,
     DatasetStatusResponse,
+    DemoResetResponse,
     EpsilonSweepRequest,
     EpsilonSweepResponse,
     InputPreviewResponse,
@@ -218,6 +219,38 @@ def create_app(
     async def upload_dataset(file: UploadFile = File(...)):
         content = await file.read()
         return web_adapter.load_uploaded_data(filename=file.filename or "telemetry.csv", content=content)
+
+    # -------------------------------------------------------------
+    # Demo-only Control Routes (Strictly Forbidden in Production)
+    # -------------------------------------------------------------
+
+    @app.post("/api/demo/reset-epoch", response_model=DemoResetResponse)
+    async def reset_demo_epoch():
+        if not web_adapter.is_demo_mode():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Demo reset endpoints are strictly forbidden in production mode.",
+            )
+        try:
+            return web_adapter.reset_demo_epoch()
+        except RecipientSecurityViolation as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+    @app.post("/api/demo/reset-all", response_model=DemoResetResponse)
+    async def reset_demo_all():
+        if not web_adapter.is_demo_mode():
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Demo reset endpoints are strictly forbidden in production mode.",
+            )
+        try:
+            return web_adapter.reset_demo_all()
+        except RecipientSecurityViolation as e:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
     @app.get("/api/privacy/status", response_model=PrivacyStatusResponse)
     async def get_privacy_status(recipient: str = Query("provider_a")):

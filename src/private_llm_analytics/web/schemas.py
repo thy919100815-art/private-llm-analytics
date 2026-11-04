@@ -145,6 +145,14 @@ class ConfigResponse(BaseModel):
     recipient_details: Optional[List[Dict[str, Any]]] = None
     mechanism_cards: Optional[Dict[str, Any]] = None
     privacy_policy: Optional[Dict[str, Any]] = None
+    demo_mode: bool = False
+
+
+class DemoResetResponse(BaseModel):
+    success: bool
+    message: str
+    epoch_id: str
+    effective_epsilon: float
 
 
 class DatasetStatusResponse(BaseModel):

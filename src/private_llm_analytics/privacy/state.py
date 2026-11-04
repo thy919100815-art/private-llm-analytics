@@ -1076,7 +1076,18 @@ class PrivacyStateManager:
             )
             l_row = cursor.fetchone()
             if l_row is not None:
-                return dict(l_row)
+                d = dict(l_row)
+                if d.get("release_key"):
+                    cursor.execute(
+                        "SELECT * FROM release_store WHERE release_key = ? AND status = 'COMMITTED' LIMIT 1",
+                        (d["release_key"],),
+                    )
+                    s_row = cursor.fetchone()
+                    if s_row is not None:
+                        merged = dict(s_row)
+                        merged.update(d)
+                        return merged
+                return d
         return None
 
     def record_admin_policy_change(
@@ -1977,7 +1988,7 @@ class PrivacyStateManager:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
                 """,
                 (
-                    hit_id,
+                    release_id or hit_id,
                     now_iso,
                     release_result.metric_name,
                     recipient,
