@@ -3,7 +3,7 @@
 **状态**：全部实验完成（全链路复现验证完毕，第三版根据审阅意见完成通道解耦、真实敏感度建模、zCDP 参数校正、公开数据集评估与 10 天手工算例附录）  
 **作者**：研究工程师  
 **基准分支**：`sdg-mh-research`  
-**Git Commit**：`efc565f4aef1bd7556e3e3752d1a598d58fb1df8`  
+**Git Commit**：`ccb8ffd`  
 **创建日期**：2026-11-04  
 
 ---
@@ -119,7 +119,7 @@ SDG-MH 核心架构以独立扩展模块形式实现于 `src/private_llm_analyti
 - **操作系统**：Microsoft Windows 10 专业版 (Build 19045)，PowerShell。
 - **运行环境**：Python 3.14.0 (`.\.venv\Scripts\python.exe`)。
 - **核心依赖**：`numpy` 2.5.4, `scipy` 1.18.1, `pandas` 3.1.0, `matplotlib` 3.11.2, `pytest` 9.2.0, `pyarrow` 26.0.0。
-- **Git Commit**：`efc565f4aef1bd7556e3e3752d1a598d58fb1df8`（分支 `sdg-mh-research`）。
+- **Git Commit**：`ccb8ffd`（分支 `sdg-mh-research`）。
 - **随机种子**：全链路采用显式独立随机种子控制。
 
 ---
