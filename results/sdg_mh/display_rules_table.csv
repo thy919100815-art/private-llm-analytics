@@ -1,0 +1,6 @@
+horizon_days,requests_half_width,requests_ci_width,requests_relative_half_width_pct,requests_displayable,success_rate_ci_width,success_rate_displayable,suppression_reason
+1,4900.0,9800.0,36.6,False,0.2059,False,Volume relative half-width (36.6%) > 20%; Success rate CI width (0.2059) > 0.05
+7,12964.2,25928.4,13.8,True,0.0778,False,Success rate CI width (0.0778) > 0.05
+30,26838.4,53676.8,6.7,True,0.0376,True,None (Within threshold)
+90,46485.5,92971.0,3.9,True,0.0217,True,None (Within threshold)
+365,93614.4,187228.7,1.9,True,0.0108,True,None (Within threshold)

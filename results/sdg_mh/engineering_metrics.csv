@@ -1,0 +1,12 @@
+metric_category,metric_name,value,unit
+SealJob Latency,p50 (Median),2.632,ms
+SealJob Latency,p99,3.891,ms
+SealJob Latency,Mean,2.659,ms
+SealJob Latency,Daily Sealing Ingestion Rate,5047045.2,events/sec
+Storage Footprint,SealedStore Annual Disk Footprint,84.07,KB/year
+Storage Footprint,CalendarStore Annual Disk Footprint,69.57,KB/year
+Storage Footprint,Total Annual Storage Consumption,153.65,KB/year
+Query Latency,p50 (Median),0.008,ms
+Query Latency,p99,0.017,ms
+Query Latency,Mean,0.008,ms
+Query Privacy Spend,Query Time Differential Privacy Cost,0.0,eps

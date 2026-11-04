@@ -1,0 +1,2 @@
+n_sampled_configs,violations_of_lower_bound,configs_more_accurate_than_sdg_any_window,configs_more_accurate_than_sdg_all_windows,audit_passed
+300,0,0,0,True
