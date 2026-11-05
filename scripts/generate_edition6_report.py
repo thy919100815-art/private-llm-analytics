@@ -67,7 +67,7 @@ def main():
 **状态**：全部实验完成（第六版终版交付：忠实 Kellaris et al. 2014 最坏情形单调剖面与校准、主实验数据 W-BA 轨迹核验、看板工作负载 1,000 次 Monte Carlo 端到端误差与截断偏差合成、Tree-2l / Tree-sqrt 口径 b 独立倍率修正、WildChat 845 天全量双口径评测与 NAT 偏差说明、GH Archive 经验 99% 分位数 $C=10.0$ 校准、RQ2 纯解析 RMSE 规范、脚本原生字符串 LaTeX 零吞噬、数据指纹与清单前尾核验）  
 **作者**：研究工程师  
 **基准分支**：`sdg-mh-research`  
-**Git Commit**：`{GIT_COMMIT_HASH}`  
+**Git Commit**：`480ce9f`  
 **交付日期**：2026-11-05  
 
 ---
