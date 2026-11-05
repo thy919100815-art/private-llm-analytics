@@ -58,29 +58,34 @@ epoch90_unscaled = {
     365: target_rho_30_add,
 }
 
-# W-BD w=7, 30: faithful daily release (Kellaris et al., PVLDB 2014)
-# User-level daily clipping C: user active on h days participates in h independent releases
-# rho(h) = h * rho_daily
-wbd7_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
-wbd30_unscaled = {h: h * (target_rho_30_add / 30.0) for h in HORIZONS}
+# W-BD w=7, 30: faithful budget distribution worst-case profile (Kellaris et al., PVLDB 2014)
+# In any interval of length h <= w, publication budget sum is at most 0.5 * rho_w * (1 - 2^-h)
+# Dissimilarity budget is h * rho_w / (2*w)
+# For h > w, rho(h) = q * rho_w + rho(r) where q = h // w, r = h % w
+target_rho_7_add = target_rho_30_add * (7.0 / 30.0)
 
-# W-BA w=7, 30: faithful budget absorption (Kellaris et al., PVLDB 2014)
-# Derived directly from 30-day empirical release trajectory (wba_30day_trajectory.csv):
-# Test budget alpha = 0.2, absorption pool saves release budget on stable days
-wba7_unscaled = {
-    1: 0.00024163,
-    7: 0.00205387,
-    30: 0.00875919,
-    90: 0.00875919 * 3.0,
-    365: 0.00875919 * (365.0 / 30.0),
-}
-wba30_unscaled = {
-    1: 0.00024163,
-    7: 0.00205387,
-    30: 0.00875919,
-    90: 0.00875919 * 3.0,
-    365: 0.00875919 * (365.0 / 30.0),
-}
+def get_bd_worst_case_profile(w: int, rho_w: float) -> dict:
+    prof = {}
+    for h in HORIZONS:
+        q = h // w
+        r = h % w
+        base_h = rho_w * (r / (2.0 * w) + 0.5 * (1.0 - 2.0**(-r))) if r > 0 else 0.0
+        prof[h] = q * rho_w + base_h
+    return prof
+
+def get_ba_worst_case_profile(w: int, rho_w: float) -> dict:
+    prof = {}
+    for h in HORIZONS:
+        q = h // w
+        r = h % w
+        base_h = rho_w * ((w + r) / (2.0 * w)) if r > 0 else 0.0
+        prof[h] = q * rho_w + base_h
+    return prof
+
+wbd7_unscaled = get_bd_worst_case_profile(7, target_rho_7_add)
+wbd30_unscaled = get_bd_worst_case_profile(30, target_rho_30_add)
+wba7_unscaled = get_ba_worst_case_profile(7, target_rho_7_add)
+wba30_unscaled = get_ba_worst_case_profile(30, target_rho_30_add)
 
 # Tree variants: exact worst-case rho(h) from Fisher information matrix M = A^T Sigma^-1 A
 from private_llm_analytics.sdg_mh.baselines import TreeBaseline

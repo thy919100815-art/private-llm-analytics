@@ -225,19 +225,32 @@ class LifetimeDecayBaseline(BaseDPBaseline):
 
 
 class WEventBaseline(BaseDPBaseline):
-    """w-event Differential Privacy (Kellaris et al., VLDB 2014).
+    """w-event Differential Privacy (Kellaris et al., PVLDB 2014).
 
     Implements:
-    - W-BD: Budget Distribution across sliding window of length w.
-    - W-BA: Budget Absorption using similarity thresholding.
+    - W-BD: Budget Distribution across sliding window of length w (Section 4.2, Figure 2).
+      * Private dissimilarity check M_{i,1} using fixed budget rho_test = rho_w / (2*w).
+      * Remaining publication budget rho_rm = rho_w / 2 - sum_{k=i-w+1}^{i-1} rho_{k,2}.
+      * When publishing, allocates half of remaining publication budget: rho_{i,2} = rho_rm / 2.
+      * When skipping, rho_{i,2} = 0, reuses previous release.
+      * Budgets falling out of active window [i-w+1, i] are naturally recycled.
+    - W-BA: Budget Absorption using similarity thresholding (Section 4.3, Figure 4).
+      * Private dissimilarity check M_{i,1} using fixed budget rho_test = rho_w / (2*w).
+      * Base publication budget rho_base = rho_w / (2*w).
+      * Nullification: If a previous release absorbed budget, to_nullify = round(rho_{l,2} / rho_base) - 1.
+        The next to_nullify timestamps are forced null (rho_{i,2} = 0, cannot be absorbed).
+      * Absorption: For un-nullified timestamps, to_absorb = i - (l + to_nullify).
+        Can absorb at most w budgets: rho_{i,2} = rho_base * min(to_absorb, w) <= rho_w / 2.
+      * If dis > threshold, publish with rho_{i,2} and set to_nullify for subsequent timestamps.
+      * Else return null, allowing this timestamp to be absorbed later.
     """
 
     def __init__(
         self,
         w: int = 30,
-        mode: str = "BD",  # 'BD' or 'BA'
-        target_rho_w: float = 0.10,
-        C: float = 50.0,
+        mode: str = "BA",  # 'BD' or 'BA'
+        target_rho_w: float = 0.0090615,
+        C: float = 104.0,
         delta: float = 1e-6,
     ):
         self.w = int(w)
@@ -248,19 +261,19 @@ class WEventBaseline(BaseDPBaseline):
         self.delta = float(delta)
         self.ledger = UnifiedPrivacyLedger(delta=self.delta)
 
-        # In W-BD: each day in window w gets rho_single = target_rho_w / w
-        self.rho_daily = self.target_rho_w / float(self.w)
-        self.sigma_daily = self.C / math.sqrt(2.0 * self.rho_daily)
-
-        # For W-BA: test budget fraction alpha (default 0.2 per Kellaris et al. 2014), remainder for release
-        self.alpha_test = 0.2
-        self.rho_test = self.rho_daily * self.alpha_test
-        self.rho_release_base = self.rho_daily * (1.0 - self.alpha_test)
+        # In Kellaris et al., half of total window budget is for dissimilarity testing M_{i,1}
+        # and half is for publication M_{i,2}
+        self.rho_test = self.target_rho_w / (2.0 * float(self.w))
         self.sigma_test = self.C / math.sqrt(2.0 * self.rho_test)
 
+        self.rho_pub_max = self.target_rho_w / 2.0
+        self.rho_base = self.target_rho_w / (2.0 * float(self.w))
+
+        # State tracking
         self._last_released_value: Optional[float] = None
         self._last_released_day: Optional[int] = None
-        self._absorption_pool: float = 0.0
+        self._last_released_rho: float = 0.0
+        self._pub_budgets_history: Dict[int, float] = {}
 
     def release_day(
         self,
@@ -269,59 +282,111 @@ class WEventBaseline(BaseDPBaseline):
         rng: Optional[np.random.Generator] = None,
         seed: Optional[int] = None,
     ) -> float:
-        """Execute daily release at day t under W-BD or faithful W-BA (Kellaris et al., PVLDB 2014)."""
+        """Execute daily release at day t under faithful W-BD or W-BA (Kellaris et al., PVLDB 2014)."""
         if rng is None:
             rng = np.random.default_rng(seed)
 
-        if self.mode == "BD":
-            # Budget distribution: release every day with sigma_daily
-            noisy_val = true_value + rng.normal(0.0, self.sigma_daily)
+        # First day initialization: must publish with initial budget
+        if self._last_released_value is None:
+            if self.mode == "BD":
+                # BD initial publication takes half of available publication budget: (rho_w / 2) / 2 = rho_w / 4
+                rho_rel = self.rho_pub_max / 2.0
+            else:
+                # BA initial publication takes base publication budget
+                rho_rel = self.rho_base
+
+            sig_rel = self.C / math.sqrt(2.0 * rho_rel)
+            noisy_val = float(true_value + rng.normal(0.0, sig_rel))
+
             self.ledger.record_gaussian_release(
-                release_id=f"wbd_{self.w}_day_{day}",
+                release_id=f"{self.mode.lower()}_{self.w}_rel_day_{day}",
                 days_accessed=[day],
                 sensitivity=self.C,
-                sigma=self.sigma_daily,
-                tag="wbd_release",
+                sigma=sig_rel,
+                tag=f"{self.mode.lower()}_initial_release",
             )
             self._last_released_value = noisy_val
+            self._last_released_day = day
+            self._last_released_rho = rho_rel
+            self._pub_budgets_history[day] = rho_rel
             return noisy_val
 
-        # Mode BA: Budget absorption (Kellaris et al., PVLDB 2014 Section 4.2)
-        # Similarity check with previous release
-        if self._last_released_value is not None:
-            # Similarity test consumes rho_test
-            self.ledger.record_gaussian_release(
-                release_id=f"wba_{self.w}_test_day_{day}",
-                days_accessed=[day],
-                sensitivity=self.C,
-                sigma=self.sigma_test,
-                tag="wba_similarity_test",
-            )
-            diff = abs(true_value - self._last_released_value)
-            noisy_diff = diff + rng.normal(0.0, self.sigma_test)
-            threshold = 2.0 * self.sigma_test
-
-            if noisy_diff < threshold:
-                # Absorb: reuse last released value and accumulate unused release budget into pool
-                self._absorption_pool += self.rho_release_base
-                return self._last_released_value
-
-        # Fresh release using base release budget plus accumulated absorption pool
-        effective_rho_rel = self.rho_release_base + self._absorption_pool
-        self._absorption_pool = 0.0  # Reset pool after release
-        sig_rel = self.C / math.sqrt(2.0 * effective_rho_rel)
-
-        noisy_val = true_value + rng.normal(0.0, sig_rel)
+        # Sub-mechanism M_{i,1}: Private dissimilarity computation (always consumes rho_test)
         self.ledger.record_gaussian_release(
-            release_id=f"wba_{self.w}_rel_day_{day}",
+            release_id=f"{self.mode.lower()}_{self.w}_test_day_{day}",
             days_accessed=[day],
             sensitivity=self.C,
-            sigma=sig_rel,
-            tag="wba_release",
+            sigma=self.sigma_test,
+            tag=f"{self.mode.lower()}_similarity_test",
         )
-        self._last_released_value = noisy_val
-        self._last_released_day = day
-        return noisy_val
+        diff = abs(true_value - self._last_released_value)
+        noisy_diff = diff + float(rng.normal(0.0, self.sigma_test))
+
+        if self.mode == "BD":
+            # W-BD: Calculate remaining publication budget in active window [day - w + 1, day - 1]
+            window_start = day - self.w + 1
+            used_pub_in_window = sum(
+                rho for d, rho in self._pub_budgets_history.items()
+                if window_start <= d < day
+            )
+            rho_rm = max(1e-12, self.rho_pub_max - used_pub_in_window)
+            rho_candidate = rho_rm / 2.0
+            sig_candidate = self.C / math.sqrt(2.0 * rho_candidate)
+
+            # Similarity check: if difference > expected noise scale (sig_candidate), publish
+            if noisy_diff > sig_candidate:
+                sig_rel = sig_candidate
+                noisy_val = float(true_value + rng.normal(0.0, sig_rel))
+                self.ledger.record_gaussian_release(
+                    release_id=f"wbd_{self.w}_rel_day_{day}",
+                    days_accessed=[day],
+                    sensitivity=self.C,
+                    sigma=sig_rel,
+                    tag="wbd_release",
+                )
+                self._last_released_value = noisy_val
+                self._last_released_day = day
+                self._last_released_rho = rho_candidate
+                self._pub_budgets_history[day] = rho_candidate
+                return noisy_val
+            else:
+                # Approximate with last release, spend 0 publication budget
+                self._pub_budgets_history[day] = 0.0
+                return self._last_released_value
+
+        else:
+            # W-BA: Budget Absorption (Figure 4 in Kellaris et al.)
+            # Check nullification from previous release
+            to_nullify = max(0, int(round(self._last_released_rho / self.rho_base)) - 1)
+            nullify_until = (self._last_released_day or 0) + to_nullify
+
+            if day <= nullify_until:
+                # Output is forced null due to nullification rule
+                return self._last_released_value
+
+            # Calculate absorbable skipped timestamps since end of nullification period
+            to_absorb = day - nullify_until
+            num_absorbed = min(to_absorb, self.w)
+            rho_candidate = self.rho_base * float(num_absorbed)
+            sig_candidate = self.C / math.sqrt(2.0 * rho_candidate)
+
+            if noisy_diff > sig_candidate:
+                sig_rel = sig_candidate
+                noisy_val = float(true_value + rng.normal(0.0, sig_rel))
+                self.ledger.record_gaussian_release(
+                    release_id=f"wba_{self.w}_rel_day_{day}",
+                    days_accessed=[day],
+                    sensitivity=self.C,
+                    sigma=sig_rel,
+                    tag="wba_release",
+                )
+                self._last_released_value = noisy_val
+                self._last_released_day = day
+                self._last_released_rho = rho_candidate
+                return noisy_val
+            else:
+                # Approximate with last release
+                return self._last_released_value
 
 
 class TreeBaseline(BaseDPBaseline):
