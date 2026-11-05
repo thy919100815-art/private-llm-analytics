@@ -169,47 +169,12 @@ def main():
             var_factor = (C_r**2 * math.pi**2) / (12.0 * rho_max_add)
             decay_rmse_analytical = beta_decay * math.sqrt(var_factor * sum_t_sq)
 
-            # Ground truth 30-day clipped volume under 99% quantile bounds (C_r=104.0)
-            # From rq1_clipping_statistics: 30d raw requests = 476,863.0, daily clipped = 462,352.0
-            expected_30d_volume = 462352.0
-
-            trial_sdg_noises = []
-            trial_decay_noises = []
-            trial_sdg_clipped_errs = []
-            trial_decay_clipped_errs = []
-
-            for trial in range(n_trials):
-                seed = 200000 + int(rate * 1000) + year * 73 + trial * 17
-
-                # Sample Discrete Gaussian noise
-                noise_sdg = sample_discrete_gaussian(sdg_rmse_analytical, seed=seed)
-                noise_decay = sample_discrete_gaussian(decay_rmse_analytical, seed=seed + 1)
-
-                trial_sdg_noises.append(noise_sdg)
-                trial_decay_noises.append(noise_decay)
-
-                est_sdg = max(0.0, expected_30d_volume + noise_sdg)
-                est_decay = max(0.0, expected_30d_volume + noise_decay)
-
-                trial_sdg_clipped_errs.append(abs(est_sdg - expected_30d_volume) / expected_30d_volume)
-                trial_decay_clipped_errs.append(abs(est_decay - expected_30d_volume) / expected_30d_volume)
-
             results_rows.append({
                 "year": year,
                 "turnover_rate": f"{rate_pct}%",
                 "sdg_rmse_analytical": round(sdg_rmse_analytical, 1),
                 "decay_rmse_analytical": round(decay_rmse_analytical, 1),
                 "analytical_rmse_ratio": round(decay_rmse_analytical / sdg_rmse_analytical, 2),
-                # Clipped MAPE metrics (30 MC trials)
-                "sdg_mape_mean": float(np.mean(trial_sdg_clipped_errs)),
-                "sdg_mape_std": float(np.std(trial_sdg_clipped_errs)),
-                "sdg_mape_median": float(np.median(trial_sdg_clipped_errs)),
-                "sdg_mape_p95": float(np.percentile(trial_sdg_clipped_errs, 95)),
-                "decay_mape_mean": float(np.mean(trial_decay_clipped_errs)),
-                "decay_mape_std": float(np.std(trial_decay_clipped_errs)),
-                "decay_mape_median": float(np.median(trial_decay_clipped_errs)),
-                "decay_mape_p95": float(np.percentile(trial_decay_clipped_errs, 95)),
-                "decay_to_sdg_mape_ratio": float(np.mean(trial_decay_clipped_errs) / np.mean(trial_sdg_clipped_errs)),
             })
 
     df_rq2 = pd.DataFrame(results_rows)
@@ -247,7 +212,7 @@ def main():
 
     print(f"RQ2 completed successfully in {time.time() - t_start:.2f}s!")
     print("=" * 80)
-    cols_to_print = ["year", "sdg_rmse_analytical", "decay_rmse_analytical", "analytical_rmse_ratio", "sdg_mape_mean", "decay_mape_mean", "decay_to_sdg_mape_ratio"]
+    cols_to_print = ["year", "turnover_rate", "sdg_rmse_analytical", "decay_rmse_analytical", "analytical_rmse_ratio"]
     print(default_res[cols_to_print].to_string(index=False))
 
 
