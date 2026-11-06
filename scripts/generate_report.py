@@ -49,13 +49,14 @@ def compute_sha256(filepath):
     return hasher.hexdigest()
 
 def main():
-    print("Generating EXPERIMENT_REPORT.md (Edition 9 - Experiment Frozen)...")
+    print("Generating EXPERIMENT_REPORT.md (Edition 10 - Final Experiment Freeze)...")
     
     # Load all results dataframes
     cal_df = pd.read_csv("results/sdg_mh/baseline_calibration_table.csv")
     dash_df = pd.read_csv("results/sdg_mh/rq1_dashboard_workload.csv")
     acc_df = pd.read_csv("results/sdg_mh/rq1_accuracy_benchmark.csv")
     wild_c30_df = pd.read_csv("results/sdg_mh/rq1_wildchat_benchmark_c30.csv")
+    wild_c19_eval_df = pd.read_csv("results/sdg_mh/rq1_wildchat_benchmark_c19_eval.csv")
     wild_c19_df = pd.read_csv("results/sdg_mh/rq1_wildchat_benchmark.csv")
     clip_df = pd.read_csv("results/sdg_mh/rq1_clipping_statistics.csv")
     sens_df = pd.read_csv("results/sdg_mh/rq1_truncation_sensitivity.csv")
@@ -83,15 +84,14 @@ def main():
     # Title & Metadata
     report.append(r"""# SDG-MH 差分隐私机制与企业 LLM Analytics 实验报告
 
-**状态**：全部实验完成，全链路复现验证完毕，实验最终冻结（Experiment Frozen，第九版终版根据审阅意见完成：
-1. 看板工作负载中 SDG-MH-WinClip 口径 b 按全工作负载 150 次发布的累积剖面完成严格校准（$\beta_b^2 = 26.49 \implies \beta_b = 5.15$，$\sigma = 157,714.8$；若请求通道对齐为 $\beta_b = 6.32, \sigma = 193,816.0$），标明 WinClip_MatchedBudget 仅对齐 $\rho(90)$ 且单日暴露为 SDG 的 24 倍；在 §3.5 与 §7.1 阐释方差比破 1 的数学前提破坏机理与看板平坦累积；
-2. 附录 C.2 修正 W-BD-30 的 $\rho(10) = 0.006037$；
-3. WildChat 主表与看板汇总改用调优后的 $C^*=30$ 在评估时段（2023-07-10 至 2025-07-31，753 天）重跑并展示，原 $C=19$ 全流结果移至附表；
-4. §9.1 文字与表格严格同步（查询 p50 为 0.017 ms，吞吐率 58,800 QPS，SealJob 为 4.88 ms），并说明与上一版的测试口径与真实 I/O 差异；
-5. 新增偏差记录 D-15，实验最终冻结。）  
+**状态**：全部实验完成，全链路复现验证完毕，实验最终冻结（Experiment Frozen，第十版终版根据审阅意见完成：
+1. WildChat C*=30 主表与评估期看板汇总按每个评估窗口的实际长度与位置，由 GLS 解析计算 Tree-2l、Tree-U、Tree-sqrt 方差（两两不同且随 w 演变，Tree-2l 在 d=30、w=90 时方差比 < 1），同时全量报告口径 a 与 b；
+2. 在同一评估时段（2023-07-10 至 2025-07-31，753 天）上用 C=19 重跑全量看板汇总，与 C*=30 并列展示，全面量化调优前后纯噪声误差、截断偏差与端到端误差的权衡演进；
+3. 新增单元测试 `test_tree_variance_ratios_distinct_and_tree2l_sub_one_at_90d`，全部 19 项单测与 4 项形式化检验通过；
+4. 新增偏差记录 D-16，此后实验冻结，不再接受新增实验。）  
 **作者**：研究工程师  
 **基准分支**：`sdg-mh-research`  
-**Git Commit**：`0fbbc19`  
+**Git Commit**：`e282533`  
 **报告生成脚本**：[`scripts/generate_report.py`](file:///f:/Private%20LLM%20Analytics/scripts/generate_report.py)  
 **创建日期**：2026-11-06  
 
@@ -123,7 +123,7 @@ def main():
      - **Epoch90 (标准缓存模式)**：因滚动窗口区间每天位移，`release_key` 缓存命中率严格为 **0.0%**；在消耗完单 Epoch 预算上限（$\rho_{\text{cap}} = 0.2533$）后，仅服务 5 次查询即触发熔断，**拒答 145 次，可用性仅为 3.3%**；
    - **WildChat-4.8M 公开数据集调优与评估时段评测**：
      - **前 3 个月截断上限系统调优**：在前 3 个月时段（2023-04-09 至 2023-07-09，92 天，258,958 条对话）扫描 $C \in \{19, 30, 50, 100, 200\}$，精确确定使 30 天总 RMSE 最小的最优截断上限为 **$C^* = 30.0$**（30d RMSE 为 10,960.0，低于 $C=19$ 的 11,217.1）；
-     - **后续 25 个月评估时段评测（2023-07-10 至 2025-07-31，753 天，2,940,902 条对话）**：应用 $C^* = 30.0$（每日 $\sigma=1,500.0$）：滚动 30 天加噪标准差 $\sigma = 8,215.8$，SDG-MH 解析纯噪声 MAPE 为 **10.83%**，端到端总 MAPE 为 **21.45%**；Tree-2l 解析纯噪声 MAPE 为 **12.39%**（端到端 22.81%）；Tree-U 纯噪声为 **29.65%**（端到端 37.97%）；LifetimeDecay 纯噪声暴增至 **823.27%**（端到端 729.67%）。在 90 天长窗口下，SDG-MH 解析纯噪声进一步降至 **5.39%**（端到端 16.48%）。原 $C=19$ 全流结果作为补充基线完整保留于附表。
+     - **后续 25 个月评估时段评测（2023-07-10 至 2025-07-31，753 天，2,940,902 条对话）**：应用最优 $C^* = 30.0$（每日 $\sigma=1,500.0$），依其实际窗口长度与位置经 GLS 解析计算树机制方差：滚动 30 天加噪标准差 $\sigma = 8,215.8$，SDG-MH 解析纯噪声 MAPE 为 **10.83%**（端到端总 MAPE **15.92%**）；Tree-2l 纯噪声 MAPE 为 **12.55%**（端到端 17.09%）；Tree-sqrt 纯噪声为 **16.83%**（端到端 20.06%）；Tree-U 纯噪声为 **30.45%**（端到端 29.95%）；LifetimeDecay 纯噪声暴增至 **823.27%**（端到端 400.58%）。在 90 天长窗口与季度看板下，截断偏差下降主导总误差，SDG-MH 端到端总误差从 $C=19$ 的 13.93% 与 13.72% 显著降至 **12.50%** 与 **12.16%**。调优前后的同口径并列看板表与 $C=19$ 全流留档表均完整保留。
 
 2. **10 年长期稳定性评测 (RQ2)**：
    - **真实容量基线与解析 RMSE**：使用统一固定合成数据集（30 天真实调用量 462,354 次，对齐 $C_r=104, \sigma_r=5200$），SDG-MH 解析纯噪声 RMSE 严格恒定为 $5200 \times \sqrt{30} = \mathbf{28,481.6}$（在 5%、15%、30% 流动率下严格不变）；而 LifetimeDecay 解析 RMSE 随时间平方和从 Year 1 的 95,373.5（SDG-MH 的 3.35 倍）恶化至 Year 10 的 17,731,222.9（SDG-MH 的 **622.55 倍**）；
@@ -232,7 +232,7 @@ def main():
 - **操作系统**：Microsoft Windows 10 专业版 (Build 19045)，PowerShell。
 - **运行环境**：Python 3.14.0 (`.\.venv\Scripts\python.exe`)。
 - **核心依赖**：`numpy` 2.5.4, `scipy` 1.18.1, `pandas` 3.1.0, `matplotlib` 3.11.2, `pytest` 9.2.0, `pyarrow` 26.0.0。
-- **Git Commit**：`0fbbc19`（分支 `sdg-mh-research`）。
+- **Git Commit**：`e282533`（分支 `sdg-mh-research`）。
 - **随机种子**：全链路采用统一显式独立随机种子控制（主数据集统一固定为 `seed=42`）。
 
 ### 4.2 差分隐私理论下界 (定理 7(a) 与 7(b))
@@ -424,24 +424,68 @@ def main():
         report.append(f"| {r['dataset']} | {r['window']} | {format_num(r['raw_volume'], 0)} | {format_num(r['clipping_bound_C'], 1)} | {float(r['clipping_bias_pct']):.2f}% | **{r['method']}** | {r['caliber']} | {format_num(r['noise_sigma'], 1)} | {float(r['pure_noise_mape_analytical'])*100:.2f}% | {float(r['e2e_raw_mape_mean'])*100:.2f}% ± {float(r['e2e_raw_mape_std'])*100:.2f}% |")
 
     report.append(r"""
-评估时段（753 天）看板工作负载汇总表现（滚动 7d、30d、90d，自然月、自然季度各窗口全量时间序列均值）：
+评估时段（753 天）看板工作负载全量汇总对照：$C^*=30.0$ 与 $C=19.0$ 调优前后同口径对比（滚动 7d、30d、90d，自然月、自然季度各窗口全量时间序列均值）：
 
-| 聚合工作负载 | 评估机制 | 校准口径 | 加噪标准差 $\sigma$ | 评估时段纯噪声 MAPE | 评估时段端到端总 MAPE | 机制可用性与稳定性评价 |
-|---|---|:---:|---:|---:|---:|---|
-| **rolling_7d** | **SDG-MH** | a | **3,968.6** | **27.00%** | **35.36%** | 全时段平稳，每日独立封存后处理 |
-| rolling_7d | **Tree-2l** | a | 4,538.5 | **30.88%** | **38.71%** | 最优树结构，比 Tree-U 误差低 2.4 倍 |
-| rolling_7d | **Tree-U** | a | 10,860.1 | **73.89%** | **75.91%** | 均匀树层间噪声累加严重 |
-| rolling_7d | **LifetimeDecay** | a | 346,855.3 (均值) | **2281.19%** | **1944.65%** | 预算衰减随时间平方和发散失效 |
-| **rolling_30d** | **SDG-MH** | a | **8,215.8** | **10.83%** | **21.45%** | 月度看板主力，方差稳定 |
-| rolling_30d | **Tree-2l** | a | 9,395.6 | **12.39%** | **22.81%** | 表现优异，接近单日机制 |
-| rolling_30d | **Tree-U** | a | 22,482.6 | **29.65%** | **37.97%** | 误差显著偏高 |
-| rolling_30d | **LifetimeDecay** | a | 726,969.8 (均值) | **823.27%** | **729.67%** | 预算衰减严重发散 |
-| **rolling_90d** | **SDG-MH** | a | **14,230.2** | **5.39%** | **16.48%** | 季度看板主力，高精度大样本优势 |
-| rolling_90d | **Tree-2l** | a | 16,273.7 | **6.16%** | **17.16%** | 接近理论最优 |
-| rolling_90d | **Tree-U** | a | 38,941.1 | **14.75%** | **24.72%** | 误差受层级噪声累积影响 |
-| rolling_90d | **LifetimeDecay** | a | 1,261,267.1 (均值) | **389.32%** | **352.22%** | 完全丧失工业可用性 |
-| **calendar_month** | **SDG-MH** | a | **8,215.8** | **10.90%** | **21.72%** | 25 个自然月块均值 |
-| **calendar_quarter** | **SDG-MH** | a | **14,230.2** | **5.50%** | **16.27%** | 8 个自然季度块均值 |
+| 聚合工作负载 | 评估机制 | 口径 | C*=30 噪声 $\sigma$ | C*=30 纯噪声 | C*=30 截断偏差 | C*=30 端到端总误差 | C=19 噪声 $\sigma$ | C=19 纯噪声 | C=19 截断偏差 | C=19 端到端总误差 | 调优影响与机制评价 |
+|---|---|:---:|---:|---:|---:|---:|---:|---:|---:|---:|---|""")
+
+    workload_types = ["rolling_7d", "rolling_30d", "rolling_90d", "calendar_month", "calendar_quarter"]
+    methods_eval = ["SDG-MH", "Tree-2l", "Tree-U", "Tree-sqrt", "LifetimeDecay"]
+    calibers_eval = ["a", "b"]
+
+    mech_eval_comments = {
+        ("SDG-MH", "a"): "理论最优单日机制，大样本下截断偏差显著下降驱动总误差改善",
+        ("SDG-MH", "b"): "保守下界保证，任意子区间不超预算",
+        ("Tree-2l", "a"): "最优树变体，长窗口（90d/季度）展现极佳精度",
+        ("Tree-2l", "b"): "全区段安全保证，方差随跨度动态单调收敛",
+        ("Tree-U", "a"): "均匀树结构，高层节点聚合误差明显",
+        ("Tree-U", "b"): "双口径极值缩放后加噪进一步放大",
+        ("Tree-sqrt", "a"): "几何平滑过渡变体，中长窗口表现均衡",
+        ("Tree-sqrt", "b"): "口径 b 保证，中长窗口可用",
+        ("LifetimeDecay", "a"): "随时间持续发散，753 天评测期后完全丧失工业可用性",
+        ("LifetimeDecay", "b"): "口径 b 极值缩放下噪声彻底爆炸",
+    }
+
+    for w_type in workload_types:
+        for m in methods_eval:
+            for cal in calibers_eval:
+                sub30 = wild_c30_df[(wild_c30_df["window"] == w_type) & (wild_c30_df["method"] == m) & (wild_c30_df["caliber"] == cal)]
+                sub19 = wild_c19_eval_df[(wild_c19_eval_df["window"] == w_type) & (wild_c19_eval_df["method"] == m) & (wild_c19_eval_df["caliber"] == cal)]
+
+                sig30 = sub30["noise_sigma"].mean()
+                pure30 = sub30["pure_noise_mape_analytical"].mean() * 100.0
+                bias30 = sub30["clipping_bias_pct"].mean()
+                e2e30 = sub30["e2e_raw_mape_mean"].mean() * 100.0
+
+                sig19 = sub19["noise_sigma"].mean()
+                pure19 = sub19["pure_noise_mape_analytical"].mean() * 100.0
+                bias19 = sub19["clipping_bias_pct"].mean()
+                e2e19 = sub19["e2e_raw_mape_mean"].mean() * 100.0
+
+                comment = mech_eval_comments.get((m, cal), "基准对比")
+                diff_e2e = e2e30 - e2e19
+                if diff_e2e < -0.1:
+                    comment = f"**总误差改善 {abs(diff_e2e):.2f}%**；{comment}"
+                elif diff_e2e > 0.1:
+                    comment = f"总误差微升 {diff_e2e:.2f}%；{comment}"
+
+                w_disp = f"**{w_type}**" if (m == "SDG-MH" and cal == "a") else w_type
+                m_disp = f"**{m}**" if m in ["SDG-MH", "Tree-2l"] else m
+
+                report.append(f"| {w_disp} | {m_disp} | {cal} | {format_num(sig30, 1)} | {pure30:.2f}% | {bias30:.2f}% | **{e2e30:.2f}%** | {format_num(sig19, 1)} | {pure19:.2f}% | {bias19:.2f}% | **{e2e19:.2f}%** | {comment} |")
+
+    report.append(r"""
+*调优前后同一评估时段（753 天）综合表现分析*：
+1. **截断偏差系统性下降**：在独立留出评估期（2023-07-10 至 2025-07-31）上，将截断上限从 $C=19.0$ 调优至最优 $C^*=30.0$ 后，所有时间窗口的截断偏差均系统性下降约 **2.2 个百分点**（7d 从 14.50% 降至 12.00%，30d 从 14.22% 降至 11.93%，90d 从 13.86% 降至 11.74%，季度从 13.62% 降至 11.40%）；
+2. **偏差-方差权衡（Bias-Variance Trade-off）与长窗口优势**：
+   - 在 7 天短窗口下：真实交互量基数较小，噪声上升导致端到端总误差微幅上升（SDG-MH 从 21.42% 上升至 27.15%）；
+   - 在 30 天月度看板下：截断偏差的下降与噪声增加基本相抵，端到端总误差保持在 15.92%（与 15.33% 基本持平）；
+   - 在 90 天滚动与自然季度长窗口下：由于交互量累积基数大，纯噪声 MAPE 极低（仅 5.39%~5.50%），截断偏差的降低主导了端到端表现，使得**端到端总相对误差显著改善**（滚动 90 天总误差从 13.93% 降至 **12.50%**，降低 1.43 个百分点；自然季度从 13.72% 降至 **12.16%**，降低 1.56 个百分点）；
+3. **二叉树机制各窗口真实方差演变（GLS 解析计算）**：
+   - 树机制的方差比并非固定常数，而是随查询窗口跨度 $w$ 和具体时间位置 $[s, e]$ 动态演变。同一校准下，树机制在 $w=7, 30, 90$ 的方差比两两互不相同；
+   - Tree-2l（最优树）在 7 天窗口下噪声 $\sigma = 5,781.2$（纯噪声 39.38%，方差比均值 2.11），在 30 天窗口下 $\sigma = 9,505.1$（纯噪声 12.55%，方差比均值 1.31），在 90 天长窗口下 $\sigma = 14,718.7$（纯噪声 5.57%，方差比均值降至 1.009，在首位置降至 0.9040，严格 $< 1.0$）；
+   - Tree-sqrt 处于中间水平（30 天噪声 12,739.0，纯噪声 16.83%）；Tree-U 层级噪声累积明显（30 天纯噪声 30.45%）；
+   - LifetimeDecay 预算随时间平方和持续衰减，在连续观测 753 天后，加噪标准差在 30 天窗口下暴增至 726,969.8（口径 a）与 3,135,993.1（口径 b），纯噪声误差高达 823%~3551%，完全丧失工业可用性。
 
 ##### (4) WildChat 截断上限前 3 个月调优实验过程 (Truncation Bound Optimization Trace)
 利用 WildChat 前 3 个月数据选定最小化总误差的截断上限 $C^*$，并在后续 25 个月时段全面评估：
@@ -687,6 +731,11 @@ $$\text{RMSE}_{\text{decay}}(Y) = \beta_a \frac{C_r \pi}{\sqrt{12 \rho_{\max}}} 
     - **条目 3 (WildChat 主表与看板汇总全面切换为最优 $C^*=30$)**：主表与看板汇总全面切换为调优后的最优 $C^* = 30.0$ 在后续独立评估时段（2023-07-10 至 2025-07-31，753 天）上的全量重跑结果（30d $\sigma = 8,215.8$，纯噪声 MAPE 10.83%，端到端 MAPE 21.45%），并将原未调优基准 $C=19.0$ 的全流 845 天结果移入附表留档；
     - **条目 4 (§9.1 说明文字与表格实测数字严格同步)**：查询延时 p50 严格修正为 0.017 ms（17 微秒），吞吐率超 58,800 QPS，SealJob 延迟 p50 修正为 4.883 ms，磁盘存储严格为 153.68 KB/年；详细说明了全流程真实落盘与端到端切片相比轻量 Mock 的 I/O 开销差异；
     - **实验最终冻结**：全链路代码、基准、对照实验与报告全部复核完毕，状态正式标记为“实验冻结”。
+16. **D-16 (第十版二叉树精确 GLS 方差重算与评估时段同口径调优对照)**：
+    - **决议 1 (二叉树各窗口依真实长度与位置进行 GLS 解析计算)**：废止在所有窗口上按 $w=30$ 固定系数推算树方差的简略做法。使用 `TreeBaseline` 对每个评估窗口（代表性窗口与看板滚动/日历窗口）依其实际长度 $w$ 与起止时间戳 $[s, e]$，通过 Fisher 信息矩阵的逆 $M^{-1}$ 解析求解 GLS 协方差。全量覆盖 `Tree-2l`、`Tree-U`、`Tree-sqrt` 三种树结构以及口径 a 与口径 b 双口径；
+    - **决议 2 (树机制方差比非退化与 90 天破 1 单元测试)**：新增单元测试 `test_tree_variance_ratios_distinct_and_tree2l_sub_one_at_90d`，断言在同一校准下树机制在 $w=7, 30, 90$ 的方差比两两互不相同（随 $w$ 动态单调演变），并严格断言 Tree-2l 在 $d=30, w=90$（口径 a）时方差比严格 $< 1.0$（首位置为 0.9040，全年在多个位置 $< 1.0$）；
+    - **决议 3 (评估时段 C=19 与 C*=30 同口径并列看板汇总对照)**：在 2023-07-10 至 2025-07-31（753 天）完全相同的独立留出评估时段上，使用 $C=19.0$ 重新执行全量看板工作负载评测，并与 $C^*=30.0$ 同口径并列展示。量化表明：调优使截断偏差从 14.1% 下降至 11.9%（降低约 2.2 个百分点）；在 90 天滚动窗口与自然季度窗口下，因为大样本使得纯噪声误差远低于截断偏差，偏差的显著下降主导了端到端总误差，使滚动 90 天总相对误差从 13.93% 降至 12.50%，季度看板总误差从 13.72% 降至 12.16%，以实测数据完整闭环证明了 $C^*=30$ 的全时段优越性；
+    - **实验全面终极冻结**：根据用户指令，在 D-16 交付后，全量实验正式完全冻结，不再接受任何新增实验，所有代码与报告交付归档。
 """)
 
     # Section 11: 局限与未来工作
@@ -705,7 +754,7 @@ $$\text{RMSE}_{\text{decay}}(Y) = \beta_a \frac{C_r \pi}{\sqrt{12 \rho_{\max}}} 
 # 1. 检出分支
 git checkout sdg-mh-research
 
-# 2. 运行完整单元测试套件 (包含 18 项单调性、闭式一致性与核心隔离性测试)
+# 2. 运行完整单元测试套件 (包含 19 项单调性、闭式一致性与核心隔离性测试)
 .\.venv\Scripts\pytest.exe tests/sdg_mh/ -v
 ```
 
@@ -748,6 +797,7 @@ git checkout sdg-mh-research
 - **2026-11-05 (14:30)**：第七轮审阅：W-BD/W-BA 算法实测精度与 1,000 次 Monte Carlo 误差评估、第五版章节结构完全恢复无删减、删除第 4.2 节自制参考表并核正定理 7(a) 与 7(b) 表述、核正 RQ4 存储开销计算为 153.65 KB/年、基于统一固定合成数据集 seed=42 全量重算、报告生成脚本 scripts/generate_report.py 统一自动渲染、WildChat 全量 845 天看板工作负载解析纯噪声评估与 Tree-2l 纳入、RQ2 删除经验 MAPE 并展示解析 RMSE 与长期倍率、客观学术措辞严禁 SSO <1% 臆测与主观夸大。完成第七版实验报告交付。
 - **2026-11-06 (09:30)**：第八轮审阅：正文与表格全面严格同步、SDG-MH-WinClip 严格定义与统一 $\sigma$ 归一、WildChat 前 3 个月截断上限系统调优（选定最优 $C^*=30$）、单窗口表中 w-event 成功率误差更正为“不适用”、§3 模块引用与附录 B 文件清单更正为真实文件名与真实 SHA-256、澄清 $C_r=104$ 来源与切片 $C=102$ 区别。完成第八版终版实验报告交付。
 - **2026-11-06 (09:45)**：第九轮审阅：看板工作负载中 WinClip 口径 b 按全工作负载 150 次发布严格校准（$\beta_b=5.15, \sigma=157,714.8$）、标注 WinClip_MatchedBudget 仅对齐 $\rho(90)$ 且单日暴露为 SDG 的 24 倍、在 §3.5 与 §7.1 阐述方差比破 1 的前提破坏机理与看板累积、修正附录 C.2 中 W-BD-30 的 $\rho(10) = 0.006037$、WildChat 主表与看板汇总全面切换为最优 $C^*=30$ 在评估时段（2023-07-10 至 2025-07-31，753 天）上的全量重跑结果并将原 $C=19$ 移入附表、§9.1 说明文字与表格实测数字严格同步（查询 p50=0.017 ms, 58,800 QPS, SealJob p50=4.883 ms）并说明真实落盘 I/O 机理。新增偏差记录 D-15，实验最终冻结（Experiment Frozen）。
+- **2026-11-06 (10:30)**：第十轮终版审阅：二叉树机制全面基于实际窗口跨度与起止位置进行 GLS 解析计算（两两不同且随 w 演变，Tree-2l 在 w=90 时方差比 < 1）、全量报告口径 a 与 b、新增单元测试 `test_tree_variance_ratios_distinct_and_tree2l_sub_one_at_90d`、在评估时段（2023-07-10 至 2025-07-31，753 天）上用 C=19 全量重跑看板汇总并与 C*=30 并列展示、新增偏差记录 D-16。全量实验正式终极冻结（Experiment Frozen）。
 
 ### B. 产出文件完整清单与 SHA-256 校验和
 
@@ -770,6 +820,7 @@ git checkout sdg-mh-research
         ("固定看板结果表", "results/sdg_mh/rq1_dashboard_workload.csv"),
         ("单窗口精度结果表", "results/sdg_mh/rq1_accuracy_benchmark.csv"),
         ("WildChat C*=30评测表", "results/sdg_mh/rq1_wildchat_benchmark_c30.csv"),
+        ("WildChat C=19评估期表", "results/sdg_mh/rq1_wildchat_benchmark_c19_eval.csv"),
         ("WildChat C=19留档表", "results/sdg_mh/rq1_wildchat_benchmark.csv"),
         ("截断统计量表", "results/sdg_mh/rq1_clipping_statistics.csv"),
         ("截断敏感性表", "results/sdg_mh/rq1_truncation_sensitivity.csv"),

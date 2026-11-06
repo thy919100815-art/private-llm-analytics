@@ -213,3 +213,40 @@ def test_empirical_rmse_matches_analytical_within_3pct():
     )
 
 
+def test_tree_variance_ratios_distinct_and_tree2l_sub_one_at_90d():
+    """Verify that under calibration (d=30, Caliber a), tree mechanisms' variance ratios
+    at w=7, 30, 90 are pairwise distinct, and Tree-2l at d=30, w=90 (Caliber a) has variance ratio < 1."""
+    from private_llm_analytics.sdg_mh.baselines import TreeBaseline
+
+    C = 104.0
+    T = 365
+    for variant in ["Tree-2l", "Tree-U", "Tree-sqrt"]:
+        tree = TreeBaseline(variant=variant, T=T, L=9, C=C)
+        rho_term_30 = tree.get_worst_case_rho_term(30)
+
+        # Variance ratios across w=7, 30, 90
+        ratios = {}
+        for w in [7, 30, 90]:
+            base_vars = [tree.get_window_variance(s + 1, s + w) for s in range(0, T - w + 1)]
+            mean_base_var = float(np.mean(base_vars))
+            ratios[w] = (rho_term_30 / 30.0) * mean_base_var / w
+
+        # Must be pairwise distinct
+        assert abs(ratios[7] - ratios[30]) > 0.1, f"[{variant}] w=7 ({ratios[7]}) and w=30 ({ratios[30]}) not distinct"
+        assert abs(ratios[30] - ratios[90]) > 0.1, f"[{variant}] w=30 ({ratios[30]}) and w=90 ({ratios[90]}) not distinct"
+        assert abs(ratios[7] - ratios[90]) > 0.1, f"[{variant}] w=7 ({ratios[7]}) and w=90 ({ratios[90]}) not distinct"
+
+    # Specific requirement: Tree-2l at d=30, w=90 (Caliber a) has variance ratio < 1
+    tree_2l = TreeBaseline(variant="Tree-2l", T=T, L=9, C=C)
+    rho_term_30_2l = tree_2l.get_worst_case_rho_term(30)
+    pos0_var = tree_2l.get_window_variance(1, 90)
+    pos0_ratio = (rho_term_30_2l / 30.0) * pos0_var / 90.0
+    assert pos0_ratio < 1.0, f"Tree-2l pos0 variance ratio {pos0_ratio:.4f} must be < 1.0"
+
+    # Also verify start positions with ratio < 1 exist across the year
+    base_vars_90 = [tree_2l.get_window_variance(s + 1, s + 90) for s in range(0, T - 90 + 1)]
+    sub_one_count = sum(1 for v in base_vars_90 if (rho_term_30_2l / 30.0) * v / 90.0 < 1.0)
+    assert sub_one_count > 0, "Tree-2l at w=90 must have start positions with variance ratio < 1"
+
+
+
