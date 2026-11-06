@@ -8,7 +8,7 @@
 5. 新增偏差记录 D-15，实验最终冻结。）  
 **作者**：研究工程师  
 **基准分支**：`sdg-mh-research`  
-**Git Commit**：`a2ba842`  
+**Git Commit**：`0fbbc19`  
 **报告生成脚本**：[`scripts/generate_report.py`](file:///f:/Private%20LLM%20Analytics/scripts/generate_report.py)  
 **创建日期**：2026-11-06  
 
@@ -242,7 +242,7 @@ class WEventBaseline(BaseDPBaseline):
 - **操作系统**：Microsoft Windows 10 专业版 (Build 19045)，PowerShell。
 - **运行环境**：Python 3.14.0 (`.\.venv\Scripts\python.exe`)。
 - **核心依赖**：`numpy` 2.5.4, `scipy` 1.18.1, `pandas` 3.1.0, `matplotlib` 3.11.2, `pytest` 9.2.0, `pyarrow` 26.0.0。
-- **Git Commit**：`a2ba842`（分支 `sdg-mh-research`）。
+- **Git Commit**：`0fbbc19`（分支 `sdg-mh-research`）。
 - **随机种子**：全链路采用统一显式独立随机种子控制（主数据集统一固定为 `seed=42`）。
 
 ### 4.2 差分隐私理论下界 (定理 7(a) 与 7(b))
