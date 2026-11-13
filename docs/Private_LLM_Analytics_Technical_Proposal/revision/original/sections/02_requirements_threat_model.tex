@@ -1,0 +1,109 @@
+\section{需求分析与威胁模型}
+\label{sec:threat_model}
+
+\subsection{数据来源与遥测日志特征}
+系统处理的核心数据源为企业大模型网关沉淀的交互遥测记录。每条记录代表一次原子化的用户与大模型的交互会话，具备以下数据模式特征：
+\begin{equation}
+  r = (\texttt{interaction\_id}, \texttt{user\_id}, \texttt{timestamp}, \texttt{provider}, \texttt{task}, \texttt{success})
+\end{equation}
+在企业实际环境中，遥测日志呈现出显著的\textbf{用户异质性（User Heterogeneity）}与\textbf{长尾分布（Heavy-tailed Distribution）}：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{重度调用者（Power Users）：} 处于研发核心岗位的员工可能通过自动化脚本或频繁的代码补全插件，在单个工作日内发起数百乃至上千次调用。
+  \item \textbf{轻度与偶发调用者（Casual Users）：} 部分职能部门员工可能在整月周期内仅发起个位数的长文本摘要或咨询交互。
+  \item \textbf{专长偏好分化（Persona Bias）：} 员工在任务类型与模型供应商的选择上具备高度稳定的个人习惯（例如某些工程师固定偏好 DeepSeek 解决算法题目，而文档专员固定使用 Kimi 处理会议纪要）。
+\end{itemize}
+
+\subsection{统计对象与多维空间划分}
+系统将统计分析的目标域形式化为二维笛卡尔积空间：
+\begin{equation}
+  \mathcal{C} = \mathcal{P} \times \mathcal{T} = \{ (\text{prov}_p, \text{task}_t) \mid p \in \{1, \dots, P\}, \, t \in \{1, \dots, T\} \}
+\end{equation}
+统计单元总数记为 $D = |\mathcal{C}| = P \times T$。所有发布的统计指标均在该 $D$ 维离散单元网格上定义。
+
+\subsection{隐私保护对象与保护粒度}
+在隐私保护的粒度选择上，差分隐私存在“记录级”（Record-Level）与“用户级”（User-Level）两种不同的邻接关系定义：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{记录级保护对高频用户的保障局限：} 记录级邻接关系仅约束相邻数据集相差“单条调用记录”。根据群隐私性质（Group Privacy）~\cite{dwork2014algorithmic}，当将记录级差分隐私扩展至一个在观测周期内包含 $k$ 条交互记录的员工个体时，其用户级保护界会随记录数 $k$ 显著恶化（隐私损失参数放大约至 $k\varepsilon$；而在近似差分隐私下，$\delta$ 项也会放大至约 $k e^{(k-1)\varepsilon} \delta$）。对于拥有高频交互特征的企业员工，记录级差分隐私无法提供具有实用意义的用户级保护界。
+  \item \textbf{用户级邻接关系的直接采用：} 本系统直接确立\textbf{用户级邻接关系（User-Level Adjacency）}，将隐私保护的原子单位定义为单个自然人员工在整个观测窗口内的完整行为轨迹，确保隐私保证与单用户的交互调用次数解耦。
+\end{itemize}
+
+\begin{definitionbox}{用户级差分隐私 (User-Level Differential Privacy)}
+设 $\mathcal{M}$ 为一个随机化发布算法。若对于任意两个在观测时间窗口内相差某个特定员工 $u^*$ 全部调用记录的邻近数据集 $D, D'$（即 $D \sim D'$），以及算法输出空间中的任意可测子集 $\mathcal{S}$，均满足：
+\begin{equation}
+  \Pr[\mathcal{M}(D) \in \mathcal{S}] \le e^\varepsilon \Pr[\mathcal{M}(D') \in \mathcal{S}] + \delta
+\end{equation}
+则称算法 $\mathcal{M}$ 满足用户级 $(\varepsilon, \delta)$-差分隐私。
+\end{definitionbox}
+
+该数学保证向员工提供了明确的隐私底线：无论外部实体具备何种分析能力，观测到发布结果的概率分布对于“该员工是否使用大模型”或“该员工全部使用轨迹的存在与否”保持极高程度的平滑稳定性。
+
+\subsection{外部接收方威胁模型与能力假设}
+系统面向的潜在威胁实体包括外部模型供应商、第三方合作机构，以及通过公开或半公开渠道截获统计报表的潜在恶意观测者。系统对威胁模型做出如下界定：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{半诚实与恶意外部接收方：} 接收方在遵守基本协议规范的同时，会利用自身算力与数学工具，极尽所能从接收到的统计报告中挖掘企业核心成员的行为特征与组织架构信息。
+  \item \textbf{任意外部背景知识（Arbitrary Auxiliary Information）：} 依据差分隐私的严密理论基础~\cite{dwork2006calibrating}，假设攻击者掌握除目标被保护数据之外的一切辅助信息（例如员工在社交平台公开的代码提交记录、离职变动公示、外部公开的技术博客等）。差分隐私在此类强假设下依然保持稳健。
+  \item \textbf{任意后处理能力（Post-Processing Immunity）：} 接收方可对发布结果应用任何确定性或随机化的后续统计变换、机器学习建模或数值反演算法。根据差分隐私后处理定理，此类操作绝不可能凭空削弱已成立的隐私保证。
+\end{enumerate}
+
+\subsection{外部合谋假设与作用域隔离}
+在多供应商共存的商业生态中，不能简单假定各供应商之间彼此信息绝缘。系统引入了审慎的\textbf{全局外泄合谋假设（Collusion Assumption）}：
+\begin{techbox}{全局外部合谋假设 (Global External Collusion Assumption)}
+系统默认假设所有外部模型供应商（如 OpenAI、Kimi、DeepSeek 等）可能在离线环境下共享其收到的企业统计报表，或被同一外部第三方咨询/评测机构集中获取。因此，系统将所有属于不可信外部范畴的接收方统一绑定至同一个全局隐私预算作用域（\texttt{GLOBAL\_EXTERNAL}）。任何外部接收方发起的新发布均累积计入该共享作用域的终身消耗。
+\end{techbox}
+
+对于企业内部经过严格鉴权的高信任治理团队（\texttt{internal}），由于其肩负算法效能审计与真实效用评测职责，系统为其开辟独立的内部预算作用域，与外部暴露严格解耦。
+
+\subsection{系统信任边界 (Trust Boundary)}
+系统采用经典的\textbf{可信数据保管者模型（Trusted Curator Model）}。系统的信任边界划定如图~\ref{fig:trust_boundary} 所示：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{可信边界内部（Trusted Computing Boundary）：} 企业私有部署的遥测日志数据库、数据预聚合引擎、贡献限制算子、噪声采样器、RDP 记账账本与状态持久化引擎。该区域受企业信任边界保护，实施严格的网络隔离与访问控制。
+  \item \textbf{不可信外部边界（Untrusted Consumers）：} 外部模型供应商 API 回传接口、公开 CSV/JSON 报表下载端点以及面向非特权租户的展示界面。此区域仅允许流经差分隐私扰动后的数值产品。
+\end{itemize}
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.9, every node/.style={scale=0.9},
+  box/.style={draw=navyblue, fill=lightbg, rounded corners=3pt, thick, align=center, minimum height=1cm, inner sep=6pt},
+  trust/.style={draw=accentgreen, fill=accentgreen!5, rounded corners=6pt, dashed, thick},
+  untrust/.style={draw=accentamber, fill=accentamber!5, rounded corners=6pt, dashed, thick},
+  arrow/.style={-{Latex[length=3mm]}, thick, color=navyblue}
+]
+
+  % 可信区
+  \node[box, text width=3cm] (raw) at (0, 0) {企业明细遥测日志\\(\texttt{Raw Telemetry})};
+  \node[box, text width=3.2cm] (curator) at (4.5, 0) {可信隐私计算核心\\(Clipping + DP Noise)};
+  \node[box, text width=3cm] (ledger) at (4.5, -2.5) {全生命周期账本\\(\texttt{RDP Ledger})};
+
+  % 边界外
+  \node[box, text width=3.2cm] (release) at (9.5, 0) {发布与导出接口\\(DP Estimates)};
+  \node[box, text width=2.8cm, fill=white] (extA) at (14, 1.2) {OpenAI\\(不可信接收方)};
+  \node[box, text width=2.8cm, fill=white] (extB) at (14, 0) {Kimi\\(不可信接收方)};
+  \node[box, text width=2.8cm, fill=white] (extC) at (14, -1.2) {DeepSeek\\(不可信接收方)};
+
+  % 连线
+  \draw[arrow] (raw) -- (curator);
+  \draw[arrow] (curator) -- (ledger);
+  \draw[arrow] (curator) -- node[above]{\small 仅限DP发布值} (release);
+  \draw[arrow] (release) -- (extA);
+  \draw[arrow] (release) -- (extB);
+  \draw[arrow] (release) -- (extC);
+
+  % 信任区域框
+  \begin{scope}[on background layer]
+    \node[trust, fit=(raw) (curator) (ledger), label={[accentgreen, font=\bfseries]above:企业可信安全计算边界 (Trusted Curator Boundary)}] {};
+    \node[untrust, fit=(release) (extA) (extB) (extC), label={[accentamber, font=\bfseries]above:不可信外部暴露域 (Untrusted External Domain)}] {};
+  \end{scope}
+
+\end{tikzpicture}
+\caption{系统信任边界与数据流转拓扑示意图}
+\label{fig:trust_boundary}
+\end{figure}
+
+\subsection{系统非保护目标与技术边界澄清}
+为了在学术、合规及架构评审中确立严谨的技术预期，明确系统\textbf{不保护}的内容：
+\begin{enumerate}[label=(\arabic*), leftmargin=2em]
+  \item \textbf{宏观总体统计事实（Macro Population Properties）：} 差分隐私旨在掩盖个体存在性与微观贡献，但\textbf{其数学设计的本义就是要忠实反映宏观群体规律}。例如，“全公司整体有 90\% 的员工积极使用了大模型”属于宏观统计属性，系统将准确发布这一事实，该宏观事实不属于差分隐私保护的个体隐私范畴。
+  \item \textbf{替代身份认证与网络访问控制：} 差分隐私是针对统计发布与数据分析的数学扰动机制，绝非替代网络防火墙、传输层加密（TLS）或细粒度角色访问控制（RBAC）的工具。
+  \item \textbf{抗侧信道硬件泄露：} 假定底层计算硬件与操作系统满足标准的内存与计算隔离安全假设，非硬件侧信道攻击防护方案。
+\end{enumerate}

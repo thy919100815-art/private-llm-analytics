@@ -1,0 +1,72 @@
+\section{全生命周期隐私记账与发布控制机制}
+\label{sec:accounting_release}
+
+\subsection{Rényi 差分隐私 (RDP) 理论体系与紧致组合}
+在企业实际运维中，统计发布是一项跨越数周乃至数月的长周期操作。根据差分隐私的基本组合定理，多次释放的 $\varepsilon$ 呈线性简单累加，会导致隐私预算迅速耗尽。为此，系统采用 Mironov (2017) 提出的 \textbf{Rényi 差分隐私（Rényi Differential Privacy, RDP）}~\cite{mironov2017renyi} 作为底层核心记账引擎。
+
+\begin{definitionbox}{Rényi 差分隐私 (RDP)}
+对于阶数 $\alpha > 1$，设两个概率分布 $P, Q$ 在同一支集上的 Rényi 散度定义为 $D_\alpha(P \parallel Q) = \frac{1}{\alpha - 1} \ln \int P(x)^\alpha Q(x)^{1-\alpha} dx$。若随机化机制 $\mathcal{M}$ 满足对于任意邻近数据集 $D \sim D'$：
+\begin{equation}
+  D_\alpha\left(\mathcal{M}(D) \,\parallel\, \mathcal{M}(D')\right) \le \rho(\alpha)
+\end{equation}
+则称机制 $\mathcal{M}$ 满足 $(\alpha, \rho(\alpha))$-RDP。
+\end{definitionbox}
+
+高斯机制在 RDP 框架下具备解析封闭的散度表达式。对于标准差为 $\sigma$、全局 $L_2$ 敏感度为 $\Delta_2$ 的单次高斯释放，其在任意阶数 $\alpha$ 上的 RDP 消耗量为：
+\begin{equation}
+  \label{eq:rdp_cost}
+  \rho(\alpha) = \frac{\alpha \Delta_2^2}{2 \sigma^2}
+\end{equation}
+RDP 最大的理论与工程优势在于其在独立组合下的\textbf{严格线性可加性}：设系统先后执行了 $m$ 次具有不同敏感度与噪声标度的高斯发布，则系统在阶数 $\alpha$ 上的全生命周期累积隐私损失为单次损失的直接求和：
+\begin{equation}
+  \rho_{\text{life}}(\alpha) = \sum_{i=1}^m \rho_i(\alpha) = \sum_{i=1}^m \frac{\alpha \Delta_{2, i}^2}{2 \sigma_i^2}
+\end{equation}
+当需要向业务层或审计合规方呈现可保证的 $(\varepsilon, \delta)$ 状态时，系统遍历标准离散阶数集合 $\mathcal{A} = [1.25, 1.5, 2.0, 3.0, 4.0, 5.0, 8.0, 10.0, 16.0, 32.0, 64.0, 128.0]$，在预设离散 RDP 阶数集合上最小化标准 RDP-to-DP 上界：
+\begin{equation}
+  \label{eq:rdp_conversion}
+  \varepsilon_{\text{life}}(\delta) = \min_{\alpha \in \mathcal{A}} \left[ \rho_{\text{life}}(\alpha) + \frac{\ln(1/\delta)}{\alpha - 1} \right]
+\end{equation}
+这是合法的保守上界，不等价于对所有连续 $\alpha>1$ 求全局最优，也不代表精确隐私损失。零成本空历史按代码返回 $0$；非空历史采用上述离散网格。RDP 组合的效用收益取决于发布参数。
+
+\subsection{全生命周期隐私预算硬控制 (Lifetime Budget Cap)}
+企业必须防范内部发布频次失控导致的隐私保证实质性失效。系统确立了“全生命周期终身隐私预算”（Lifetime Privacy Budget）控制规范：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{政策配置上限 ($\varepsilon_{\text{cap}}$)：} 管理层或数据安全团队根据法规要求配置终身预算硬上限（系统默认 $\varepsilon_{\text{cap}} = 4.0, \, \delta_{\text{global}} = 10^{-6}$）。
+  \item \textbf{状态持久化原则（Persistent State）：} 历史发布的 RDP 账本存储于持久化、事务一致的生命周期隐私账本中；正常服务重启、系统升级或前端刷新不会自动重置历史状态。
+  \item \textbf{原子比较与预留（Atomic Compare-and-Reserve）：} 在每次发起实际计算与加噪之前，记账引擎首先模拟计算若本次发布提交后，转换得到的全生命周期 $\varepsilon_{\text{projected}}(\delta_{\text{global}})$。若满足：
+    \begin{equation}
+      \varepsilon_{\text{projected}}(\delta_{\text{global}}) > \varepsilon_{\text{cap}}
+    \end{equation}
+    系统抛出 \texttt{PrivacyBudgetExceededError} 并拒绝本次发布。
+\end{enumerate}
+
+\subsection{接收方作用域敏感组合 (Recipient-Aware Composition)}
+针对多模型供应商协同反馈场景，若将所有外部接收方与内部审计视同单一主体，会导致内部高频评测迅速消耗外部共享预算；反之，若为每个外部供应商分配完全独立的无限预算，则在供应商合谋时将引发隐私防线的被击穿。系统研发了\textbf{接收方作用域敏感记账体系}，支持三种核心管理范式：
+\begin{itemize}[leftmargin=2em]
+  \item \texttt{GLOBAL\_}\allowbreak\texttt{EXTERNAL}（默认外部模式）：所有不可信外部供应商（OpenAI、Kimi、DeepSeek）共享同一账本作用域 $\mathcal{S}_{\text{ext}}$。任何向供应商 A 的发布，其隐私成本均在供应商 B 的可用预算中扣减，以对该组全部已计费发布的联合可见信息进行组合约束。
+  \item \texttt{PER\_RECIPIENT}：在确立了严格商业互信且拥有相互审计与防泄密法律契约的特定实体之间，启用独立账本记账。
+  \item \texttt{COLLUSION\_GROUP}：显式定义指定合谋组（Collusion Group），组内实体预算互通，组间相互隔离。
+\end{itemize}
+
+\subsection{规范发布与幂等重放机制 (Canonical Release \& Replay)}
+\paragraph{均值恢复攻击风险：}
+若外部接收方对完全相同的统计问题（例如连续多次查询“上月 OpenAI 编程任务成功率”）重复发起请求，且系统在每次请求时均独立采样高斯噪声返回，攻击者只需发起 $K$ 次查询并取均值：
+\begin{equation}
+  \bar{Y} = \frac{1}{K} \sum_{k=1}^K \left( f(D) + Z_k \right) = f(D) + \frac{1}{K} \sum_{k=1}^K Z_k \sim \mathcal{N}\left(f(D), \, \frac{\sigma^2}{K} \mathbf{I}\right)
+\end{equation}
+当 $K \to \infty$ 时，噪声方差以 $O(1/K)$ 速率衰减，差分隐私提供的稳定性保障显著削弱。
+
+\paragraph{规范语义哈希与零成本重放：}
+为了有效防范该特定攻击路径，系统引入了\textbf{规范发布引擎（Canonical Release Engine）}。当前代码对规范 JSON 字典计算 SHA-256；下式概括其已绑定字段，$h_{\text{profile}}$ 表示现有 Profile 指纹：
+\begin{equation}
+  \begin{split}
+  \text{ReleaseKey}=\text{SHA256}\big(\operatorname{CanonicalJSON}(&\text{dataset},\text{window},\text{metric},\mathcal S_{\text{scope}},\varepsilon,\delta,\\
+  &C,C_{\text{rate}},k,N_{\text{public}},h_{\text{profile}},\text{versions},\ldots)\big).
+  \end{split}
+\end{equation}
+查询执行时遵循如图~\ref{fig:flowchart} 所示的状态检查逻辑：
+\begin{itemize}[leftmargin=2em]
+  \item 若 \texttt{ReleaseKey} 在持久化发布库中已存在对应已提交（COMMITTED）记录，系统直接提取已有发布结果返回，标记 \texttt{cache\_hit = True}，且本次请求的\textbf{净增隐私成本恒为零 ($\Delta\text{RDP} = 0$)}；
+  \item 首次获准提交的静态发布使用由操作系统熵初始化的统计 RNG 进行高斯采样并持久化，不据此声明密码学安全性。
+\end{itemize}
+对同一已提交对象的重放不提供独立噪声样本，因而不增加预算。当前键还绑定机制/校准版本、贡献模式、人口模式、供应商/任务标签等，但未完整绑定运行时的 $\tau$、Top-K 的 $K$ 与参与上限，以及独立 taxonomy 版本号。本次变参检查发现这些配置可变化而键不变；现有 Profile 指纹不足以填补此缺口。\textbf{REMAINING LIMITATION：}应以实际生效参数构造 \texttt{mechanism\_config\_hash}，纳入完整 contribution、后处理、taxonomy 版本和组合策略；实现前不能宣称跨配置重放正确。

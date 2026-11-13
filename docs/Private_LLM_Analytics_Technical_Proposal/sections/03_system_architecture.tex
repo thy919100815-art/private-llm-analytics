@@ -1,0 +1,102 @@
+\section{系统架构设计}
+\label{sec:system_architecture}
+
+\subsection{五层总体架构体系}
+为确保系统在企业级环境下的稳定性、可扩展性与数学严密性，\textbf{\mbox{Private LLM Analytics}} 采用了分工明确、松耦合的五层架构体系。架构层级如图~\ref{fig:system_architecture} 所示。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.88, every node/.style={scale=0.88},
+  layerbox/.style={draw=navyblue, fill=lightbg, rounded corners=4pt, thick, inner sep=6pt, text width=14.8cm},
+  subbox/.style={draw=slateblue, fill=white, rounded corners=2pt, font=\small, align=center, inner sep=3pt, minimum height=0.75cm},
+  arrow/.style={-{Latex[length=2.5mm]}, thick, color=navyblue}
+]
+
+  % Layer 1: Ingestion
+  \node[layerbox] (L1) at (0, 0) {
+    \textbf{\color{navyblue} 1. 数据接入层 (Data Ingestion Layer)}\\[3pt]
+    \centering
+    \begin{tikzpicture}
+      \node[subbox, text width=4.5cm] at (0,0) {日志模式与字段类型校验};
+      \node[subbox, text width=4.5cm] at (4.9,0) {全数据流式 SHA-256 指纹};
+      \node[subbox, text width=4.5cm] at (9.8,0) {动态多模型与任务分类对齐};
+    \end{tikzpicture}
+  };
+
+  % Layer 2: Protection
+  \node[layerbox, below=0.35cm of L1] (L2) {
+    \textbf{\color{navyblue} 2. 隐私保护层 (Privacy Preservation Layer)}\\[3pt]
+    \centering
+    \begin{tikzpicture}
+      \node[subbox, text width=4.5cm] at (0,0) {用户状态矩阵聚合};
+      \node[subbox, text width=4.5cm] at (4.9,0) {单用户贡献范数截断};
+      \node[subbox, text width=4.5cm] at (9.8,0) {解析高斯加噪标定};
+    \end{tikzpicture}
+  };
+
+  % Layer 3: Analytics
+  \node[layerbox, below=0.35cm of L2] (L3) {
+    \textbf{\color{navyblue} 3. 统计分析层 (Analytics Profile Layer)}\\[3pt]
+    \centering
+    \begin{tikzpicture}
+      \node[subbox, text width=2.5cm] at (0,0) {调用总量统计};
+      \node[subbox, text width=2.5cm] at (2.85,0) {Token 消耗统计};
+      \node[subbox, text width=2.5cm] at (5.7,0) {员工渗透率分析};
+      \node[subbox, text width=2.5cm] at (8.55,0) {调用成功率评估};
+      \node[subbox, text width=3.2cm] at (11.75,0) {热门任务分析 (扩展)};
+    \end{tikzpicture}
+  };
+
+  % Layer 4: Release
+  \node[layerbox, below=0.35cm of L3] (L4) {
+    \textbf{\color{navyblue} 4. 结果发布层 (Result Release Layer)}\\[3pt]
+    \centering
+    \begin{tikzpicture}
+      \node[subbox, text width=4.5cm] at (0,0) {安全阈值抑制过滤};
+      \node[subbox, text width=4.5cm] at (4.9,0) {规范重放缓存引擎};
+      \node[subbox, text width=4.5cm] at (9.8,0) {合规脱敏结构化导出};
+    \end{tikzpicture}
+  };
+
+  % Layer 5: Governance & Audit
+  \node[layerbox, below=0.35cm of L4] (L5) {
+    \textbf{\color{navyblue} 5. 权限审计层 (Security \& Audit Layer)}\\[3pt]
+    \centering
+    \begin{tikzpicture}
+      \node[subbox, text width=4.5cm] at (0,0) {多角色数据视角隔离};
+      \node[subbox, text width=4.5cm] at (4.9,0) {持久化隐私预算账本};
+      \node[subbox, text width=4.5cm] at (9.8,0) {访问鉴权与安全审计日志};
+    \end{tikzpicture}
+  };
+
+  % Connections
+  \draw[arrow] (L1) -- (L2);
+  \draw[arrow] (L2) -- (L3);
+  \draw[arrow] (L3) -- (L4);
+  \draw[arrow] (L4) -- (L5);
+
+\end{tikzpicture}
+\caption{Private LLM Analytics 系统五层分层架构图}
+\label{fig:system_architecture}
+\end{figure}
+
+\subsection{各层级核心职责与交互机制}
+五层架构自底向上交互明确，职责边界清晰：
+
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+  \item \textbf{数据接入层：}
+  负责对接企业内部统一 API 网关或数据湖。系统具备高效的向量化解析引擎，支持百万级规模日志的载入。该层对日志列模式（用户标识、时间戳、模型名称、任务分类、成功标记、Token 计数）进行校验，自动完成维度对齐（支持任意 $M$ 个供应商与 $K$ 个任务类别的动态分类学映射），并流式生成数据集 SHA-256 唯一指纹。
+  
+  \item \textbf{隐私保护层：}
+  系统的核心数学计算引擎。负责将原始明细映射为用户状态矩阵并执行贡献限制（$L_2$ 范数截断），计算各指标的理论敏感度；根据配置的隐私目标（$\varepsilon, \delta$），通过解析高斯机制数值标定所需噪声；通过系统内部随机数模块注入扰动，并提供基于时间二叉树的分层复用能力。在生产环境中，系统禁止接收外部调用方传入的随机种子，有效防范利用已知种子预测噪声的安全风险。
+  
+  \item \textbf{统计分析层：}
+  承载企业核心统计业务逻辑。为每一类指标定义专属的数学处理算子：调用总量与 Token 总量使用全域求和与线性投影；员工渗透率基于去重指示向量与公开员工基数进行比率折算；成功率采用成功数与总请求数的联合加噪；高频任务作为扩展能力，采用词表加噪与安全排序。
+  
+  \item \textbf{结果发布层：}
+  负责加噪结果的业务合规转换与对外输出。针对加噪导致的轻微负数进行截断，对概率分布执行归一化修复；实施安全阈值过滤（当加噪后的有效分母低于配置阈值 $\tau$ 时自动抑制输出为空值，避免除以极小值产生极端偏差）；维护规范重放缓存（ReleaseKey），对历史相同语义的查询直接返回此前发布的受保护结果，降低重复查询造成的无谓预算流失。
+  
+  \item \textbf{权限审计层：}
+  保障数据安全发布的治理支撑。建立以角色为核心的作用域隔离机制：企业内部 AI 治理团队拥有跨模型全景视角；外部模型供应商仅能查询自身模型维度的脱敏指标；维护事务一致的 SQLite 隐私账本，记录每一次发布的时间戳、目标接收方、消耗的 RDP 预算及数据集版本，提供可追溯的安全合规审计。
+\end{enumerate}

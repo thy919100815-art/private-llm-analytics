@@ -1,0 +1,86 @@
+\section{持续统计机制}
+\label{sec:continual_observation}
+
+在真实企业运营场景中，大模型的使用监控通常是一个长周期、跨天、跨月的\textbf{持续观测过程}。管理层不仅需要查看当天的即时调用量，还需要调阅最近 7 天的滚动周报、最近 30 天的月度趋势，乃至连续按天查看历史增长曲线。
+
+\subsection{长周期观测的隐私预算挑战}
+在传统的差分隐私方案中，跨时间统计面临着较为严峻的预算累积挑战：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{天级独立发布模式：} 如果每天对当天的调用量发布一次独立加噪结果，根据隐私组合原理，30 天累计消耗的隐私预算将线性增加 30 倍。若要将总预算控制在安全阈值以内，分配给每一天的预算将非常微小，注入的噪声容易对日常小幅度的业务趋势造成干扰。
+  \item \textbf{滑动窗口重复查询：} 如果每天重新对“过去 30 天累计调用量”发起一次全量查询，同一批历史数据将被反复加噪释放，不仅加速消耗总预算，且重复查询增加了被统计分析利用的暴露面。
+\end{itemize}
+
+\subsection{时间二叉树分层复用机制}
+为了兼顾“长期连续监控”与“预算节约”，\textbf{\mbox{Private LLM Analytics}} 实现了基于\textbf{时间二叉树（Binary Time Tree）}的分层统计复用机制。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.9, every node/.style={scale=0.9},
+  treenode/.style={draw=navyblue, fill=white, rounded corners=3pt, thick, align=center, inner sep=3pt, font=\small},
+  hitnode/.style={draw=accentamber, fill=accentamber!20, rounded corners=3pt, very thick, align=center, inner sep=3pt, font=\bfseries\small},
+  leafnode/.style={draw=slateblue, fill=lightbg, rounded corners=2pt, align=center, inner sep=3pt, font=\small},
+  edge/.style={thick, color=darkgray}
+]
+
+  % Level 3 (Root)
+  \node[treenode, text width=6.8cm, minimum height=0.75cm] (N_1_8) at (7.5, 3.8) {根节点：区间 $[1, 8]$\\\footnotesize (8天整体汇总)};
+
+  % Level 2 (4-day)
+  \node[hitnode, text width=5.0cm, minimum height=0.75cm] (N_1_4) at (3.55, 2.5) {区间 $[1, 4]$\\\footnotesize (命中复用项 1)};
+  \node[treenode, text width=5.0cm, minimum height=0.75cm] (N_5_8) at (11.45, 2.5) {区间 $[5, 8]$\\\footnotesize (4天跨度汇总)};
+
+  % Level 1 (2-day)
+  \node[treenode, text width=2.6cm, minimum height=0.7cm] (N_1_2) at (1.85, 1.25) {区间 $[1, 2]$};
+  \node[treenode, text width=2.6cm, minimum height=0.7cm] (N_3_4) at (5.25, 1.25) {区间 $[3, 4]$};
+  \node[hitnode, text width=2.6cm, minimum height=0.7cm] (N_5_6) at (9.75, 1.25) {区间 $[5, 6]$\\\footnotesize (命中复用项 2)};
+  \node[treenode, text width=2.6cm, minimum height=0.7cm] (N_7_8) at (13.15, 1.25) {区间 $[7, 8]$};
+
+  % Level 0 (1-day leaves)
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L1) at (1.0, 0) {第 1 天};
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L2) at (2.7, 0) {第 2 天};
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L3) at (4.4, 0) {第 3 天};
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L4) at (6.1, 0) {第 4 天};
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L5) at (8.9, 0) {第 5 天};
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L6) at (10.6, 0) {第 6 天};
+  \node[hitnode, text width=1.45cm, minimum height=0.65cm] (L7) at (12.3, 0) {第 7 天\\\footnotesize (项 3)};
+  \node[leafnode, text width=1.45cm, minimum height=0.65cm] (L8) at (14.0, 0) {第 8 天};
+
+  % Edges
+  \draw[edge] (N_1_8.south) -- (N_1_4.north);
+  \draw[edge] (N_1_8.south) -- (N_5_8.north);
+
+  \draw[edge] (N_1_4.south) -- (N_1_2.north);
+  \draw[edge] (N_1_4.south) -- (N_3_4.north);
+  \draw[edge] (N_5_8.south) -- (N_5_6.north);
+  \draw[edge] (N_5_8.south) -- (N_7_8.north);
+
+  \draw[edge] (N_1_2.south) -- (L1.north);
+  \draw[edge] (N_1_2.south) -- (L2.north);
+  \draw[edge] (N_3_4.south) -- (L3.north);
+  \draw[edge] (N_3_4.south) -- (L4.north);
+  \draw[edge] (N_5_6.south) -- (L5.north);
+  \draw[edge] (N_5_6.south) -- (L6.north);
+  \draw[edge] (N_7_8.south) -- (L7.north);
+  \draw[edge] (N_7_8.south) -- (L8.north);
+
+\end{tikzpicture}
+\caption{持续观测时间二叉树分解示意图（以查询前 7 天区间 $[1, 7]$ 为例）}
+\label{fig:time_tree}
+\end{figure}
+
+\subsection{时间二叉树的核心运作原理与业务优势}
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+  \item \textbf{树状分层结构：} 如图~\ref{fig:time_tree} 所示，系统将观测时间周期（例如 16 天或 32 天）构建为一棵二叉树。底层叶子节点对应单日数据聚合，父节点对应连续 2 天、4 天、8 天乃至全周期的聚合节点。
+  \item \textbf{规范前缀对偶分解：} 任意连续时间区间的统计查询，均可被唯一拆解为该树中最多 $\lceil \log_2 T \rceil$ 个规范互斥节点的代数和。例如，查询“第 1 天至第 7 天”的前缀总调用量，不需要相加 7 个独立单日叶子节点，而是直接分解为 3 个节点之和：
+  \begin{equation}
+    \text{区间} [1, 7] = \text{节点}[1, 4] + \text{节点}[5, 6] + \text{节点}[7, 7]
+  \end{equation}
+  \item \textbf{累积噪声随时间呈对数级增长：}
+  由于任意时间范围的估计值至多由树高（$\log_2 T$）个加噪节点合成，累积噪声的方差仅随时间呈对数增长（$O(\log T)$），而非线性的 $O(T)$。
+  \begin{itemize}
+    \item 观测周期达到 32 天时，直接天级累加需要叠加 32 次独立噪声；而时间二叉树仅需合成至多 5 个分层节点，大幅减少了累积噪声对长周期趋势的干扰。
+    \item 在连续监控下，跨天重复节点自动复用历史加噪值，有效降低了对企业年度总隐私预算的日常消耗。
+  \end{itemize}
+  \item \textbf{代际轮换（Epoch Rolling）：} 当一棵二叉树的预设跨度（如 30 天）走完后，系统滚动开启下一个代际树，支持长周期持续安全监控。
+\end{enumerate}

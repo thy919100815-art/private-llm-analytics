@@ -1,0 +1,81 @@
+........................................................................ [ 13%]
+........................................................................ [ 26%]
+........................................................................ [ 39%]
+........................................................................ [ 53%]
+........................................................................ [ 66%]
+..........................................................F........F.... [ 79%]
+........................................................................ [ 92%]
+......................................                                   [100%]
+================================== FAILURES ===================================
+____________ test_08_run_all_experiments_exp02_population_is_50000 ____________
+
+    def test_08_run_all_experiments_exp02_population_is_50000():
+        """Test 8: run_all_experiments.py explicitly uses N=50,000 and interactions_n50000.parquet."""
+>       import run_all_experiments
+E       ModuleNotFoundError: No module named 'run_all_experiments'
+
+tests\test_v017_regression.py:189: ModuleNotFoundError
+_______ test_17_smoke_mode_does_not_modify_official_research_artifacts ________
+
+tmp_path = WindowsPath('F:/Private LLM Analytics/docs/Private_LLM_Analytics_Technical_Proposal/revision/pytest_tmp/test_17_smoke_mode_does_not_mo0')
+
+    def test_17_smoke_mode_does_not_modify_official_research_artifacts(tmp_path):
+        """Test 17: run_all_experiments(smoke=True) does not alter official research artifacts."""
+        results_dir = Path("results")
+        official_files = [
+            results_dir / "tables" / "exp01_baseline_summary.csv",
+            results_dir / "tables" / "exp02_epsilon_summary.csv",
+            results_dir / "tables" / "exp03_population_summary.csv",
+            results_dir / "tables" / "exp04_clipping_summary.csv",
+            results_dir / "tables" / "scalability_benchmark.csv",
+            results_dir / "raw" / "exp01_baseline_trials.csv",
+            results_dir / "raw" / "exp02_epsilon_trials.csv",
+            results_dir / "raw" / "exp03_population_trials.csv",
+            results_dir / "raw" / "exp04_clipping_trials.csv",
+        ]
+    
+        hashes_before = {p: hashlib.sha256(p.read_bytes()).hexdigest() for p in official_files if p.is_file()}
+>       assert len(hashes_before) >= 5, "Official summary tables must exist before running test"
+E       AssertionError: Official summary tables must exist before running test
+E       assert 0 >= 5
+E        +  where 0 = len({})
+
+tests\test_v017_regression.py:311: AssertionError
+============================== warnings summary ===============================
+..\..\..\..\.venv\Lib\site-packages\fastapi\testclient.py:1
+  F:\Private LLM Analytics\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+tests/test_profile_accounting.py: 2 warnings
+tests/test_recipient_view_accounting.py: 17 warnings
+tests/test_reproducibility.py: 2 warnings
+tests/test_v012_regression.py: 3 warnings
+tests/test_v015_regression.py: 2 warnings
+tests/test_v09_production_hardening.py: 1 warning
+tests/test_web_console.py: 14 warnings
+tests/test_web_downloads.py: 6 warnings
+tests/test_web_epsilon_sweep.py: 2 warnings
+tests/test_web_input_preview.py: 2 warnings
+tests/test_web_privacy_policy.py: 1 warning
+tests/test_web_utility_evaluation.py: 6 warnings
+  F:\Private LLM Analytics\docs\Private_LLM_Analytics_Technical_Proposal\revision\test_workspace\src\private_llm_analytics\simulator\interactions.py:92: Pandas4Warning: The inplace keyword in DataFrame.sort_values is deprecated and will be removed in a future version (PDEP-8).
+  See https://pandas.pydata.org/docs/dev/whatsnew/v3.1.0.html#deprecation-inplace for more details.
+    df.sort_values(by=COL_TIMESTAMP, inplace=True, ignore_index=True)
+
+tests/test_v011_regression.py::test_regression_12_prevalence_evaluation_no_total_variation
+tests/test_v011_regression.py::test_regression_12_prevalence_evaluation_no_total_variation
+  F:\Private LLM Analytics\docs\Private_LLM_Analytics_Technical_Proposal\revision\test_workspace\src\private_llm_analytics\evaluation\accuracy.py:60: ConstantInputWarning: An input array is constant; the correlation coefficient is not defined.
+    corr, _ = spearmanr(y_true, y_pred)
+
+tests/test_web_console.py::test_10_release_rejects_rng_or_seed_control
+tests/test_web_console.py::test_16_continual_unsupported_metric_rejected
+tests/test_web_console.py::test_web_rejects_window_days_with_explicit_bounds
+tests/test_web_privacy_policy.py::TestAdminPrivacyPolicy::test_invalid_policy_values_rejected
+  F:\Private LLM Analytics\.venv\Lib\site-packages\starlette\_exception_handler.py:59: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    response = await handler(conn, exc)  # type: ignore[arg-type]
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_v017_regression.py::test_08_run_all_experiments_exp02_population_is_50000
+FAILED tests/test_v017_regression.py::test_17_smoke_mode_does_not_modify_official_research_artifacts
+2 failed, 540 passed, 65 warnings in 825.05s (0:13:45)

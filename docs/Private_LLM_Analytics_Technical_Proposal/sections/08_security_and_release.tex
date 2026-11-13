@@ -1,0 +1,30 @@
+\section{权限、安全与结果发布}
+\label{sec:security_and_release}
+
+数据要素安全流通的核心在于构建清晰的信任边界。\textbf{\mbox{Private LLM Analytics}} 在架构层面建立了“角色隔离、底层加固、输出阻断”的多维主动安全防护网。
+
+\subsection{多角色视角隔离机制（Recipient Scopes）}
+企业在治理大模型数据时，面临内部管理与外部供应商两套截然不同的使用主体。系统在数据源头与发布策略上建立了严格的接收方作用域（Recipient Scope）边界：
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+  \item \textbf{内部治理视角（\texttt{internal}）：} 面向企业内部 AI 治理委员会、安全团队与技术管理层。该角色拥有跨模型、跨部门的全景分析权限，能够同时对比 OpenAI、Kimi、DeepSeek 等所有供应商的调用量、成本占比、渗透率与可用性指标，辅助宏观技术决策。
+  \item \textbf{外部供应商隔离视角（\texttt{provider\_a/b/c}）：} 面向外部模型服务商进行服务质量对齐时，系统对数据实行严格的作用域隔离与过滤：
+  \begin{itemize}
+    \item 针对 OpenAI（\texttt{provider\_a}）发布的报告，仅包含该供应商自身的接口成功率与任务调用量，不包含任何竞品（Kimi、DeepSeek）的统计信息；
+    \item 针对 Kimi（\texttt{provider\_b}）与 DeepSeek（\texttt{provider\_c}）同样实施双向隔离。
+  \end{itemize}
+  \item \textbf{全局外泄控制线（\texttt{GLOBAL\_EXTERNAL}）：} 系统设置了跨外部供应商的合并隐私预算水位线，防止多个外部供应商通过串谋或联合分析拼凑出企业全局业务大盘。
+\end{enumerate}
+
+\subsection{生产环境随机数安全与抗操纵设计}
+差分隐私的数学有效性依赖于噪声样本的不可预测性。在工程安全审计中，系统确立了严格的防注入规范：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{生产模式禁止外部种子注入：} 生产模式禁止调用方指定随机种子（\texttt{seed}）或随机数生成器（\texttt{rng}）。若外部请求试图传入自定义种子，系统触发安全拦截异常（ProductionRNGControlError）并阻断发布流程。
+  \item \textbf{系统内部随机数独立生成：} 扰动噪声由系统内部随机数模块独立生成，加噪过程内存隔离，保障扰动采样的统计独立性。
+\end{itemize}
+
+\subsection[小分母安全阈值抑制与合规后处理]{小分母安全阈值抑制（$\tau$-Suppression）与合规后处理}
+除了高斯加噪外，系统在发布前对加噪结果实施严格的合规后处理校验：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{非负截断与总和一致性：} 针对调用量、Token 总量等物理计数指标，系统将加噪产生的偶发负数自动截断为 0；针对比例分布指标，进行和为 $100\%$ 的仿射投影约束。
+  \item \textbf{安全阈值抑制（Safety Threshold）：} 当某个统计单元加噪后的有效分母低于配置阈值（系统基准阈值设定为 $\tau = 1.0$，对应配置中的 \texttt{min\_noisy\_denominator} 参数；加噪后的有效分母低于该值时不发布成功率）时，系统将该项成功率输出置为 \textbf{SUPPRESSED（空值）}。该规则既消除了小样本高方差导致的数据失真，又降低了针对孤立个案的推断风险。
+\end{itemize}

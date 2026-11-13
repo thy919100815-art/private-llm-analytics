@@ -1,0 +1,40 @@
+\contentsline {section}{\numberline {1}建设背景与目标}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}建设背景：企业大模型应用普及与数据治理需求}{3}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}核心风险：传统统计方式的隐私与数据安全隐患}{3}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}建设目标与系统核心定位}{3}{subsection.1.3}%
+\contentsline {section}{\numberline {2}系统总体方案}{4}{section.2}%
+\contentsline {subsection}{\numberline {2.1}端到端业务处理全流程}{4}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}关键处理环节定位与协同逻辑}{4}{subsection.2.2}%
+\contentsline {section}{\numberline {3}系统架构设计}{5}{section.3}%
+\contentsline {subsection}{\numberline {3.1}五层总体架构体系}{5}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}各层级核心职责与交互机制}{5}{subsection.3.2}%
+\contentsline {section}{\numberline {4}业务统计分析能力}{6}{section.4}%
+\contentsline {subsection}{\numberline {4.1}总调用量统计（Total Requests）}{6}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Token 消耗总量统计（Total Tokens）}{6}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}员工渗透率统计（User Prevalence）}{7}{subsection.4.3}%
+\contentsline {subsection}{\numberline {4.4}任务调用成功率（Success Rate）}{7}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}高频任务分布统计（Top-K Tasks，扩展能力）}{8}{subsection.4.5}%
+\contentsline {section}{\numberline {5}差分隐私保护机制}{8}{section.5}%
+\contentsline {subsection}{\numberline {5.1}保护基石：为什么必须坚持“用户级”差分隐私？}{8}{subsection.5.1}%
+\contentsline {subsection}{\numberline {5.2}第一步：为什么要限制单用户贡献（贡献截断）？}{9}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}第二步：为什么要加噪声（解析高斯机制）？}{9}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}第三步：为什么要控制总体消耗（隐私预算）？}{9}{subsection.5.4}%
+\contentsline {section}{\numberline {6}隐私预算与重复查询控制}{10}{section.6}%
+\contentsline {subsection}{\numberline {6.1}隐私预算记账机制（RDP Accountant）}{10}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}ReleaseKey 规范重放机制：降低重复查询带来的噪声平均风险}{10}{subsection.6.2}%
+\contentsline {section}{\numberline {7}持续统计机制}{10}{section.7}%
+\contentsline {subsection}{\numberline {7.1}长周期观测的隐私预算挑战}{10}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}时间二叉树分层复用机制}{11}{subsection.7.2}%
+\contentsline {subsection}{\numberline {7.3}时间二叉树的核心运作原理与业务优势}{11}{subsection.7.3}%
+\contentsline {section}{\numberline {8}权限、安全与结果发布}{11}{section.8}%
+\contentsline {subsection}{\numberline {8.1}多角色视角隔离机制（Recipient Scopes）}{12}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}生产环境随机数安全与抗操纵设计}{12}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}小分母安全阈值抑制与合规后处理}{12}{subsection.8.3}%
+\contentsline {section}{\numberline {9}系统部署与实施方案}{12}{section.9}%
+\contentsline {subsection}{\numberline {9.1}部署拓扑与运行环境配置}{12}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}与企业网关及日志系统的集成步骤}{13}{subsection.9.2}%
+\contentsline {section}{\numberline {10}实施效果、适用范围与结论}{13}{section.10}%
+\contentsline {subsection}{\numberline {10.1}统计精度与效用表现}{13}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}适用场景与边界说明}{14}{subsection.10.2}%
+\contentsline {subsection}{\numberline {10.3}方案总结}{14}{subsection.10.3}%
+\contentsline {section}{\numberline {A}附录：系统核心配置与安全参数速查}{15}{appendix.A}%

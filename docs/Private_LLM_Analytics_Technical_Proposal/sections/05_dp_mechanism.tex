@@ -1,0 +1,49 @@
+\section{差分隐私保护机制}
+\label{sec:dp_mechanism}
+
+差分隐私（Differential Privacy, 简称 DP）是公认具有良好数学保障的数据隐私保护技术框架。传统的信息安全手段（如数据脱敏、访问控制）主要保护原始明细不被直接窃取，但无法防范从合法的统计分析结果中间接推断特定个人的敏感信息。\textbf{\mbox{Private LLM Analytics}} 通过三步核心机制，构建了从原始日志到最终大屏发布的防护网。
+
+\subsection{保护基石：为什么必须坚持“用户级”差分隐私？}
+在技术落地前，必须明确差分隐私的保护颗粒度。业界主要存在两种定义：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{记录级保护（Record-Level DP）：} 将单次 API 调用日志视为受保护的基本单元。
+  \item \textbf{用户级保护（\mbox{User-Level DP}）：} 将单个员工在企业内的所有历史调用行为视为一个不可分割的整体单元。
+\end{itemize}
+
+如果采用传统的记录级保护，当某名员工仅偶尔发起 1 次调用时能够获得保护；但如果某名员工在统计周期内累计发起了 $k=5,000$ 次请求，根据差分隐私的群体隐私推导法则（Group Privacy），其用户级实际隐私保护界会随记录数 $k$ 发生显著恶化，在 $(\varepsilon, \delta)$-DP 框架下失效率 $\delta$ 项也会成倍放大，使得高频活跃员工的隐私保护效果大幅下降。
+
+因此，\textbf{本系统在底层全面采用用户级邻接关系定义}：无论某位员工产生了 10 次还是 10 万次交互，系统在设定的差分隐私参数范围内，将单个用户数据对最终发布结果分布的影响限制在严格受控的边界内，显著降低外部攻击者推断员工个体行为的风险。
+
+\subsection{第一步：为什么要限制单用户贡献（贡献截断）？}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{直观原理：} 在企业真实场景中，极个别高频用户（如编写脚本自动化测试的研发人员）可能单日产生大量调用。如果不对单名员工的最大影响力设定上限，为了掩盖这部分调用量的波动，系统就必须添加极大的随机噪声，导致最终统计大盘严重失真而失去业务参考价值。
+  \item \textbf{系统做法（用户级 $L_2$ 范数截断）：} 系统对每位员工聚合后的高维向量 $x_u$ 施加几何投影截断：
+  \begin{equation}
+    \bar{x}_u = x_u \cdot \min\left(1, \frac{C}{\|x_u\|_2}\right)
+    \label{eq:l2_clipping}
+  \end{equation}
+  其中 $C$ 为预设的安全上限截断阈值（例如调用量 $C_{\text{req}}=20 \sim 100$）。
+  \item \textbf{核心效果：} 正常员工的调用向量（$\|x_u\|_2 \le C$）不受缩放影响；而极少数异常高频用户的贡献向量被等比例压缩至欧氏长度恰好为 $C$。这一步骤将统计函数的最大单用户变动量（即全局 $L_2$ 敏感度 $\Delta_2$）严格锚定在常数 $C$ 以内，为后续校准加噪提供了有限且可控的数学前提。
+\end{itemize}
+
+\subsection{第二步：为什么要加噪声（解析高斯机制）？}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{直观原理：} 限制了单用户贡献后，如果直接发布求和结果，攻击者对比“该员工入职前”与“入职后”两个报表的差值，依然能反算出该员工的截断数据。因此，必须向最终的汇总向量中注入恰当大小的随机扰动（加噪），将单用户贡献淹没在统计波动之中。
+  \item \textbf{系统做法（高斯扰动注入）：} 系统在全量截断数据求和后，添加均值为 0、协方差为 $\sigma^2 \mathbf{I}$ 的多维正态高斯噪声：
+  \begin{equation}
+    \tilde{Y} = \sum_{u=1}^N \bar{x}_u + \mathcal{N}\left(0, \sigma^2 \mathbf{I}\right)
+    \label{eq:gaussian_mechanism}
+  \end{equation}
+  \item \textbf{噪声标定技术（Analytic Gaussian Mechanism）：} 噪声标准差 $\sigma$ 不能凭经验主观设定。加多了影响业务可用性，加少了达不到设定的隐私保护强度。系统集成了 Balle \& Wang 提出的\textbf{解析高斯标定算法}，根据设定的敏感度 $\Delta_2$、隐私损失上限 $\varepsilon$ 和失败概率 $\delta$，数值求解满足差分隐私条件的最小标准差 $\sigma$。相比传统经典高斯上界公式，解析高斯机制有效避免了松弛放缩，减少了多余的噪声添加。
+\end{itemize}
+
+\subsection{第三步：为什么要控制总体消耗（隐私预算）？}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{直观原理：} 单次发布被噪声保护，但如果针对同一批底层数据发起多次统计查询，多次加噪结果相互组合可能会逐步累积信息泄露。差分隐私将这种累积泄露量量化为\textbf{“隐私预算”}，通常记作 $(\varepsilon, \delta)$。
+  \item \textbf{通俗理解隐私参数：}
+  \begin{itemize}
+    \item $\varepsilon$（隐私损失系数）：衡量数据发布前后推断概率的最大变动倍数。$\varepsilon$ 越小（如 $\varepsilon \le 1.0$），隐私保护越强，噪声相对越大；$\varepsilon$ 适中（如 $\varepsilon = 1.0 \sim 2.0$），在工业场景中实现了良好的效用与安全性平衡。
+    \item $\delta$（失效率上限）：极小概率事件的松弛上界，代表差分隐私成立的置信边界。系统默认设置 $\delta = 1.0 \times 10^{-6}$（百万分之一），其概率远低于硬件物理随机故障率，在工程上具有充分的可靠性。
+  \end{itemize}
+  \item \textbf{全生命周期闭环记账：} 系统将企业允许消耗的总隐私预算视为固定资产。每一次统计发布都必须消耗特定的预算配额。当配额达到上限时，系统执行阻断，拒绝新增查询，有效控制多次查询带来的累积泄露风险。
+\end{itemize}

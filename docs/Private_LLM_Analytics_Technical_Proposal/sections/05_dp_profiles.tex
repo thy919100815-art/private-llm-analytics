@@ -1,0 +1,152 @@
+\section[统计专属差分隐私机制框架]{统计专属差分隐私机制框架\\[0.2cm](Statistic-Specific DP Framework)}
+\label{sec:dp_profiles}
+
+\subsection{机制设计动机：为何否定通用单一机制}
+在传统差分隐私工程实践中，一种常见的简化方式是将所有统计查询统一视为数值型向量查询，不加区分地对各类统计值施加通用的全局敏感度界限与单一拉普拉斯或高斯噪声。这一方案在真实企业业务场景下暴露出严重的缺陷：
+\begin{enumerate}[label=(\arabic*), leftmargin=2em]
+  \item \textbf{值域约束与敏感度错配：} 比例指标（Prevalence, Success Rate）天然位于 $[0, 1]$ 区间，而调用总量（Volume）可能高达数十万次。若使用统一机制，会导致比例指标被过大噪声彻底湮没，或导致总量指标的敏感度被严重低估。
+  \item \textbf{比值型统计的敏感性与不稳定性：} 成功率是成功次数与调用总次数的比值（Ratio）。直接经验比率在小分母情况下具有较高单用户敏感性和严重效用不稳定性；若将分子分母独立加噪且独立记账，不仅会消耗双倍隐私预算，而且在除法后处理时极易产生严重失真的极端野值。因此，系统联合发布受限的 success / total counts，再执行安全阈值抑制和比率后处理。
+\end{enumerate}
+
+因此，本项目提出了\textbf{统计专属差分隐私机制框架（Statistic-Specific DP Framework）}。每个注册的统计指标拥有完整的闭环 Profile：
+\begin{center}
+  \textbf{业务统计目标} $\longrightarrow$ \textbf{用户级贡献定义} $\longrightarrow$ \textbf{贡献截断算子} $\longrightarrow$ \textbf{紧致敏感度分析} $\longrightarrow$ \textbf{专属加噪释放} $\longrightarrow$ \textbf{合规后处理}
+\end{center}
+
+\subsection{用户使用率机制 (User Prevalence Profile)}
+\paragraph{1. 业务目标与贡献定义：}
+度量在册企业员工对特定模型任务单元的能力采纳渗透率。对于用户 $u$ 和统计单元 $j$，其原始贡献为二值化指示函数：
+\begin{equation}
+  b_{u, j} = \mathbf{1}[m_{u, j} > 0] \in \{0, 1\}
+\end{equation}
+无论用户 $u$ 在单元 $j$ 调用了 1 次还是 10,000 次，其对单元 $j$ 的贡献严格恒等为 1。
+
+\paragraph{2. 贡献限制算子 ($L_0$ Bounding)：}
+为了防止跨领域重度活跃员工在过多统计单元中同时产生贡献，系统施加 $L_0$ 范数上界约束 $\|b_u\|_0 \le k$。若某个用户的活跃单元数超出了 $k$，系统采用确定性用户级伪随机抽样算子，无放回截断保留 $k$ 个单元，其余置零。
+
+\paragraph{3. 敏感度推导与紧致性：}
+设全局聚合直方图为 $H(D) = \sum_{u \in \mathcal{U}} b_u$。考虑相邻数据集 $D \sim D'$（相差用户 $u^*$）：
+\begin{equation}
+  \|H(D) - H(D')\|_2 = \|b_{u^*}\|_2 = \sqrt{\sum_{j=1}^D b_{u^*, j}^2} = \sqrt{\sum_{j=1}^D b_{u^*, j}} = \sqrt{\|b_{u^*}\|_0} \le \sqrt{\min(k, D)}
+\end{equation}
+\begin{techbox}{Prevalence 敏感度定理}
+在 $L_0$ 贡献限制参数为 $k$、分类单元总数为 $D$ 的前提下，用户级加/删邻接关系下直方图聚合的全局 $L_2$ 敏感度紧致上界为：
+\begin{equation}
+  \Delta_2^{\text{tight}} = \sqrt{\min(k, D)}
+\end{equation}
+在工程生产配置中，若分类维度满足 $D \ge k$，代码采用保守校准敏感度 $\Delta_2^{\text{prod}} = \sqrt{k}$（例如在默认 $k=D=9$ 的场景下，$\Delta_2 = 3.0$）。
+\end{techbox}
+
+\paragraph{4. 高斯加噪与后处理：}
+系统向聚合直方图注入独立高斯噪声向量：$\tilde{H} = H(D) + \mathcal{N}(0, \sigma^2 \mathbf{I}_D)$。后处理算子严格遵循：
+\begin{equation}
+  \hat{H}_j = \max(0, \tilde{H}_j), \qquad \hat{r}_j = \operatorname{clip}\left(\frac{\hat{H}_j}{N_{\text{public}}}, 0.0, 1.0\right)
+\end{equation}
+其中 $N_{\text{public}}$ 严格采用企业固定公开在册人口，严禁使用加噪后的或动态估计的活跃人数作为分母，防范二次信息泄露。
+
+\subsection{用户归一化占比机制 (User-Normalized Share Profile)}
+\paragraph{1. 业务目标与贡献定义：}
+度量宏观工作流结构分布，反映企业员工在不同模型与任务之间的精力分配倾向。为了消除“单个狂热用户主导全局占比”的偏差，系统首先在单用户内部进行自身归一化：
+\begin{equation}
+  x_{u, j} = \begin{cases}
+    \dfrac{m_{u, j}}{\|m_u\|_1} = \dfrac{m_{u, j}}{\sum_{i=1}^D m_{u, i}}, & \text{若 } \|m_u\|_1 > 0 \\[8pt]
+    0, & \text{若 } \|m_u\|_1 = 0
+  \end{cases}
+\end{equation}
+该映射将每个活跃员工的交互偏好投影至标准单纯形 $\Delta^{D-1}$ 上。
+
+\paragraph{2. 敏感度推导与单纯形有界性：}
+对于任意活跃员工 $u$，由于 $x_{u, j} \ge 0$ 且 $\sum_{j=1}^D x_{u, j} = 1$，其 $L_1$ 范数恒满足 $\|x_u\|_1 = 1$。由向量范数关系式 $\|x_u\|_2 \le \|x_u\|_1$：
+\begin{equation}
+  \|x_u\|_2 = \sqrt{\sum_{j=1}^D x_{u, j}^2} \le \sum_{j=1}^D x_{u, j} = 1.0
+\end{equation}
+因此，对于聚合向量 $X(D) = \sum_{u \in \mathcal{U}} x_u$，增加或移除一个用户产生的最大 $L_2$ 范数偏移为：
+\begin{equation}
+  \Delta_2 = \max_{u^*} \|x_{u^*}\|_2 \le 1.0
+\end{equation}
+该指标天然具备严格的 $L_2$ 敏感度上界 $\Delta_2 \le 1.0$，无需任何人为截断算子介入。
+
+\paragraph{3. 后处理（非负截断与单纯形重新投影）：}
+对加噪后的向量 $\tilde{X} = X(D) + \mathcal{N}(0, \sigma^2 \mathbf{I}_D)$，后处理依次执行非负截断与再归一化：
+\begin{equation}
+  \bar{s}_j = \max(0, \tilde{X}_j), \qquad \hat{s}_j = \begin{cases}
+    \dfrac{\bar{s}_j}{\sum_{i=1}^D \bar{s}_i}, & \text{若 } \sum_{i=1}^D \bar{s}_i > 0 \\[8pt]
+    \dfrac{1}{D}, & \text{若 } \sum_{i=1}^D \bar{s}_i = 0
+  \end{cases}
+\end{equation}
+此方法保证了发布向量严格满足 $\sum_{j=1}^D \hat{s}_j = 1$ 且 $\hat{s}_j \ge 0$。
+
+\subsection{交互总量机制 (Interaction Volume Profile)}
+\paragraph{1. 业务目标与贡献限制：}
+度量各业务单元的绝对交互规模，直接指导基础设施算力采购与云账单核算。由于用户的原始调用计数 $m_u$ 理论上无自然上界，系统采用标准的用户级 $L_2$ 截断算子（$L_2$ Clipping）：
+\begin{equation}
+  \bar{m}_u = m_u \cdot \min\left(1, \frac{C}{\|m_u\|_2}\right)
+\end{equation}
+其中 $C > 0$ 为配置的用户级最大贡献阈值。
+
+\paragraph{2. 敏感度与两层误差分解：}
+截断后的单用户向量必然满足 $\|\bar{m}_u\|_2 \le C$，因此在用户级邻接关系下的全局 $L_2$ 敏感度为：
+\begin{equation}
+  \Delta_2 = C
+\end{equation}
+向截断后的聚合值 $\bar{M} = \sum_{u \in \mathcal{U}} \bar{m}_u$ 注入高斯噪声：$\hat{M} = \bar{M} + \mathcal{N}(0, \sigma^2 \mathbf{I}_D)$。发布值 $\hat{M}$ 与未受保护的原始真实值 $M = \sum_{u \in \mathcal{U}} m_u$ 之间的总误差具备精确的代数分解结构：
+\begin{equation}
+  \label{eq:volume_error_decomp}
+  E_{\text{total}} = \hat{M} - M = \underbrace{(\hat{M} - \bar{M})}_{E_{\text{noise}} \sim \mathcal{N}(0, \sigma^2)} + \underbrace{(\bar{M} - M)}_{E_{\text{clip}} \le 0}
+\end{equation}
+\begin{techbox}{误差解耦洞察}
+在企业高倾斜的长尾分布下，重度员工发起的调用量往往远超预设的常数阈值（如 $C=20$）。系统量化评估证明：交互总量的主要效用损失来自结构性截断偏差 $E_{\text{clip}}$，而高斯噪声误差 $E_{\text{noise}}$ 在统计总量面前处于微弱数量级。
+\end{techbox}
+
+\subsection{任务成功率机制 (Success Rate Profile)}
+\paragraph{1. 联合向量空间建模与共享截断：}
+设用户 $u$ 的任务成功计数向量为 $s_u \in \mathbb{R}^D$，总调用计数向量为 $n_u \in \mathbb{R}^D$。显然有 $0 \le s_{u, j} \le n_{u, j}$。为了消除分子分母独立截断引发的逻辑失真（例如出现加噪后成功数反超总调用数的荒谬现象），系统设计了\textbf{共享比例截断算子}：
+\begin{equation}
+  a_u = \min\left(1, \frac{C_{\text{rate}}}{\|n_u\|_2}\right), \qquad \bar{n}_u = a_u n_u, \qquad \bar{s}_u = a_u s_u
+\end{equation}
+由于 $a_u \in (0, 1]$ 是标量，截断严格保留了用户个体的原始成功率比例关系（$\bar{s}_{u, j} / \bar{n}_{u, j} = s_{u, j} / n_{u, j}$）。将截断后的成功向量与总量向量拼接为 $2D$ 维联合向量：
+\begin{equation}
+  w_u = \begin{bmatrix} \bar{s}_u \\ \bar{n}_u \end{bmatrix} \in \mathbb{R}^{2D}
+\end{equation}
+
+\paragraph{2. 联合敏感度推导定理：}
+\begin{techbox}{Success Rate 联合敏感度定理}
+对于任意用户 $u$，联合向量 $w_u = [\bar{s}_u ; \bar{n}_u]$ 的 $L_2$ 范数满足：
+\begin{equation}
+  \|w_u\|_2 = \sqrt{\|\bar{s}_u\|_2^2 + \|\bar{n}_u\|_2^2} \le \sqrt{\|\bar{n}_u\|_2^2 + \|\bar{n}_u\|_2^2} = \sqrt{2}\|\bar{n}_u\|_2 \le \sqrt{2} C_{\text{rate}}
+\end{equation}
+因此，在用户级邻接关系下，$2D$ 维联合查询 $\sum_{u \in \mathcal{U}} w_u$ 的全局 $L_2$ 敏感度满足：
+\begin{equation}
+  \Delta_2 \le \sqrt{2} C_{\text{rate}}
+\end{equation}
+\end{techbox}
+
+\paragraph{3. 单次联合释放与阈值抑制后处理：}
+系统执行\textbf{单次 $2D$ 维高斯机制联合释放}：
+\begin{equation}
+  \tilde{W} = \begin{bmatrix} \tilde{S} \\ \tilde{N} \end{bmatrix} = \sum_{u \in \mathcal{U}} w_u + \mathcal{N}\left(0, \sigma^2 \mathbf{I}_{2D}\right)
+\end{equation}
+该操作仅产生一次隐私预算消耗。后处理算子严格定义如下：
+\begin{enumerate}[label=\textbf{步骤\arabic*：}, leftmargin=4.5em]
+  \item \textbf{总量非负约束：} $\hat{N}_j = \max(0, \tilde{N}_j)$；
+  \item \textbf{分子值域约束：} $\hat{S}_j = \operatorname{clip}(\tilde{S}_j, 0, \hat{N}_j)$，使后处理成功数不超过后处理总量；
+  \item \textbf{小样本抑制判定：} 若 $\hat{N}_j < \tau$（本文 YAML 生效阈值 $\tau = 1.0$），判定该单元加噪后样本量不足，可能引发除法剧烈扰动，系统返回 \texttt{SUPPRESSED / null}；
+  \item \textbf{常规比率求取：} 若 $\hat{N}_j \ge \tau$，输出估计成功率 $\hat{r}_j = \hat{S}_j / \hat{N}_j \in [0.0, 1.0]$。
+\end{enumerate}
+
+\subsection{热门任务发现机制 (Top-K Tasks Profile)}
+\paragraph{1. 有穷受管字典设定：}
+明确系统的统计设定为\textbf{已知有限分类字典下的频率排序（Configured Finite Taxonomy）}，而非开放词表的重头项挖掘（Open-Universe Heavy Hitters）。设候选任务集合为 $\mathcal{T} = \{t_1, \dots, t_T\}$。
+
+\paragraph{2. 用户参与度截断与敏感度：}
+定义用户对任务的二值参与指示向量 $v_{u, t} = \mathbf{1}[m_{u, t} > 0]$。施加截断约束 $\|v_u\|_0 \le k_{\text{task}}$。聚合直方图在受管字典维度 $T$ 上的全局 $L_2$ 敏感度为：
+\begin{equation}
+  \Delta_2 = \sqrt{\min(k_{\text{task}}, T)} \quad (\text{代码保守校准使用 } \sqrt{k_{\text{task}}})
+\end{equation}
+
+\paragraph{3. 噪声注入与全字典排序合规准则：}
+为了避免选择性数据窥探偏置，系统严格禁止“先按真实数据挑选前 $K$ 个任务再单独加噪”的不合规操作。合法流程必须先对字典中的全部 $T$ 个任务独立注入高斯噪声：
+\begin{equation}
+  \tilde{c}_t = \max\left(0, \sum_{u \in \mathcal{U}} v_{u, t} + \mathcal{N}(0, \sigma^2)\right), \quad \forall t \in \mathcal{T}
+\end{equation}
+随后仅基于加噪得分向量 $\tilde{c}$ 降序排序。代码遍历有限任务列表并在达到 $K$ 项时停止，无额外阈值时等价于取 $K_{\text{eff}}=\min(K,T)$ 项；有阈值时还可更少。当前 $K=5,T=3$，实际输出 3 项。这里的计数是参与任务的独立用户数，不是交互次数。

@@ -1,0 +1,238 @@
+Metadata-Version: 2.4
+Name: private-llm-analytics
+Version: 0.1.1
+Summary: User-level Central Differential Privacy Analytics Layer for Enterprise Multi-LLM Telemetry
+Author: Private LLM Analytics Research Team
+License: Apache-2.0
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: numpy>=1.24.0
+Requires-Dist: scipy>=1.10.0
+Requires-Dist: pandas>=2.0.0
+Requires-Dist: pyarrow>=14.0.0
+Requires-Dist: pydantic>=2.0.0
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: matplotlib>=3.7.0
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0.0; extra == "dev"
+
+# Private LLM Analytics (v0.1)
+
+A **User-Level Central Differential Privacy Analytics Layer** prototype for enterprise multi-model AI telemetry.
+
+---
+
+## 1. Problem Statement
+
+Modern enterprises widely adopt multiple frontier Large Language Model (LLM) providers simultaneously (e.g., `provider_a`, `provider_b`, `provider_c`). Enterprise IT and AI governance teams need to understand workforce adoption patterns:
+- Which providers and task domains are gaining adoption?
+- What is the workforce prevalence across AI task categories?
+- How does an employee's workflow distribute across different providers and capabilities?
+- What is the total enterprise interaction volume per domain?
+
+While the enterprise itself acts as a **trusted curator** with access to raw, detailed interaction telemetry logs, releasing statistical summaries to external recipients (such as model providers or market analysts) poses severe privacy risks:
+- Exposing exact usage can reveal an individual employee's workflow, sensitive projects, or anomalous behavior.
+- Repeated querying could allow external parties to reconstruct individual employee activity histories.
+
+**Private LLM Analytics** resolves this tension by inserting a mathematically verified Differential Privacy layer between internal telemetry and external releases.
+
+---
+
+## 2. Threat Model & Privacy Framework
+
+- **Trusted Curator**: The enterprise internal telemetry service collects interaction logs, performs user-level grouping, and runs contribution transformations.
+- **External Recipient**: Third-party model providers (`provider_a`, `provider_b`, `provider_c`) or external evaluators who receive released aggregated statistics. External recipients are untrusted and must never receive exact data or information sufficient to reconstruct exact user records.
+- **Privacy Model**: **Central Differential Privacy** (not Local DP).
+- **Privacy Unit**: **User-level**. The privacy guarantee covers **all interactions of an employee within the designated statistical window** (e.g., 30 days).
+- **Adjacency**: **Add/Remove User Adjacency**. Two neighboring datasets $D$ and $D'$ differ by the presence or absence of one entire user's interaction history in the statistical window:
+  $$D \sim D' \iff D' = D \cup \{u\} \quad \text{or} \quad D' = D \setminus \{u\}$$
+
+---
+
+## 3. The Three Analytics Metrics
+
+### Metric 1: User Prevalence ($H^{prev}$ and $R^{prev}$)
+- **Question**: *How many employees used a given Provider for a given Task in the window?*
+- **User Transformation**: 9-dimensional binary vector $b_u \in \{0, 1\}^9$:
+  $$b_{u, p, c} = \mathbf{1}[m_{u, p, c} > 0]$$
+- **Contribution Bounding**: Bounded to at most $K$ cells (default $K=9$).
+- **Sensitivities**:
+  - $L_2$ Sensitivity: $\Delta_2 = \sqrt{K} = \sqrt{9} = 3.0$
+  - $L_1$ Sensitivity: $\Delta_1 = K = 9.0$
+- **Release**: Gaussian or Laplace noise added to population sum $\sum_u b_u$, followed by clamping to $[0, N]$ and rate conversion $R^{prev} = H^{prev}/N$.
+
+### Metric 2: User-Normalized Share ($S$ and $\bar{S}$)
+- **Question**: *How does a typical employee distribute their AI usage across Provider $\times$ Task?*
+- **User Transformation**: Normalized simplex vector $x_u$:
+  $$x_u = \frac{m_u}{\|m_u\|_1} \quad \text{if } \|m_u\|_1 > 0 \quad (\text{else } \mathbf{0})$$
+  - $\|x_u\|_1 = 1.0$
+  - $\|x_u\|_2 = \sqrt{\sum_j x_{u,j}^2} \le \sum_j x_{u,j} = 1.0$
+- **Sensitivities**:
+  - $L_2$ Sensitivity: $\Delta_2 = 1.0$
+  - $L_1$ Sensitivity: $\Delta_1 = 1.0$
+- **Post-Processing (No raw data access)**:
+  - Overall Provider $\times$ Task share distribution (normalized on simplex).
+  - Overall provider marginal distribution $P(p) = \sum_c \hat{s}_{p,c}$.
+  - Overall task marginal distribution $P(c) = \sum_p \hat{s}_{p,c}$.
+  - Provider-conditional task distribution $P(c \mid p) = \hat{s}_{p,c} / P(p)$.
+
+### Metric 3: Interaction Volume ($V$)
+- **Question**: *Where is enterprise total interaction volume distributed?*
+- **User Transformation**: User-level $L_2$ norm clipping with threshold $C$:
+  $$\bar{m}_u = m_u \cdot \min\left(1, \frac{C}{\|m_u\|_2}\right)$$
+  - $\|\bar{m}_u\|_2 \le C$
+- **Sensitivities**:
+  - $L_2$ Sensitivity: $\Delta_2 = C$ (default $C=20.0$)
+  - $L_1$ Sensitivity: $\Delta_1 = \sqrt{d} \cdot C = \sqrt{9} \cdot C = 3 \cdot C$ (by Cauchy-Schwarz on $\mathbb{R}^9$)
+- **Error Decomposition**:
+  $$\text{Total Error} = \underbrace{(V^{clip} - V^{raw})}_{\text{Clipping Bias}} + \underbrace{(V^{DP} - V^{clip})}_{\text{DP Noise Error}}$$
+
+---
+
+## 4. Differential Privacy Mechanisms
+
+### Gaussian Mechanism (Primary)
+- Calibrated using the **Analytic Gaussian Mechanism (AGM)** (Balle & Wang, ICML 2018).
+- Solves the exact root condition for the Gaussian privacy loss tail:
+  $$\delta(\sigma) = \Phi\left(\frac{\Delta_2}{2\sigma} - \frac{\varepsilon\sigma}{\Delta_2}\right) - e^\varepsilon \Phi\left(-\frac{\Delta_2}{2\sigma} - \frac{\varepsilon\sigma}{\Delta_2}\right) = \delta$$
+- Satisfies tight $(\varepsilon, \delta)$-DP for any $\varepsilon > 0, \delta \in (0, 1)$.
+
+### Laplace Mechanism (Baseline)
+- Calibrated using scale $b = \frac{\Delta_1}{\varepsilon}$.
+- Satisfies pure $\varepsilon$-DP ($\delta=0$).
+- Strictly uses $L_1$ sensitivity $\Delta_1$ (never substituting $L_2$ sensitivity).
+
+---
+
+## 5. Security & Isolation Architecture
+
+- **Release Cache**: Stable SHA-256 hash key based on query, window, dataset version, and privacy parameters prevents re-sampling noise and redundant budget consumption.
+- **Privacy Ledger**: Persistent SQLite and JSONL audit trail recording all release queries, noise parameters, budget consumption, and cache hits.
+- **Recipient Isolation**: `provider_a` only receives statistics pertaining to `provider_a`. Cross-provider shares and competitor volumes are filtered at the policy layer. External recipients are strictly barred from ground truth or error statistics.
+
+---
+
+## 6. Directory Structure
+
+```text
+private-llm-analytics/
+├── configs/
+│   ├── scenario.yaml
+│   ├── privacy.yaml
+│   ├── metrics.yaml
+│   └── recipients.yaml
+├── src/
+│   └── private_llm_analytics/
+│       ├── config/        # Pydantic models, YAML loaders & validators
+│       ├── ingestion/     # Schema validation, CSV & Parquet loaders
+│       ├── simulator/     # Heterogeneous employee preference simulator
+│       ├── aggregation/   # Vectorized user-matrix aggregation & windows
+│       ├── contribution/  # Binary, normalization & L2 clipping transforms
+│       ├── mechanisms/    # Analytic Gaussian & Laplace DP mechanisms
+│       ├── privacy/       # Budget, accountant, SQLite ledger & policies
+│       ├── metrics/       # Prevalence, Normalized Share & Volume
+│       ├── planner/       # Query planning & stable release key hashing
+│       ├── release/       # Release cache, orchestrator & recipient filter
+│       ├── evaluation/    # Ground truth, multi-trial harness & accuracy
+│       └── service/       # Unified AnalyticsService facade
+├── experiments/
+│   ├── exp01_baseline.py
+│   ├── exp02_epsilon.py
+│   ├── exp03_population.py
+│   └── exp04_clipping.py
+├── data/                  # Synthetic Parquet datasets
+├── results/
+│   ├── raw/               # Trial-level CSV outputs
+│   ├── tables/            # Summary experiment CSV tables
+│   └── figures/           # Publication-ready PNG and PDF plots
+├── tests/                 # Unit & correctness test suite
+├── pyproject.toml
+├── run_all_experiments.py
+├── IMPLEMENTATION_REPORT.md
+└── README.md
+```
+
+---
+
+## 7. Installation & Quickstart
+
+### Prerequisites
+- Python 3.10+ (tested on Python 3.14)
+- Packages: `numpy`, `scipy`, `pandas`, `pyarrow`, `pydantic`, `pyyaml`, `matplotlib`, `pytest`
+
+### Installation
+```bash
+git clone <repo>
+cd private-llm-analytics
+pip install -e .
+```
+
+### Running Unit Tests
+```bash
+pytest tests/
+```
+
+### Running Experiments
+```bash
+# Run all experiments sequentially:
+python run_all_experiments.py
+
+# Or run individual experiments:
+python experiments/exp01_baseline.py
+python experiments/exp02_epsilon.py
+python experiments/exp03_population.py
+python experiments/exp04_clipping.py
+```
+
+### High-Level Python API Usage
+```python
+from private_llm_analytics.service.analytics import AnalyticsService
+
+# Initialize from YAML configurations
+service = AnalyticsService.from_config_dir("configs")
+
+# Load parquet interaction telemetry (or generate synthetic)
+service.load_data("data/interactions_n10k.parquet")
+
+# Query User-Normalized Share for external recipient provider_a
+result = service.compute(
+    metric="user_normalized_share",
+    recipient="provider_a",
+    epsilon=1.0,
+    delta=1e-6,
+)
+
+print(result["results"]["provider_distribution"])
+```
+
+---
+
+## 8. Experimental Outputs
+
+Experiment results are automatically generated in:
+- `results/tables/`:
+  - `exp01_baseline_summary.csv`
+  - `exp02_epsilon_summary.csv`
+  - `exp03_population_summary.csv`
+  - `exp04_clipping_summary.csv`
+  - `scalability_benchmark.csv`
+- `results/figures/`:
+  - `exp01_baseline_error.png` / `.pdf`
+  - `exp02_mae_vs_epsilon.png` / `.pdf`
+  - `exp02_tv_vs_epsilon.png` / `.pdf`
+  - `exp02_relerr_vs_epsilon.png` / `.pdf`
+  - `exp02_gaussian_vs_laplace.png` / `.pdf`
+  - `exp03_mae_vs_population.png` / `.pdf`
+  - `exp03_tv_vs_population.png` / `.pdf`
+  - `exp03_small_n_breakdown.png` / `.pdf`
+  - `exp04_clipping_tradeoff.png` / `.pdf`
+
+---
+
+## 9. Limitations & Future Scope (v0.1)
+
+The v0.1 release focuses on proving mathematical validity and benchmarking the core user-level Central DP mechanisms. The following advanced capabilities are deliberately scoped for future releases:
+- **Longitudinal Composition & RDP Accountant**: v0.1 supports single release budget checks with an accountant interface ready for future Rényi DP accounting.
+- **Adaptive Privacy Budgeting**: Budgets are statically allocated per query.
+- **Dynamic Taxonomy & Top-K**: Task and provider categories are fixed to the primary 3x3 grid.
+- **Continual Observation**: Queries represent static snapshot aggregation over a window.

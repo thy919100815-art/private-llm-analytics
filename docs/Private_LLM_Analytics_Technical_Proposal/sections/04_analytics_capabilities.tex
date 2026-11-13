@@ -1,0 +1,72 @@
+\section{业务统计分析能力}
+\label{sec:analytics_capabilities}
+
+系统目前提供四项核心统计能力，并提供 Top-K 热门任务分析作为扩展能力。针对每个指标，系统均采用“业务释义 $\to$ 单用户贡献限制 $\to$ 差分加噪 $\to$ 最终输出”的针对性设计，在保证数学严谨性的同时，提供直观易懂的业务分析结论。
+
+\subsection{总调用量统计（Total Requests）}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{解决的业务问题：} 掌握企业内部对各个大模型（OpenAI、Kimi、DeepSeek 等）及各类任务的宏观调用频次，辅助 IT 基础设施部门评估网关吞吐负载，并在不同供应商之间进行科学的流量调度。
+  \item \textbf{业务示例：} 某研发团队单日发起 12,000 次代码生成请求，运营团队发起 3,000 次文案翻译请求。管理层需要了解全公司各部门对不同模型的真实调用总规模。
+  \item \textbf{单用户贡献限制策略：} 在无约束状态下，少数编写自动化脚本的工程师单日可能产生大量调用，若直接统计，该极端用户将显著主导统计大盘。系统对每名员工在观测期内的调用量向量 $x_u \in \mathbb{R}^D$ 实施 $L_2$ 范数截断：
+  \begin{equation}
+    \bar{x}_u = x_u \cdot \min\left(1, \frac{C_{\text{req}}}{\|x_u\|_2}\right)
+  \end{equation}
+  生产基准配置通常设定 $C_{\text{req}} = 20 \sim 100$。该约束确保任何单名员工对全局总调用量统计的最大欧氏扰动不超过 $C_{\text{req}}$ 次，既保留绝大多数正常员工的调用记录，又有效抑制极端异常流量对大盘的非对称影响。
+  \item \textbf{最终输出与呈现：} 输出各供应商在各业务任务下的差分隐私调用总量估计值（非负整数）。在典型基准仿真测试中，宏观调用总量相对误差通常可控制在 $1\% \sim 2\%$ 左右。
+\end{itemize}
+
+\subsection{Token 消耗总量统计（Total Tokens）}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{解决的业务问题：} 大模型 API 服务通常按照 Token（词元）数量计费。财务与采购团队需要合理掌握各模型、各任务的 Token 消耗总量，以便进行月度账单核算、供应商对账以及跨部门成本分摊。
+  \item \textbf{业务示例：} 部分用户发送数万字的长文档分析请求，而多数用户仅交互短句。管理层需要了解整体 Token 账单的宏观结构。
+  \item \textbf{单用户贡献限制策略：} 单用户 Token 消耗的离散度远大于调用次数。系统对单用户在所有单元的 Token 消耗向量执行 $L_2$ 截断，基准阈值设为 $C_{\text{tok}} = 100,000$ Token。当某员工总消耗超过 10 万 Token 时，其向量按比例缩放至范数为 10 万，确保全局 $L_2$ 敏感度不超过 $C_{\text{tok}}$。
+  \item \textbf{最终输出与呈现：} 输出按模型与任务划分的 Token 消耗总量估计值，支持 API 采购预算的合理规划，统计相对误差在 $1\% \sim 2\%$ 左右。
+\end{itemize}
+
+\subsection{员工渗透率统计（User Prevalence）}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{解决的业务问题：} 评估大模型技术在企业内部的“普及广度”。管理层不仅关心调用了多少次，更关心到底有多少比例的员工真正使用大模型，是否存在“少数人高频使用、多数人未触达”的状况。
+  \item \textbf{业务示例：} 某业务部门拥有 2,000 名员工，如果仅有 100 名员工发起了 10 万次请求，尽管调用量巨大，但员工渗透率仅为 $5\%$。
+  \item \textbf{单用户贡献限制与基准对齐：}
+  \begin{enumerate}[label=\alph*., leftmargin=1.5em]
+    \item \textbf{去重二值化：} 只要员工在该维度至少发起过 1 次调用，该维度即标记为 1，否则为 0。
+    \item \textbf{跨维度限制（$L_0$ 截断）：} 限制单个员工最多在 $k=2 \sim 9$ 个不同的分类单元中被计入有效用户（超过则按活跃度保留前 $k$ 个）。单个用户对所有单元活跃计数总和的最大 $L_2$ 影响上限为 $\Delta_2 \le \sqrt{k}$。
+    \item \textbf{公开企业总人数对齐（消除分母偏差）：} 传统做法若直接除以“日志中活跃出现的去重用户数”，会导致明显的抽样分母偏差。系统采用企业人事系统公开备案的总员工编制数 $N_{\text{public}}$（例如 2,000 人）作为计算分母：
+    \begin{equation}
+      \hat{P}_j = \frac{\max(0, \tilde{A}_j)}{N_{\text{public}}}
+    \end{equation}
+    其中 $\tilde{A}_j$ 为加噪后的各单元去重活跃人数。该设计有效避免了活跃分母波动带来的系统性偏差。
+  \end{enumerate}
+  \item \textbf{最终输出与呈现：} 输出百分比形式的员工渗透率（如某模型代码任务渗透率为 $46.8\%$），绝对误差在仿真测试中通常低于 1 个百分点。
+\end{itemize}
+
+\subsection{任务调用成功率（Success Rate）}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{解决的业务问题：} 客观评估各大模型供应商在实际企业网络环境与复杂 prompt 下的接口稳定性与模型可用度，为 SLA 选型评估提供客观参考。
+  \item \textbf{核心技术挑战与解决思路：} 直接经验比率在小分母情况下具有较高单用户敏感性和严重效用不稳定性，若强行直接给比率加噪或对极小分母做除法，极易出现数值发散。系统采用\textbf{联合高斯释放与安全阈值抑制机制}：
+  \begin{enumerate}[label=\arabic*., leftmargin=1.5em]
+    \item \textbf{联合向量贡献限制：} 提取单用户的成功次数向量 $s_u$ 与总请求次数向量 $n_u$。首先基于总请求向量求缩放因子：
+    \begin{equation}
+      a_u = \min\left(1, \frac{C_{\text{rate}}}{\|n_u\|_2}\right)
+    \end{equation}
+    同步缩放成功向量与请求向量：$\bar{s}_u = a_u s_u$，$\bar{n}_u = a_u n_u$。将二者拼接为联合向量 $w_u = [\bar{s}_u ; \bar{n}_u]$。由于成功数天然不大于请求数（$\|s_u\|_2 \le \|n_u\|_2$），数学上严格可证联合向量的 $L_2$ 敏感度满足：
+    \begin{equation}
+      \Delta_2 \le \sqrt{\| \bar{s}_u \|_2^2 + \| \bar{n}_u \|_2^2} \le \sqrt{C_{\text{rate}}^2 + C_{\text{rate}}^2} = \sqrt{2} C_{\text{rate}}
+    \end{equation}
+    基准配置设定 $C_{\text{rate}} = 20 \sim 50$。
+    \item \textbf{单次联合加噪与后处理抑制：} 仅消耗一次差分隐私预算，同时对全量成功数与总请求数注入校准高斯噪声，得到加噪值 $\tilde{S}_j$ 与 $\tilde{N}_j$。后处理流程如下：
+    \begin{align}
+      \hat{N}_j &= \max(\tilde{N}_j, 0) \\
+      \hat{S}_j &= \operatorname{clip}(\tilde{S}_j, 0, \hat{N}_j)
+    \end{align}
+    系统设置成功率最小发布分母 $\tau = 1.0$（对应配置中的 \texttt{min\_noisy\_denominator} 参数）。若加噪后的有效分母 $\hat{N}_j < \tau$，系统输出 \textbf{SUPPRESSED（空值）}；仅当 $\hat{N}_j \ge \tau$ 时，才发布比率 $\hat{r}_j = \hat{S}_j / \hat{N}_j$。
+  \end{enumerate}
+  \item \textbf{最终输出与呈现：} 输出各模型与各任务下的接口成功率，绝对偏差在基准测试中通常在 1 个百分点量级左右。
+\end{itemize}
+
+\subsection{高频任务分布统计（Top-K Tasks，扩展能力）}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{解决的业务问题：} 作为系统的扩展统计能力，算法模块已在 Profile 机制层实现，可根据企业业务部署版本选择启用。该能力用于发现企业员工使用大模型最频繁的前 $K$ 大类业务场景（如代码生成、翻译、文档总结等），辅助企业搭建专属知识库或定制微调模型。
+  \item \textbf{单用户贡献限制与加噪：} 单用户在全任务词表中每个任务的贡献经过频次截断，且最多在 $k=5 \sim 10$ 个候选任务中产生影响（$L_2$ 敏感度为 $\sqrt{k}$）。系统向词典中所有任务的调用频次注入高斯噪声，在加噪后的数值空间中选取前 $K$ 个最大值并重排。
+  \item \textbf{最终输出与呈现：} 输出排序后的前 $K$ 大热门任务清单及估计热度频次。在典型测试验证中，Top-5 热门任务列表与真实高频任务具有良好的重合度。
+\end{itemize}

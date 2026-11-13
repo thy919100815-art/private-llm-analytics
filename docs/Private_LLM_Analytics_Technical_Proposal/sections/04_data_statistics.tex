@@ -1,0 +1,77 @@
+\section{数据模型与统计任务}
+\label{sec:data_statistics}
+
+\subsection{输入数据模式与字段语义}
+系统对接入的企业大模型交互遥测日志执行强类型模式（Schema）校验。必需字段及其业务语义与约束条件如表~\ref{tab:input_schema} 所示。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{企业大模型交互遥测日志模式规范}
+\label{tab:input_schema}
+\begin{tabularx}{\textwidth}{llcX}
+\toprule
+\textbf{字段名称} & \textbf{数据类型} & \textbf{可空性} & \textbf{约束条件与业务语义说明} \\
+\midrule
+\texttt{interaction\_id} & String (UUID) & 否 & 单次大模型调用的全局唯一标识符，用于去重审计 \\
+\texttt{user\_id} & String & 否 & 员工唯一身份标识（如企业统一工号或 SSO 标识），用于用户级分组 \\
+\texttt{timestamp} & Timestamp & 否 & 交互发生时的 UTC 时间戳（ISO 8601），用于时间窗口划分 \\
+\texttt{provider} & String & 否 & 调用的目标模型供应商内部标识（如 \texttt{provider\_a}、\texttt{provider\_b}） \\
+\texttt{task} & String & 否 & 业务任务类别标识（如 \texttt{technical}、\texttt{document}、\texttt{analysis}） \\
+\texttt{success} & Boolean & 是 & 任务端到端完成状态（True 为成功，False 为失败），成功率统计必需 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{动态分类学体系 (Dynamic Taxonomy)}
+传统的差分隐私分析代码往往将统计维度硬编码为固定大小的矩阵（如历史版本遗留的 $3 \times 3 = 9$ 单元）。本项目在架构层面重构为完全参数化的\textbf{动态分类学管理机制（Dynamic Taxonomy）}。
+系统允许在不修改底层差分隐私算子实现的前提下，通过修改配置文件动态增删模型供应商与任务分类。设注册的供应商集合为 $\mathcal{P} = \{p_1, \dots, p_P\}$，任务集合为 $\mathcal{T} = \{t_1, \dots, t_T\}$，分类系统自动构建双射映射：
+\begin{equation}
+  \Phi: \mathcal{P} \times \mathcal{T} \to \{0, 1, \dots, D-1\}, \quad \Phi(p_i, t_j) = i \cdot T + j
+\end{equation}
+其中全局统计维度 $D = P \times T$ 保持动态计算。系统内所有的截断算子、敏感度计算、高斯协方差矩阵以及后处理均匀回退向量均严格依赖动态传入的维度 $D$，有效防止了硬编码常数带来的维度越界与统计口径失配。
+
+\subsection{供应商内部标识与展示名称的解耦}
+为了兼顾外部合规审计的稳定性与 Web 界面的人性化展示，系统在工程上实施了\textbf{底层标识与展示视图的严格分离}：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{底层规范标识（Canonical ID）：} 数据库、RDP 记账账本、语义哈希计算以及接收方鉴权逻辑，均严格使用不可变的规范标识符（如 \texttt{provider\_a}、\texttt{provider\_b}、\texttt{provider\_c}、\texttt{internal}）。
+  \item \textbf{展示层友好映射（Display Name）：} 仅在向 Web 控制台以及面向业务人员的最终报表输出时，执行固定的映射投影：
+    $$\texttt{provider\_a} \mapsto \text{OpenAI}, \quad \texttt{provider\_b} \mapsto \text{Kimi}, \quad \texttt{provider\_c} \mapsto \text{DeepSeek}$$
+\end{itemize}
+这一设计确保了管理人员未来调整供应商对外展示名称时，\textbf{绝不会破坏历史 RDP 累积账本的一致性，也不会引起规范发布哈希漂移}。
+
+\subsection{用户级交互矩阵 (\texttt{UserMatrix}) 建模}
+在数据摄取阶段，系统通过高效的多列分组与稠密矩阵投影，将原始日志抽象为数据结构 \texttt{UserMatrix}。设当前活跃用户集合为 $\mathcal{U}_{\text{active}}$（大小为 $n_{\text{active}}$），企业在册固定公开总人口为 $N_{\text{public}}$，则 \texttt{UserMatrix} 包含：
+\begin{equation}
+  \mathbf{M} \in \mathbb{R}^{n_{\text{active}} \times D}, \quad \mathbf{M}_{u, j} = \sum_{r \in \mathcal{R}_u} \mathbf{1}[\Phi(\text{prov}_r, \text{task}_r) = j]
+\end{equation}
+其中 $\mathcal{R}_u$ 表示用户 $u$ 在选定时间窗口内的所有交互记录集合。若遥测日志包含 \texttt{success} 字段，系统同步构建成功量矩阵 $\mathbf{S} \in \mathbb{R}^{n_{\text{active}} \times D}$：
+\begin{equation}
+  \mathbf{S}_{u, j} = \sum_{r \in \mathcal{R}_u} \mathbf{1}[\Phi(\text{prov}_r, \text{task}_r) = j \land \text{succ}_r = \text{True}]
+\end{equation}
+在构造阶段，系统强制验证约束 $n_{\text{active}} \le N_{\text{public}}$；若活跃用户数超过公开总人口，系统执行 Fail-Closed 熔断报错，防范因配置不匹配引发的分母越界。
+
+\subsection{五类统计任务总览导航表}
+系统支持的五类统计分析任务、对应的数学贡献形式、截断机制、敏感度与效用评估度量汇总于表~\ref{tab:statistic_master}。该表作为全篇差分隐私机制设计的核心基准。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{Private LLM Analytics 五大核心统计任务设计总览表}
+\label{tab:statistic_master}
+\begin{tabularx}{\textwidth}{p{2.2cm}Xp{2.6cm}p{2.0cm}p{2.2cm}p{2.1cm}}
+\toprule
+\textbf{统计指标} & \textbf{业务度量目标} & \textbf{用户级贡献定义} & \textbf{截断方式} & \textbf{$L_2$ 敏感度} & \textbf{主效用度量} \\
+\midrule
+\textbf{用户使用率}\newline (Prevalence) & 统计在册员工中至少使用一次特定模型任务能力的比例 & 二值指示向量\newline $b_{u,j} = \mathbf{1}[m_{u,j} > 0]$ & $L_0$ 范数截断\newline ($\|b_u\|_0 \le k$) & $\sqrt{\min(k, D)}$\newline (实现为 $\sqrt{k}$) & 百分点误差 (pp)\newline $E = |\hat{r} - r_{\text{raw}}|$ \\
+\addlinespace
+\textbf{使用结构占比}\newline (Normalized Share) & 统计宏观任务分布，反映员工在各能力域的工作流时间分配 & 归一化工作流向量\newline $x_u = m_u / \|m_u\|_1$ & 单纯形天然有界\newline ($\|x_u\|_2 \le 1$) & $\Delta_2 \le 1.0$ & 曼哈顿距离 $L_1$\newline 及百分点误差 \\
+\addlinespace
+\textbf{交互总量}\newline (Volume) & 统计各模型任务的累计交互调用总规模，指导算力与成本核算 & 多维计数向量\newline $m_u \in \mathbb{R}^D$ & $L_2$ 范数截断\newline (阈值 $C$) & $\Delta_2 = C$ & 平均相对误差\newline (MRE) \\
+\addlinespace
+\textbf{任务成功率}\newline (Success Rate) & 评估特定模型在特定业务域的端到端调用质量与可用性 & 联合向量\newline $w_u = [\bar{s}_u ; \bar{n}_u] \in \mathbb{R}^{2D}$ & 共享比例截断\newline (总量阈值 $C_{\text{rate}}$) & $\Delta_2 \le \sqrt{2}C_{\text{rate}}$ & 百分点误差 (pp)\newline 小分母安全抑制 \\
+\addlinespace
+\textbf{热门任务}\newline (Top-K Tasks) & 发现企业内部调用最频繁的热门业务分类前 $K$ 名 & 任务二值指示\newline $v_{u,t} = \mathbf{1}[m_{u,t} > 0]$ & 任务数截断\newline ($\|v_u\|_0 \le k_{\text{task}}$) & $\sqrt{\min(k_t, T)}$\newline (实现为 $\sqrt{k_t}$) & Top-$K$ 命中率\newline 与 Jaccard 指数 \\
+\bottomrule
+\end{tabularx}
+\end{table}

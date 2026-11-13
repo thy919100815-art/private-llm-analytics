@@ -20,7 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -320,6 +321,95 @@ class UnifiedPrivacyLedger:
                 )
 
         return True, "Revisit gate passed: candidate release is within historical privacy bounds.", projected
+
+    def compute_full_horizon_profile(self, t_span: Optional[int] = None) -> np.ndarray:
+        """Compute exact worst-case rho(h) for all horizons h = 1..T_span.
+
+        Complexity: O(T_span * (N + T_span)) via difference array.
+        For all h >= T_span, rho(h) is constant and equals the total sum of all releases.
+        """
+        if not self.records:
+            t = 1 if t_span is None else max(1, int(t_span))
+            return np.zeros(t + 1, dtype=np.float64)
+
+        max_day = max(max(r.days_accessed) for r in self.records if r.days_accessed)
+        T = max_day if t_span is None else max(int(t_span), max_day)
+
+        starts = np.array([min(r.days_accessed) for r in self.records], dtype=np.int64)
+        ends = np.array([max(r.days_accessed) for r in self.records], dtype=np.int64)
+        costs = np.array([r.rho_cost for r in self.records], dtype=np.float64)
+
+        rhos = np.zeros(T + 1, dtype=np.float64)
+        for h in range(1, T + 1):
+            max_s = T - h + 1
+            diff = np.zeros(max_s + 2, dtype=np.float64)
+            l = np.maximum(1, starts - h + 1)
+            r = np.minimum(max_s, ends)
+            valid = l <= r
+            np.add.at(diff, l[valid], costs[valid])
+            np.add.at(diff, r[valid] + 1, -costs[valid])
+            rhos[h] = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
+
+        return rhos
+
+    def check_full_horizon_gate(
+        self,
+        candidate_records: Sequence[ReleaseRecord],
+        max_profile_bound_fn_or_array: Any,
+        t_span: Optional[int] = None,
+    ) -> Tuple[bool, str, Dict[str, Any]]:
+        """Evaluate candidate releases against upper bound across ALL horizons h = 1..T_span.
+
+        Returns:
+            (is_allowed, reason_msg, diagnostics_dict)
+        """
+        trial_ledger = UnifiedPrivacyLedger(delta=self.delta)
+        trial_ledger.records = list(self.records) + list(candidate_records)
+        trial_ledger._max_day = max(
+            [self._max_day] + [max(r.days_accessed) for r in candidate_records if r.days_accessed]
+        )
+
+        T = int(t_span) if t_span is not None else trial_ledger._max_day
+        if not callable(max_profile_bound_fn_or_array):
+            T = min(T, len(max_profile_bound_fn_or_array) - 1)
+        full_rhos = trial_ledger.compute_full_horizon_profile(t_span=trial_ledger._max_day)
+
+        # Check against bound
+        exceeded_horizons = []
+        max_excess_ratio = 1.0
+        worst_h = -1
+
+        for h in range(1, T + 1):
+            if callable(max_profile_bound_fn_or_array):
+                bound_h = float(max_profile_bound_fn_or_array(h))
+            else:
+                bound_h = float(max_profile_bound_fn_or_array[h])
+
+            proj_r = float(full_rhos[h])
+            if proj_r > bound_h + 1e-9:
+                exceeded_horizons.append(h)
+                ratio = proj_r / bound_h if bound_h > 0 else float("inf")
+                if ratio > max_excess_ratio:
+                    max_excess_ratio = ratio
+                    worst_h = h
+
+        diag = {
+            "total_horizons_checked": T,
+            "exceeded_count": len(exceeded_horizons),
+            "worst_horizon_h": worst_h,
+            "max_excess_ratio": round(max_excess_ratio, 6),
+            "projected_rhos": full_rhos,
+        }
+
+        if exceeded_horizons:
+            return (
+                False,
+                f"Full horizon gate rejected: {len(exceeded_horizons)}/{T} horizons exceeded limit. "
+                f"Worst breach at h={worst_h}: projected={full_rhos[worst_h]:.6f} exceeds limit={bound_h:.6f} (ratio={max_excess_ratio:.4f}).",
+                diag,
+            )
+
+        return True, f"Full horizon gate passed: all {T} horizons within bounds.", diag
 
 
 def combine_inverse_variance(

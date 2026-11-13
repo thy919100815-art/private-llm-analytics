@@ -1,0 +1,38 @@
+\section{系统局限性与后续技术演进路线}
+\label{sec:limitations}
+
+\subsection{交互总量高流量截断偏差及其优化方向}
+在当前基准测试中，交互总量（Interaction Volume）的全局截断阈值固定设置为 $C=20$。在当前合成企业基准的所示统计单元中，固定截断产生约 $39.8\%$ 的结构性低估（Under-counting Bias）；该结论不能外推至真实企业总体。
+
+后续技术攻关的核心在于研究\textbf{截断阈值 $C$ 与隐私参数 $\varepsilon$ 的联合优化模型（$C \times \varepsilon$ Joint Calibration）}：
+\begin{equation}
+  \min_{C} \mathbb{E}\left[ \left( \hat{M}(C) - M \right)^2 \right] = \min_{C} \left[ \text{Bias}^2(C) + \text{Var}(C, \varepsilon) \right]
+\end{equation}
+即在“截断造成的负向偏差”与“增大 $C$ 导致敏感度上升从而放大的高斯方差”之间寻找理论最优平衡点。
+
+\subsection{自适应贡献截断的隐私理论考量}
+针对截断阈值 $C$ 的选择，一种工程直觉是采用“基于数据分布自适应选择分位数（如 90\% 分位数）”。然而，在严格的差分隐私理论下必须清醒认识到：\textbf{直接从待保护的数据集自身计算分位数并将阈值反馈用于后续截断，该过程本身构成了对私有数据的观测，若不分配隐私预算将产生严重的隐私泄露}。
+
+因此，后续关于自适应截断（Adaptive Clipping）的演进路线规划如下：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{独立先验校准集方案：} 利用真正公开、获得相应授权且不在保护范围内的数据，或已按预算释放的 DP 统计估计阈值 $C$；历史数据不会因时间过期自动免除用户级隐私成本；
+  \item \textbf{差分隐私私有分位数分配方案：} 将单次查询的总预算拆分为两部分：分配 $\varepsilon_{\text{clip}}$ 运行满足差分隐私的私有分位数估计机制，求出加噪截断阈值 $\tilde{C}$；随后分配 $\varepsilon_{\text{sum}} = \varepsilon - \varepsilon_{\text{clip}}$ 执行截断后的高斯聚合。该方案仍需在效用收益与分段预算损耗之间开展系统性实证评估。
+\end{enumerate}
+
+\subsection{细粒度业务分类体系的拓展适配}
+当前系统的基准分类体系包含 3 个核心任务（Technical、Document、Analysis）。在企业实际生产场景中，业务部门往往期望进一步拆分为数十个子类别（例如代码审查、单元测试生成、SQL 编写、长文润色、合规审查等）。
+
+随着分类维度 $D$ 的扩张，稀疏单元（Sparsity）数量显著增加。在微小调用单元中，高斯机制的随机扰动相对占比将增大。后续研发将探索树状层级分类法（Hierarchical Taxonomy）与分层差分隐私投影算法，在宏观层级保持高精度的同时，在微观叶子层级实施自适应样本抑制。
+
+\subsection{更多业务维度的扩展规划}
+在当前五类核心统计指标的基础上，后续版本将逐步演进支持更多维度的指标 Profile：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{Token 吞吐量统计（Token Volume Profile）：} 针对单次交互中数千乃至数万的输入/输出 Token 量，推导基于重尾对数截断的差分隐私释放方案；
+  \item \textbf{推理延迟与 SLA 达标率（Latency Profile）：} 评估不同供应商在峰值负载下的服务响应时间分布；
+  \item \textbf{错误与降级重试率（Fallback Rate Profile）：} 评估模型网关主备切换与重试频次，指导高可用架构调优。
+\end{itemize}
+
+\subsection{智能化效用规划器 (Utility-Aware Planner) 的演进}
+当前版本已实现了基础的离线效用对比、误差拆解与 $\varepsilon$-Sweep 模拟。下一阶段的研发目标是将规划器（Planner）从“离线辅助分析”演进为“智能化闭环推荐”：即系统根据输入数据集规模 $N$、历史活跃特征以及目标接收方的剩余隐私配额，自动为用户推荐兼顾合规底线与数据可用性的候选发布时间窗口、推荐 $\varepsilon$ 建议值以及配套的截断参数建议。
+
+\paragraph{本次审计保留的实现限制（REMAINING LIMITATION）：}统计 RNG 与时间树全局 RNG 尚未升级为统一的密码学安全采样路径；ReleaseKey 对运行时分母阈值、Top-K 配置及 taxonomy 版本的绑定不完整；加载 YAML 的成功率阈值为 $1.0$，但若省略该字段，部分配置模型和直接构造入口仍默认 $5.0$，应显式传参。第~\ref{sec:continual} 节证明针对固定流配置、前缀封存、独立理想高斯噪声与逐层记账模型，不是对任意代码路径的安全认证。合成基准、有限测试与 SQLite 事务均不能证明不存在其他漏洞；SQLite 也不等同于不可篡改账本。

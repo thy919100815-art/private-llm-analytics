@@ -1,0 +1,205 @@
+<USER_REQUEST>
+你当前只完成了 Top-K 权限配置和 PermissionError→HTTP 403 的局部修复，这不能视为上一轮“90-Day Epoch Workload Budgeting v1 综合修复”完成。
+
+请继续在当前 `F:\Private LLM Analytics` 工作区完成剩余任务。不要切换到 `fhe-runtime`，不要输出任何与 `fhe-runtime` 无关的内容。
+
+## 1. 先确认当前修改状态
+
+先报告：
+
+```text
+git branch --show-current
+git status
+git diff --stat
+git diff
+```
+
+明确说明 Top-K 授权与 PermissionError 修改是否：
+- 仅存在于本地工作树；
+- 已 commit；
+- 已 push；
+- 是否已经进入 GitHub main。
+
+不要声称 GitHub main 已更新，除非实际 push/merge 完成。
+
+---
+
+## 2. Top-K 不得只修“权限”
+
+在允许：
+
+```text
+provider_a
+provider_b
+provider_c
+```
+
+查询 `top_k_tasks` 之前，必须验证 Top-K 是 **provider-scoped before DP aggregation**。
+
+必须证明执行链为：
+
+```text
+recipient
+→ resolve allowed provider scope
+→ only authorized provider raw contribution domain
+→ user-level contribution bounding
+→ Gaussian DP vector
+→ Top-K post-processing
+→ recipient output
+```
+
+禁止：
+
+```text
+all providers
+→ global DP Top-K
+→ output filter
+```
+
+新增强制测试：
+
+```text
+固定 provider_a 数据不变
+大幅修改 provider_b/provider_c 数据
+→ provider_a 的 exact pre-DP bounded input vector 必须完全不变
+```
+
+如果做不到，就撤回 external 的 `top_k_tasks` 权限，仅允许 internal 使用。
+
+---
+
+## 3. 完成 CSV / JSON 下载
+
+当前用户反馈：
+
+```text
+下载 DP 处理后的 CSV 失败
+下载 DP 处理后的 JSON 失败
+```
+
+必须真正定位根因并修复。
+
+下载只能导出：
+
+```text
+已经 committed
+已经 DP 处理
+已经 recipient-filtered
+```
+
+的 release payload。
+
+禁止下载时：
+
+```text
+重新读取 raw dataframe
+重新调用 compute()
+重新加噪
+重新创建 ReleaseKey
+重新扣 RDP
+```
+
+
+<truncated 4738 bytes>
+测试，不只两个文件
+
+除了：
+
+```text
+tests/test_epoch_workload_budgeting.py
+tests/test_web_console.py
+```
+
+还必须运行整个项目：
+
+```text
+pytest -q
+```
+
+报告：
+
+```text
+总测试数
+passed
+failed
+skipped
+运行时间
+```
+
+若失败，不允许说“完成”。
+
+---
+
+## 16. 必须做实际 Web 端到端验收
+
+真正启动：
+
+```text
+python -m private_llm_analytics.web
+```
+
+然后完成：
+
+```text
+1. 加载 demo
+2. 确认 90 天数据
+3. 查看部分输入数据成功
+4. Preview 前后 epsilon 不变
+5. 时间跨度显示正确
+6. 查询 Interaction Volume
+7. 下载 CSV
+8. 下载 JSON
+9. 文件可正常打开
+10. 下载前后 budget 完全不变
+11. 查询 Success Rate
+12. 下载 CSV/JSON
+13. 查询 Top-K
+14. Top-5 正常显示
+15. 下载 Top-K CSV/JSON
+16. 相同 Top-K 再查 → 0 spend
+17. Top-5 改 Top-3 → 0 spend（若复用 noisy vector）
+18. provider_a / b / c 分别测试
+19. 验证 provider isolation
+20. 重启服务
+21. Epoch / RDP / history 保持
+```
+
+---
+
+## 17. 最终报告必须逐项给证据
+
+不要再只给“已修复”。
+
+最终必须给：
+
+```text
+A. git branch / commit / status
+B. 修改文件列表
+C. CSV 原失败根因
+D. JSON 原失败根因
+E. Preview 原失败根因
+F. [object Object] 根因
+G. Top-K 原失败根因
+H. Top-K provider isolation 证明
+I. 90-Day Epoch 状态
+J. workload allocation/spent
+K. reserve
+L. lifetime exposure
+M. CSV/JSON 实际输出示例
+N. 下载前后 privacy state 对比
+O. cache/post-processing 前后 privacy state 对比
+P. restart persistence 验证
+Q. pytest -q 全量结果
+R. Web E2E 验收结果
+S. 当前仍未完成项
+```
+
+本轮不要处理任何 `fhe-runtime` 内容。
+
+只有上述验收全部通过，才允许声明：
+
+> **Private LLM Analytics — 90-Day Epoch Workload Budgeting v1 综合修复完成。**
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-03T10:59:03+08:00.
+</ADDITIONAL_METADATA>

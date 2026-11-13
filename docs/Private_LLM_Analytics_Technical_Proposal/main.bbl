@@ -1,0 +1,40 @@
+\begin{thebibliography}{1}
+
+\bibitem{balle2018improving}
+Borja Balle and Yu-Xiang Wang.
+\newblock Improving the gaussian mechanism for differential privacy: Analytical
+  calibration and optimal denoising.
+\newblock In {\em International Conference on Machine Learning (ICML)}, pages
+  394--403, 2018.
+
+\bibitem{chan2011private}
+T.-H.~Hubert Chan, Elaine Shi, and Dawn Song.
+\newblock Private and continual release of statistics.
+\newblock In {\em ACM-SIAM Symposium on Discrete Algorithms (SODA)}, pages
+  405--417, 2011.
+
+\bibitem{dwork2006calibrating}
+Cynthia Dwork, Frank McSherry, Kobbi Nissim, and Adam Smith.
+\newblock Calibrating noise to sensitivity in private data analysis.
+\newblock In {\em Theory of Cryptography Conference (TCC)}, pages 265--284.
+  Springer, 2006.
+
+\bibitem{dwork2010continual}
+Cynthia Dwork, Moni Naor, Toniann Pitassi, and Guy~N. Rothblum.
+\newblock Differential privacy under continual observation.
+\newblock In {\em ACM Symposium on Theory of Computing (STOC)}, pages 715--724,
+  2010.
+
+\bibitem{dwork2014algorithmic}
+Cynthia Dwork and Aaron Roth.
+\newblock The algorithmic foundations of differential privacy.
+\newblock {\em Foundations and Trends{\textregistered} in Theoretical Computer
+  Science}, 9(3--4):211--407, 2014.
+
+\bibitem{mironov2017renyi}
+Ilya Mironov.
+\newblock R{\'e}nyi differential privacy.
+\newblock In {\em IEEE Computer Security Foundations Symposium (CSF)}, pages
+  263--275, 2017.
+
+\end{thebibliography}

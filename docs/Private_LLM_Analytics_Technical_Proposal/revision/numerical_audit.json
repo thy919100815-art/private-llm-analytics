@@ -1,0 +1,133 @@
+{
+  "python": "3.14.0",
+  "gaussian": [
+    {
+      "metric": "Prevalence",
+      "sensitivity": 3.0,
+      "classical": 15.896407580551422,
+      "analytic": 12.674036667980548,
+      "independent_analytic": 12.67403666798051,
+      "sd_reduction_pct": 20.271063737150953,
+      "variance_reduction_pct": 36.432967223945546
+    },
+    {
+      "metric": "Normalized Share",
+      "sensitivity": 1.0,
+      "classical": 5.298802526850474,
+      "analytic": 4.224678889326813,
+      "independent_analytic": 4.224678889326836,
+      "sd_reduction_pct": 20.27106373715163,
+      "variance_reduction_pct": 36.43296722394662
+    },
+    {
+      "metric": "Interaction Volume",
+      "sensitivity": 20.0,
+      "classical": 105.97605053700947,
+      "analytic": 84.49357778653626,
+      "independent_analytic": 84.49357778653672,
+      "sd_reduction_pct": 20.27106373715163,
+      "variance_reduction_pct": 36.43296722394662
+    },
+    {
+      "metric": "Success Rate",
+      "sensitivity": 28.284271247461902,
+      "classical": 149.87276795617532,
+      "analytic": 119.49196363914565,
+      "independent_analytic": 119.49196363914632,
+      "sd_reduction_pct": 20.27106373715164,
+      "variance_reduction_pct": 36.43296722394663
+    },
+    {
+      "metric": "Top-K conservative",
+      "sensitivity": 2.23606797749979,
+      "classical": 11.848482649385314,
+      "analytic": 9.446669179643104,
+      "independent_analytic": 9.446669179643116,
+      "sd_reduction_pct": 20.27106373715131,
+      "variance_reduction_pct": 36.43296722394611
+    },
+    {
+      "metric": "Top-K tight T=3",
+      "sensitivity": 1.7320508075688772,
+      "classical": 9.17779519577937,
+      "analytic": 7.317358481977757,
+      "independent_analytic": 7.317358481977734,
+      "sd_reduction_pct": 20.27106373715094,
+      "variance_reduction_pct": 36.432967223945525
+    }
+  ],
+  "release_key_checks": {
+    "min_noisy_denominator": {
+      "changes_key": false,
+      "new_value": 5.0
+    },
+    "clip_norm_rate": {
+      "changes_key": true,
+      "new_value": 21.0
+    },
+    "top_k": {
+      "changes_key": false,
+      "new_value": 2
+    },
+    "max_tasks_per_user": {
+      "changes_key": false,
+      "new_value": 2
+    },
+    "max_cells_per_user": {
+      "changes_key": true,
+      "new_value": 8
+    },
+    "clip_norm": {
+      "changes_key": true,
+      "new_value": 21.0
+    }
+  },
+  "tree": {
+    "days": 90,
+    "levels": 8,
+    "sigma": 308.06778326983454,
+    "epoch_epsilon_bound": 1.9999991177487255,
+    "test_daily_norms": [
+      [
+        10.0,
+        10.0,
+        5.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    ],
+    "test_level_norms": [
+      15.0,
+      20.615528128088304,
+      25.0,
+      25.0
+    ]
+  },
+  "data": {
+    "source": "synthetic (DATASET_MANIFEST.md and scenario.yaml)",
+    "rows": 3011232,
+    "users": 50000,
+    "sha256": "56a465add221a641d156ebf029219bfc2753a8b4bf1c278216e7bed02f2076f2",
+    "task_users": {
+      "analysis": 48311,
+      "document": 48490,
+      "technical": 48432
+    },
+    "provider_a_users": 49592,
+    "provider_a_technical": 46423
+  },
+  "config": {
+    "tau": 1.0,
+    "delta_rdp": 1e-06,
+    "delta_basic": 4e-06,
+    "top_k": 5,
+    "tasks": [
+      "technical",
+      "document",
+      "analysis"
+    ]
+  }
+}

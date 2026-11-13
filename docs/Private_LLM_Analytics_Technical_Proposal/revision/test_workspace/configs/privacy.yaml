@@ -1,0 +1,116 @@
+privacy:
+  privacy_unit: user
+  adjacency: add_remove
+
+  horizon:
+    days: 90
+
+  global_budget:
+    epsilon: 4.0
+    delta: 4.0e-6
+
+  default_query_budget:
+    epsilon: 1.0
+    delta: 1.0e-6
+
+  accountant:
+    mode: rdp
+    epsilon_cap: 4.0
+    delta_global: 1.0e-6
+    orders:
+      - 1.25
+      - 1.5
+      - 2.0
+      - 3.0
+      - 4.0
+      - 5.0
+      - 8.0
+      - 10.0
+      - 16.0
+      - 32.0
+      - 64.0
+      - 128.0
+
+  history:
+    mode: lifetime
+
+  recipient_composition:
+    mode: global_external
+
+  default_mechanism:
+    type: gaussian
+
+  release:
+    reuse_existing_release: true
+    allow_budget_overrun: false
+
+  planner:
+    enabled: true
+    mode: static_public
+    prior:
+      distribution: contribution_model
+      mean: 60.0
+      std: 20.0
+      lower: 5.0
+      upper: 150.0
+      public_seed: 900001
+      num_reference_users: 2000
+    weights:
+      objective_mode: EXPECTED_RELEASE_L1
+      data: 1.0
+      clipping: 1.0
+      noise: 1.0
+      aggregation: 1.0
+      staleness: 0.5
+      window: 0.2
+    workloads:
+      default_arrival_rate: 0.1
+      full_9_cell_weight: 0.4
+      provider_weight: 0.3
+      task_weight: 0.2
+      overall_weight: 0.1
+    window_model:
+      reference_days: 30
+      mean_scaling: linear
+      std_scaling: sqrt_time
+      temporal_averaging_penalty: 0.2
+    candidate_clipping:
+      - 5.0
+      - 10.0
+      - 20.0
+      - 40.0
+      - 80.0
+    candidate_granularities:
+      - full_9_cell
+      - provider_3_cell
+      - task_3_cell
+      - overall_1_cell
+    candidate_windows:
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+    candidate_frequencies:
+      - 1
+      - 7
+      - 14
+      - 30
+    planning_horizon_days: 90
+
+  continual:
+    enabled: false
+    mode: binary_tree
+    epoch_days: 90
+    timezone: UTC
+    daily_l2_bound: 10.0
+    epoch_l12_bound: 40.0
+    lateness_grace_days: 1
+    tree:
+      topology: binary
+      padding: next_power_of_two
+    noise:
+      mechanism: gaussian
+      target_epoch_epsilon: 2.0
+      calibration_delta: 1e-6
+      equal_sigma_per_level: true

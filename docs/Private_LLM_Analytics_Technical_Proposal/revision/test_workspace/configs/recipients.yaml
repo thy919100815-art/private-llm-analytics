@@ -1,0 +1,53 @@
+recipients:
+  internal:
+    role: trusted
+    display_name: "内部 AI 治理团队"
+    providers:
+      - "*"
+    metrics:
+      - "*"
+    exact_results: true
+    dp_results: true
+    cross_provider_comparison: true
+
+  provider_a:
+    role: external
+    display_name: "OpenAI"
+    providers:
+      - provider_a
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+      - success_rate
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false
+
+  provider_b:
+    role: external
+    display_name: "Kimi"
+    providers:
+      - provider_b
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+      - success_rate
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false
+
+  provider_c:
+    role: external
+    display_name: "DeepSeek"
+    providers:
+      - provider_c
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+      - success_rate
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false

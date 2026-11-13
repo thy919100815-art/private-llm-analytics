@@ -1,0 +1,262 @@
+\section{生产环境配置规范与 YAML 范例}
+\label{app:config}
+
+\textbf{Private LLM Analytics} 系统遵循声明式配置与代码逻辑严格解耦的软件工程原则。所有隐私界限、机制参数、记账策略、外部接收方权限与领域分类均通过标准 YAML 文件进行配置驱动。本附录提供与当前仓库 YAML 对齐的核心配置节选；不是对所有入口默认值已统一的声明。
+
+\subsection{指标机制定义配置 (metrics.yaml)}
+
+\texttt{configs/metrics.yaml} 统一定义系统中所有已注册统计指标的维度结构、用户级贡献限制模式与噪声释放机制类型。
+
+\begin{techbox}{指标机制生产配置清单}
+\begin{verbatim}
+metrics:
+  # 1. 用户使用率指标
+  user_prevalence:
+    enabled: true
+    type: prevalence
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: binary              # 二值指示向量
+      max_cells_per_user: 9     # 单用户最多参与单元数截断界限 k
+    mechanism:
+      type: gaussian
+
+  # 2. 用户归一化使用占比指标
+  user_normalized_share:
+    enabled: true
+    type: normalized_share
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: l1_normalized       # L1 归一化用户工作流向量
+      norm_bound: 1.0           # 天然敏感度上界
+    mechanism:
+      type: gaussian
+
+  # 3. 交互调用总量指标
+  interaction_volume:
+    enabled: true
+    type: volume
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: l2_clip             # 用户多维调用频次 L2 范数截断
+      clip_norm: 20.0           # 截断界限 C_vol
+    mechanism:
+      type: gaussian
+
+  # 4. 任务成功率指标
+  success_rate:
+    enabled: true
+    type: success_rate
+    dimensions:
+      - provider
+      - task
+    contribution:
+      mode: joint_l2_clip       # 共享调用总量总范数的联合截断
+      clip_norm_rate: 20.0      # 成功率截断界限 C_rate
+      min_noisy_denominator: 1.0 # 有噪分母抑制最小阈值 tau
+    mechanism:
+      type: gaussian
+
+  # 5. 热门任务发现指标
+  top_k_tasks:
+    enabled: true
+    type: top_k_tasks
+    dimensions:
+      - task
+    contribution:
+      mode: binary
+      max_tasks_per_user: 5
+      top_k: 5                  # T=3 时实际最多输出 min(K,T)=3 项
+    mechanism:
+      type: gaussian
+\end{verbatim}
+\end{techbox}
+
+本文所有 Success Rate 配置示例均显式设置 \texttt{min\_noisy\_denominator: 1.0}。YAML 加载后和 Profile 默认值为 $1.0$；部分兼容构造入口仍默认 $5.0$，因此不可省略此字段。Top-K 的配置 $K=5$ 保留当前代码行为，实际输出数受任务字典大小限制。
+
+\subsection{全生命周期隐私与规划器配置 (privacy.yaml)}
+
+\texttt{configs/privacy.yaml} 集中配置全系统的差分隐私基础假设、生命周期预算上限、RDP 记账阶数、外部接收方合并模式以及数据驱动离线规划器（Offline Planner）的先验分布。
+
+\begin{techbox}{隐私管理与记账生产配置清单}
+\begin{verbatim}
+privacy:
+  privacy_unit: user            # 隐私保护实体：单个自然人用户
+  adjacency: add_remove         # 邻接关系：加/删单用户所有记录
+
+  horizon:
+    days: 90                    # 规划与记账生命周期时间跨度
+
+  global_budget:
+    epsilon: 4.0                # basic 模式/内部作用域的 epsilon 上限
+    delta: 4.0e-6               # basic 模式/内部作用域的累加 delta 上限
+
+  default_query_budget:
+    epsilon: 1.0                # 单次常规发布默认隐私预算
+    delta: 1.0e-6
+
+  accountant:
+    mode: rdp                   # 采用 Rényi 差分隐私紧致组合记账
+    epsilon_cap: 4.0
+    delta_global: 1.0e-6         # 外部 RDP 转换和 lifetime cap 的 delta
+    # 跟踪的 Rényi 散度阶数列表 alpha
+    orders:
+      - 1.25
+      - 1.5
+      - 2.0
+      - 3.0
+      - 4.0
+      - 5.0
+      - 8.0
+      - 10.0
+      - 16.0
+      - 32.0
+      - 64.0
+      - 128.0
+
+  history:
+    mode: lifetime              # 永久追踪全部发布历史事件
+
+  recipient_composition:
+    mode: global_external       # 所有外部模型提供商共用同一外部预算池
+
+  default_mechanism:
+    type: gaussian              # 核心机制：解析高斯机制 (Balle-Wang)
+
+  release:
+    # 开启规范发布语义缓存，相同查询零预算开销
+    reuse_existing_release: true
+    allow_budget_overrun: false    # 预算耗尽时执行 Fail-Closed 熔断
+
+  planner:
+    enabled: true
+    mode: static_public         # 基于公开先验参数的离线规划
+    prior:
+      distribution: contribution_model
+      mean: 60.0
+      std: 20.0
+      lower: 5.0
+      upper: 150.0
+      public_seed: 900001
+      num_reference_users: 2000
+    weights:
+      objective_mode: EXPECTED_RELEASE_L1
+      data: 1.0
+      clipping: 1.0
+      noise: 1.0
+      aggregation: 1.0
+      staleness: 0.5
+      window: 0.2
+    candidate_clipping: [5.0, 10.0, 20.0, 40.0, 80.0]
+    candidate_windows: [7, 14, 30, 60, 90]
+    candidate_frequencies: [1, 7, 14, 30]
+\end{verbatim}
+\end{techbox}
+
+\textbf{字段语义：}外部 \texttt{mode: rdp} 发布以 \texttt{accountant.delta\_global} 为唯一 RDP 转换目标，cap 为 \texttt{accountant.epsilon\_cap}。静态 \texttt{internal} 作用域在当前编排器中走 basic 组合，使用 \texttt{global\_budget} 的 $4.0,4\times10^{-6}$；显式 basic 模式亦使用这组值。两组 delta 含义不同，不能相加或互换。单次 \texttt{default\_query\_budget.delta} 只用于机制标定；持续观测使用 RDP 路径及其配置。
+
+\subsection{多接收方权限与作用域配置 (recipients.yaml)}
+
+\texttt{configs/recipients.yaml} 实现了基于最小权限原则的强隔离策略。系统将接收方划分为内部受信任审计方与外部竞争性模型服务商，并对外部实体施加列级过滤与跨供应商视图屏蔽。
+
+\begin{techbox}{接收方角色与权限矩阵配置}
+\begin{verbatim}
+recipients:
+  # 内部受信任治理团队
+  internal:
+    role: trusted
+    display_name: "内部 AI 治理团队"
+    providers: ["*"]            # 可查看所有模型供应商
+    metrics: ["*"]              # 可访问全部指标体系
+    exact_results: true         # 允许在受控沙盒内访问精确原始统计
+    dp_results: true
+    cross_provider_comparison: true
+
+  # 外部模型供应商 A
+  provider_a:
+    role: external
+    display_name: "OpenAI"
+    providers:
+      - provider_a              # 仅允许查看其自身模型对应的统计切片
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+      - success_rate
+    exact_results: false        # 严格禁止访问明细或精确基准值
+    dp_results: true            # 仅允许接收差分隐私脱敏释放结果
+    cross_provider_comparison: false # 强隔离：屏蔽所有横向对比字段
+
+  # 外部模型供应商 B
+  provider_b:
+    role: external
+    display_name: "Kimi"
+    providers:
+      - provider_b
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+      - success_rate
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false
+
+  # 外部模型供应商 C
+  provider_c:
+    role: external
+    display_name: "DeepSeek"
+    providers:
+      - provider_c
+    metrics:
+      - user_prevalence
+      - user_normalized_share
+      - interaction_volume
+      - success_rate
+    exact_results: false
+    dp_results: true
+    cross_provider_comparison: false
+\end{verbatim}
+\end{techbox}
+
+\subsection{分类体系与基准场景配置 (taxonomy.yaml \& scenario.yaml)}
+
+系统通过独立分类配置实现对多模型及业务任务的动态扩展能力，避免在代码内部硬编码业务标签。
+
+\begin{techbox}{分类与基准场景配置}
+\begin{verbatim}
+# configs/taxonomy.yaml
+taxonomy:
+  version: 1
+  ordering: "canonical_lexicographic" # 强制采用规范字典序对齐多维向量
+  providers:
+    - provider_a
+    - provider_b
+    - provider_c
+  tasks:
+    - technical
+    - document
+    - analysis
+
+# configs/scenario.yaml
+dataset:
+  source: synthetic
+population:
+  mode: fixed_public_population
+  n_users: 50000              # 企业级合成基准总体规模：50,000 名合成用户
+  n_days: 30                  # 观测周期跨度：30 天
+usage_frequency:
+  distribution: normal
+  mean: 60                    # 单用户平均调用频次基准
+  std: 20
+  minimum: 5
+  maximum: 150
+random_seed: 42
+\end{verbatim}
+\end{techbox}

@@ -1,0 +1,4 @@
+population_n,days_streamed,total_active_user_days,correctness_exact_match,memory_mb,disk_mb,bytes_per_user_day,update_latency_p50_ms,update_latency_p99_ms,caljob_latency_p50_ms,caljob_latency_p99_ms
+2000,90,79027,True,35.341,3.84,468.9,285.111,709.494,39.81,59.476
+10000,30,251138,True,77.553,5.333,323.8,1995.81,4403.422,95.773,113.817
+50000,30,1257492,True,386.076,26.7,321.9,8678.795,8895.476,458.904,582.925

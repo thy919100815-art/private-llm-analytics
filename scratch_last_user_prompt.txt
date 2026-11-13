@@ -1,0 +1,104 @@
+<USER_REQUEST>
+# 工程任务：SDG-MH 长期隐私分析系统的统一核算与 Calendar 联合规划实现
+
+## 一、任务目标
+
+请基于当前已有的 **SDG-MH / No Epochs, No Expiry: Multi-Horizon User-Time Differential Privacy for Long-Running Analytics** 项目，进行一次完整的工程实现、数学核验和实验评估。
+
+本任务服务于 PVLDB 2027 论文的技术验证。
+
+**不要重新设计一套独立系统，不要另建一个与原工程无关的演示项目。必须在现有代码、配置、隐私账本、统计发布和实验框架上实现。**
+
+我们当前的论文主线已经确定：
+
+> 在无限期运行的分析系统中，如何为任意用户的任意有限时间区间提供多时间尺度隐私承诺，并通过合理的测量发布与预算规划，长期维持有用且准确的统计？
+
+论文只保留两项主要技术贡献：
+
+1. Multi-Horizon User-Time Privacy 及每日 Gaussian 的理论刻画。
+2. 同一隐私承诺下，多种可加与非可加统计任务的统一核算与发布规划。
+
+此次工程工作的重点是第二项。
+
+**不要为了增加创新数量，额外开发 PRBS、PRICE 新版本、个体稀疏过滤、相关 Gaussian、28 天谐波步长或其他未经验证的机制。**
+
+## 二、首先审计现有仓库
+
+开始修改代码之前，必须完整检查当前仓库。
+
+历史工程可能包含以下文件或模块：
+
+- `planner.py`
+- `policy.py`
+- `models.py`
+- `validator.py`
+- `candidates.py`
+- `utility.py`
+- `diagnostics.py`
+- `configs/privacy.yaml`
+- `run_all_experiments.py`
+- `experiments/verify_planner_architecture.py`
+
+历史开发分支为 `v0.3-dev`，但不要假设当前分支、提交号或目录结构仍然相同，以实际 Git 仓库为准。
+
+先确认：
+
+1. 当前 Git 分支、提交号和未提交改动。
+2. 原每日 Gaussian 封存实现。
+3. Distinct 发布日历及实际敏感度计算。
+4. 隐私预算规划器的输入、目标函数和求解器。
+5. 隐私账本及 `PrivacyView` 等权威预算状态接口。
+<truncated 15077 bytes>
+库的适当开发分支；不覆盖未经授权的其他改动，不强制推送，不直接合并主分支。
+
+如果没有推送权限，应保留本地提交并准确报告原因，不能宣称已经推送成功。
+
+## 十二、执行顺序
+
+按以下顺序连续完成：
+
+**Phase 0 — Baseline Audit**
+
+冻结并复现原系统，确认参数和数学语义。
+
+**Phase 1 — Exact Calendar Accounting**
+
+实现精确周期日历核算、长期安全检查和对应测试。
+
+**Phase 2 — Joint Planner**
+
+实现相位枚举、预算优化与原有执行系统集成。
+
+**Phase 3 — End-to-End Evaluation**
+
+完成四组公平基线、隐私与效用实验、系统性能测试。
+
+**Phase 4 — Independent Verification**
+
+使用暴力 Oracle、反例、边界条件和独立检查重新审计关键结论。
+
+**Phase 5 — Final Engineering Report**
+
+整理所有代码、测试、图表、实验结果和未解决问题，生成完整报告并提交仓库。
+
+优先复用已有功能。不要为了增加模块数量而重构无关代码。
+
+如果某一步发现理论不成立，必须记录失败原因和最小反例，必要时修正方案并重新测试，**不允许为了得到预期正面结果而放宽隐私承诺、修改数据或跳过检查**。
+
+---
+
+## 最终任务成功标准
+
+成功不意味着必须证明联合规划有巨大收益。
+
+真正的成功标准是：
+
+> 在原有 SDG-MH 系统中，实现一套数学定义清楚、隐私成本准确、长期安全边界明确、查询语义不变、实验完全可复现的 Calendar 与预算联合规划机制，并通过公平对照得出可信的工程与论文结论。
+
+如果提升有限甚至没有提升，也要保留完整实验结果，并据此客观评估论文方向。
+
+请直接开始仓库审计和工程实施，不要只输出研究设想或伪代码。最终以实际代码、测试、实验结果和完整工程报告为准。
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-13T13:31:49+08:00.
+</ADDITIONAL_METADATA>

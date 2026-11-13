@@ -1,0 +1,44 @@
+\section{工程实现与安全控制架构}
+\label{sec:engineering}
+
+\subsection{生产环境随机数采样与注入防御}
+理论高斯机制假设按规定分布采样且随机状态不向接收方泄露。实际伪随机采样、浮点计算及种子控制需要单独审计；拒绝调用方传入种子并不等价于实现密码学安全随机数。
+
+针对该安全风险，系统在代码架构层实施了严格的\textbf{调用方 RNG 控制阻断机制}：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{静态生产模式采样：} 在生产发布接口 \texttt{AnalyticsService.compute()} 中，静态发布编排器采用 \texttt{np.random.default\_rng()}：由操作系统提供的熵初始化统计随机数生成器，用于当前高斯采样实现；该实现不宣称具备密码学 CSPRNG 安全属性；
+  \item \textbf{参数探查与即时熔断：} 任何调用方若尝试传入包含 \texttt{rng}、\texttt{seed}、\texttt{noise\_seed}、\texttt{noise} 或 \texttt{random\_state} 的参数，代码拦截器立即触发 \texttt{ProductionRNGControlError} 并阻断执行；
+  \item \textbf{禁止动态覆盖截断界：} 严禁外部调用方在查询时动态覆写截断阈值 \texttt{clip\_norm}，所有截断边界必须且仅能在受管的中心化配置中统一固化。
+\end{itemize}
+
+当前默认 BitGenerator 为 PCG64。时间树节点路径 \texttt{continual/state.py} 仍调用 \texttt{np.random.normal}，使用全局统计 RNG，可能受进程内全局 seed 影响。\textbf{REMAINING LIMITATION：}尚未实现统一 CSPRNG 高斯采样器，也未完成浮点采样的端到端安全证明；静态接口的注入防御不能直接推广至时间树。
+
+\subsection{评测实验与生产环境状态严格隔离}
+为了支持算法团队开展长期的效用基准评测，同时坚决避免将测试流量混入具有法律合规效力的正式账本，系统构建了\textbf{双模态环境隔离执行体系}：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{生产服务管线（Production Pipeline）：} 仅响应标准发布请求，严格受控于全生命周期预算上限，所有已提交记录持久化写入生产数据库 \texttt{results/privacy\_state.db}。
+  \item \textbf{实验评测管线（Experiment Runner）：} 通过专用内部通道 \texttt{compute\_experiment()} 调用，支持传入确定性种子以便实验复现，其内部记账被重定向至隔离的临时数据库 \texttt{results/experiment\_state.db}。系统部署了防护守卫（Fencing Guard）：若在实验模式下检测到数据库路径意外指向生产文件，系统将拒绝启动。
+\end{itemize}
+
+\subsection{关系型持久化状态机与并发事务控制}
+为了保障在多业务部门并发查询场景下的记账一致性，系统依托轻量级关系型数据库与预写日志（WAL）机制，实现了\textbf{具备租约隔离与世代栅栏（Generation Fencing）的原子预留状态机}。状态转移逻辑包含以下阶段：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{预留阶段（RESERVED）：} 开启数据库排他事务，核查历史累积 RDP 向量；若未超标，向账本插入处于租约有效期（\texttt{lease\_timeout = 300s}）内的预留令牌，并锁定候选预算；
+  \item \textbf{计算与加噪阶段（EXECUTING）：} 在事务外异步执行矩阵聚合与高斯机制采样，避免长耗时计算阻塞全局数据库锁；
+  \item \textbf{提交阶段（COMMITTED）：} 携带预留世代编号（Generation Token）执行二次原子事务提交；若工作节点在此期间发生崩溃或超时，未完成提交的预留令牌将被后续回收线程安全回收，防止预算悬空泄露或重复双花（Double-Spending）。
+\end{enumerate}
+
+\subsection{全面防御性故障闭环机制 (Fail-Closed Architecture)}
+系统以参数校验、预算预留和权限检查实施\textbf{故障拒绝准则（Fail-Closed）}，以下结论限于对应实现路径：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{模式缺失拦截：} 成功率查询若遭遇缺失 \texttt{success} 标记的遥测日志，抛出 \texttt{MissingRequired}\allowbreak\texttt{StatisticColumn} 异常，拒绝执行；
+  \item \textbf{分母失配拦截：} 上传数据中的活跃独立用户数若超过声明的公开在册人口（$n_{\text{active}} > N_{\text{public}}$），抛出 \texttt{DatasetConfiguration}\allowbreak\texttt{MismatchError}，阻断非法的分母越界；
+  \item \textbf{越权窃取拦截：} 任何外部不可信接收方尝试请求精确对比报表（\texttt{include\_exact = True}）或访问内部输入预览接口，系统统一返回 HTTP 403 权限违例（\texttt{RecipientSecurity}\allowbreak\texttt{Violation}）。
+\end{itemize}
+
+\subsection{多端发布数据一致性保证}
+为了避免前后端在百分比转换、浮点精度舍入或接收方映射时产生不一致，系统确立了\textbf{“单一权威事实源（Single Source of Truth）”}架构：
+\begin{center}
+  \textbf{数据库已提交快照} $\longrightarrow$ \textbf{API 过滤视图} $\longrightarrow$ \textbf{Web / CSV / JSON 呈现}
+\end{center}
+前端 Web 界面被严格限制为只读视图呈现器（View-only Presenter），不在浏览器端重新抽取隐私噪声；显示百分比和舍入属于后处理。CSV/JSON 文件的导出直接流式序列化数据库中已提交的快照记录，\textbf{下载操作不产生任何随机数重抽样，也不增加任何隐私预算消耗}。

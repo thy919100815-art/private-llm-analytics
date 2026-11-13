@@ -1,0 +1,26 @@
+dataset:
+  source: synthetic
+
+population:
+  mode: fixed_public_population
+  n_users: 50000
+  n_days: 30
+
+providers:
+  - provider_a
+  - provider_b
+  - provider_c
+
+tasks:
+  - technical
+  - document
+  - analysis
+
+usage_frequency:
+  distribution: normal
+  mean: 60
+  std: 20
+  minimum: 5
+  maximum: 150
+
+random_seed: 42

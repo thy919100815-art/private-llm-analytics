@@ -1,0 +1,76 @@
+\section{独立验证与工程测试基准}
+\label{sec:validation}
+
+\subsection{全量回归测试套件执行基准}
+本项目构建了严密的自动化多层次测试套件，全面覆盖底层代数算子、机制校准、并发数据库事务、RDP 记账账本、外部安全隔离以及 Web 控制台 REST 接口。在当前开发分支（\texttt{v1.1-dev}）上，执行全量自动化回归测试的结果如表~\ref{tab:test_summary} 所示。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{自动化测试工程回归验证基准结果 (Python 3.14 环境)}
+\label{tab:test_summary}
+\begin{tabularx}{\textwidth}{lccX}
+\toprule
+\textbf{测试分类与子系统} & \textbf{测试用例数} & \textbf{执行状态} & \textbf{重点覆盖的安全与算法属性} \\
+\midrule
+\texttt{test\_statistic\_profiles.py} & $28$ & 全部 PASS & 5 大指标专属 Profile 数学规范与后处理单调性 \\
+\texttt{test\_profile\_accounting.py} & $14$ & 全部 PASS & 单次释放 RDP 描述子与联合发布敏感度合法性 \\
+\texttt{test\_continual\_*.py} (7个模块) & $82$ & 全部 PASS & 时间二叉树节点分解、跨接收方节点复用与最终边界 \\
+\texttt{test\_cache\_and\_isolation.py} & $12$ & 全部 PASS & 规范重放幂等性、外部禁止精确值访问与供应商隔离 \\
+\texttt{test\_privacy\_state.py} & $36$ & 全部 PASS & SQLite 原子事务、世代栅栏、租约超时与并发争用 \\
+\texttt{test\_web\_*.py} (11个模块) & $94$ & 全部 PASS & Web 控制台 API、KaTeX 渲染、CSV 导出与策略更新 \\
+其余机制、规划器与集成测试 & $276$ & 全部 PASS & 摄取校验、高斯校准、动态分类法与长周期累加 \\
+\midrule
+\textbf{全量汇总 (Total Baseline)} & $\mathbf{542}$ & $\mathbf{0\text{ Failed}}$ & $\mathbf{542\text{ 项测试全量通过}}$ (总耗时 $573.10\text{ 秒}$) \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{敏感度相邻数据集 (\texorpdfstring{$D \sim D'$}{D ~ D'}) 独立构造验证}
+为了防止代码中声称的敏感度与算法实际聚合产生的位移脱节，诊断套件独立构建了边界相邻数据集验证程序。测试构造了包含空用户、单单元极值调用（1,000 次）、全单元均匀调用以及全单元极端暴增（10,000 次）在内的 6 种极端用户向量 $u^*$，独立计算 $\|f(D) - f(D')\|_2$。实测最大经验位移与代码声明敏感度对比如表~\ref{tab:sensitivity_verification} 所示。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{五大统计指标相邻数据集经验敏感度实测验证表}
+\label{tab:sensitivity_verification}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccc}
+\toprule
+\textbf{统计指标} & \textbf{代码声明敏感度 $\Delta_2$} & \textbf{最大经验位移 $\|f(D)-f(D')\|_2$} & \textbf{数学边界约束} & \textbf{审计结论} \\
+\midrule
+\textbf{User Prevalence} & $3.0000$ & $3.0000$ & $\le \sqrt{9} = 3.0$ & \textbf{PASS} (严格等于紧致界) \\
+\textbf{Normalized Share} & $1.0000$ & $1.0000$ & $\le 1.0$ & \textbf{PASS} (严格受限于单纯形) \\
+\textbf{Interaction Volume} & $20.0000$ & $20.0000$ & $\le C = 20.0$ & \textbf{PASS} (截断边界有效) \\
+\textbf{Success Rate} & $28.2843$ & $20.0728$ & $\le \sqrt{2}C_{\text{rate}} = 28.2843$ & \textbf{PASS} (完全处于理论界内) \\
+\textbf{Top-K Tasks} & $2.2361$ & $1.7321$ & $\le \sqrt{3} \approx 1.7321$ & \textbf{PASS} (受限于字典大小) \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+实测证明，所有机制在各类极端输入下均无一例外受控于声明敏感度，未发现任何敏感度低估或边界溢出漏洞。
+
+\subsection{高斯采样器蒙特卡洛统计检验 (Monte Carlo Check)}
+为了验证底层高斯采样器与解析参数校准的统计一致性，系统在基准配置（$\sigma = 12.6740$）下开展了 5,000 次独立高斯采样蒙特卡洛试验：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{均值收敛性检验：} 各单元经验均值在 $[-0.3339, +0.4354]$ 之间波动，最大均值偏差 $Z\text{-score} = 2.43 < 3.0$（符合零均值正态假设）；
+  \item \textbf{标准差吻合性检验：} 各单元经验标准差在 $[12.3997, 12.9112]$ 之间，相对理论标度 $\sigma = 12.6740$ 的最大相对误差仅为 $\mathbf{2.16\% < 3.0\%}$。
+\end{itemize}
+这排除了实现中因随机数尺度换算错误导致的隐私保证失效。
+
+\subsection{RDP 记账公式高精度理论对齐}
+针对 12 个默认评估阶数 $\alpha \in [1.25, 128.0]$，测试程序对比了理论公式 $\rho(\alpha) = \frac{\alpha \Delta_2^2}{2\sigma^2}$ 与底层高精度 \texttt{Decimal} 记账模块的输出值：
+\begin{itemize}[leftmargin=2em]
+  \item 单次高斯释放的理论散度与代码计算值之间的绝对差值最大仅为 $\mathbf{4.44 \times 10^{-16}}$；
+  \item 连续 5 次机制组合后的累积误差最大仅为 $\mathbf{2.22 \times 10^{-16}}$。
+\end{itemize}
+验证了记账引擎不仅在数学公式上完全正确，而且借助高精度定点数实现，有效规避了浮点数累加导致的有效数字丢失风险。
+
+\subsection{规范重放、作用域隔离与二叉树节点复用验证}
+在隔离状态测试中，验证了以下关键工程边界：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{规范重放零消耗：} 对同一查询执行 Replay，增量 $\Delta\varepsilon = 0.0000$，\texttt{cache\_hit = True}，返回结果与首次发布完全一致；
+  \item \textbf{外部多租户预算连通：} 供应商 \texttt{provider\_a} 发布后，\texttt{provider\_b} 在 \texttt{GLOBAL\_}\allowbreak\texttt{EXTERNAL} 共享作用域下立即同步累积消耗（$1.3421$），合谋防护生效；
+  \item \textbf{作用域内二叉树节点按位恒等复用：} 在同一作用域（如 \texttt{GLOBAL\_EXTERNAL}）下，多个不同接收方查询重叠时间段时，系统从持久化数据库提取的相同规范节点加噪向量在浮点表示上\textbf{按位完全相等（Bitwise Identical）}，正常服务重启后依然保持确定性一致；而在独立作用域之间严格遵循隔离与记账规范。
+\end{enumerate}

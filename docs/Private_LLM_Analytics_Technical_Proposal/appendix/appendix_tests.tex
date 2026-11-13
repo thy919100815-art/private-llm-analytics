@@ -1,0 +1,137 @@
+\section{工程验证与复现执行指南}
+\label{app:tests}
+
+本附录提供 \textbf{Private LLM Analytics} 系统的完整工程验证、测试执行与实验复现指令集。所有测试与实验均基于统一的沙盒与环境隔离规范设计，旨在为独立评审人提供确定性、高置信度的端到端复验路径。
+
+\subsection{环境准备与依赖安装}
+
+系统要求 Python 3.10 及以上运行环境（已验证 Python 3.10、3.11 及 3.12 兼容性）。建议在全新的虚拟环境中完成初始化配置：
+
+\begin{techbox}{Python 虚拟环境初始化指令}
+\begin{verbatim}
+# 1. 创建独立虚拟环境
+python -m venv .venv
+
+# 2. 激活虚拟环境 (Windows PowerShell)
+.\.venv\Scripts\Activate.ps1
+# 或 Linux / macOS: source .venv/bin/activate
+
+# 3. 升级核心包管理工具并安装项目依赖
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+# 4. 可选：以开发可编辑模式安装本核心库
+pip install -e .
+\end{verbatim}
+\end{techbox}
+
+核心运行依赖库包括：\texttt{numpy}、\texttt{scipy}、\texttt{pandas}、\texttt{pydantic}、\texttt{pyyaml}、\texttt{fastapi}、\texttt{uvicorn}、\texttt{jinja2}；测试框架采用 \texttt{pytest}。
+
+\subsection{全量工程测试套件运行}
+
+系统工程实现包含单元测试、机制边界测试、多工作线程记账并发测试、规范重放缓存测试以及时间二叉树持续观测测试等。执行全量测试套件：
+
+\begin{techbox}{全量自动化回归测试指令}
+\begin{verbatim}
+# 运行全部 542 项工程测试套件
+pytest tests -q
+
+# 期望输出基准（耗时约 500-600 秒）：
+# 542 passed, 0 failed in 573.10s
+\end{verbatim}
+\end{techbox}
+
+若需针对特定子系统进行快速单模块审计，可运行下列分项测试指令：
+\begin{itemize}[itemsep=2pt,topsep=2pt]
+  \item \textbf{差分隐私与敏感度测试：} \verb|pytest tests/test_dp_mechanisms.py -v|
+  \item \textbf{RDP 记账与多租户测试：} \verb|pytest tests/test_accounting_scopes.py -v|
+  \item \textbf{规范重放与零预算穿透测试：} \verb|pytest tests/test_canonical_replay.py -v|
+  \item \textbf{持续观测二叉树前缀测试：} \verb|pytest tests/test_continual_binary_tree.py -v|
+  \item \textbf{Web 控制台与 API 接口测试：} \verb|pytest tests/test_web_console.py -v|
+\end{itemize}
+
+\subsection{全数值链端到端诊断审计}
+
+为验证从原始遥测日志读取、用户贡献截断、全局敏感度校准、高斯噪声添加、非负保序后处理、RDP 记账扣除，到 API 封装与 CSV 导出的完整数值一致性，系统提供了统一数值诊断线束：
+
+\begin{techbox}{端到端数值链审计执行}
+\begin{verbatim}
+python experiments/audit_dp_mechanisms.py
+\end{verbatim}
+\end{techbox}
+
+该线束针对 $N=1,000$ 典型用户样本，在固定随机种子下遍历全部 5 项统计指标，执行下列严密检查：
+\begin{enumerate}[itemsep=1pt,topsep=2pt]
+  \item \textbf{原始精确值计算（Raw Exact）：} 验证无截断下的真实业务统计基准。
+  \item \textbf{贡献限制校验（Bounded Exact）：} 验证截断后用户特征向量严格落在界限内（如 Prevalence $\le 9$、Volume $L_2 \le 20.0$）。
+  \item \textbf{敏感度与方差推导：} 打印精确的 $\Delta_2$ 与由 Balle-Wang 解析算法求解出的最小方差 $\sigma$。
+  \item \textbf{高斯噪声释放与后处理：} 验证加噪后向量经非负约束、加和归一化或阈值抑制后，返回的业务结果在语义范围内（如成功率 $\in [0, 1]$ 或 \texttt{SUPPRESSED}）。
+  \item \textbf{规范重放判定：} 执行相同参数重放，验证服务端精准命中 \verb|cache_hit = True|，预算消耗 $\Delta\varepsilon = 0.0$。
+  \item \textbf{接收方隔离与 CSV 导出：} 验证向外部接收方（如 \texttt{provider\_a}）请求时，返回结果已被自动裁剪且不可见其他提供商数据，同时校验生成的下载 CSV 文件格式与数值完全一致。
+\end{enumerate}
+运行结果最终输出各指标全数值链状态为 \verb|STATUS: PASS|。
+
+\subsection{数学边界与蒙特卡洛独立校验}
+
+为排除对第三方统计库的先验假设，运行独立深度数值校验脚本：
+
+\begin{techbox}{数学敏感度与蒙特卡洛校验}
+\begin{verbatim}
+python scratch/audit_deep_checks.py
+\end{verbatim}
+\end{techbox}
+
+该测试执行四项独立的底层校验：
+\begin{itemize}[itemsep=2pt,topsep=2pt]
+  \item \textbf{经验敏感度网格搜索：} 构建 6 类处于边界条件下的极端用户向量（全零调用、单单元脉冲式调用、均匀满负荷调用、极端倾斜调用），遍历所有相邻数据集对 $D \sim D'$，验证 $\|f(D) - f(D')\|_2 \le \Delta_2$ 严格成立，且在最劣测试用例下等号取到。
+  \item \textbf{蒙特卡洛噪声校准验证：} 针对已求得的 $\sigma$，进行 5,000 次独立高斯采样，验证样本均值偏差在 $3\sigma/\sqrt{M}$ 统计置信区间内，样本标准差相对理论误差小于 $3.0\%$。
+  \item \textbf{RDP 记账解析精度校验：} 将代码库计算的 Rényi 散度 $\rho(\alpha)$ 与解析理论值 $\frac{\alpha \Delta_2^2}{2\sigma^2}$ 进行逐阶对比，在 12 个评价阶数上均达到浮点机器精度级别（残差 $< 10^{-15}$）。
+  \item \textbf{动态分类维度泛化校验：} 分别在 $2\times 2$、$3\times 3$ 以及 $4\times 5$ 的非对称分类维度下实例化全部指标算子，确认无静态维度硬编码缺陷。
+\end{itemize}
+
+\subsection{规范重放与持续观测一致性复现}
+
+验证多租户环境下的预算账本隔离与时间二叉树节点重用特性：
+
+\begin{techbox}{重放机制与二叉树节点复验}
+\begin{verbatim}
+python scratch/audit_replay_and_continual.py
+\end{verbatim}
+\end{techbox}
+
+该脚本验证两项系统关键行为：
+\begin{enumerate}[itemsep=1pt,topsep=2pt]
+  \item \textbf{接收方作用域穿透验证：} 外部接收方 \verb|provider_a| 触发首次发布消耗 $\varepsilon=1.3421$ 后，同属全局外部作用域的 \verb|provider_b| 请求同一统计指标时，系统直接返回已有密态发布结果且不追加扣除外部预算账本；而内部受信任接收方 \verb|internal| 拥有独立的内部审计账本，互不挤占。
+  \item \textbf{二叉树持久化与作用域节点复用确定性：} 验证跨进程重启后，二叉树在同一隐私作用域内对已完成发布的历史区间节点实现按位完全一致的重放复用输出，且仅在时间窗口拓展时对新激活的二叉树父节点进行有限增量记账。
+\end{enumerate}
+
+\subsection{本地可视化 Web 控制台交互启动}
+
+系统提供了面向非技术利益相关者的可解释性 Web 控制台：
+
+\begin{techbox}{启动本地可视化服务}
+\begin{verbatim}
+python -m private_llm_analytics.web.app
+# 服务将监听并在本地启动：http://127.0.0.1:8000
+\end{verbatim}
+\end{techbox}
+
+评审人员可在浏览器中打开 \texttt{http://127.0.0.1:8000}，体验端到端交互流：
+\begin{itemize}[itemsep=1pt,topsep=2pt]
+  \item \textbf{数据接入：} 下载示例 CSV 模板，上传企业遥测日志或系统预置的合成数据集。
+  \item \textbf{统计问题选择：} 切换“用户采纳率”、“工作流占比”、“总调用规模”与“成功率”。
+  \item \textbf{通俗化机制释义：} 控制台默认以“单人最大影响限制”、“防护噪声”与“非负约束”等业务语言展示，并提供“展开数学细节”选项支持实时 KaTeX 公式查看。
+  \item \textbf{误差可视化对比：} 观察原始真实值（Raw Exact）、有界精确值（Bounded Exact）与加噪发布值（DP Estimate）之间的数值偏差。
+  \item \textbf{合规结果导出：} 点击一键下载脱敏分析结果 CSV 文件，验证接收方作用域过滤效果。
+\end{itemize}
+
+\subsection{生产账本隔离与状态安全守则}
+
+\begin{techbox}[colback=white,colframe=accentamber]{注意事项：持久化账本操作安全规范}
+系统生产运行的默认账本存储于 \texttt{results/privacy\_state.db}。在进行工程复现与代码审计时，请严格遵守下列操作规范：
+\begin{enumerate}[itemsep=1pt,topsep=1pt]
+  \item \textbf{禁止手动篡改或重置生产账本：} \texttt{privacy\_state.db} 记录了已发布事件的历史序列与真实已耗预算，在生产环境下任何对数据库的清空或回滚均会导致严重的隐私泄露与噪声平均攻击（Noise Averaging Attack）。
+  \item \textbf{测试脚本强制使用独立数据库：} 所有自动化测试与实验脚本均通过 \texttt{IsolatedStateDB} 上下文管理器在系统临时目录生成临时 SQLite 实例，并在测试生命周期结束后自动清理，避免测试副作用污染生产账本。
+  \item \textbf{版本控制状态监控：} 在完成所有本地验证操作后，请执行 \texttt{git status}，确保 \texttt{results/privacy\_state.db} 保持未修改状态。
+\end{enumerate}
+\end{techbox}

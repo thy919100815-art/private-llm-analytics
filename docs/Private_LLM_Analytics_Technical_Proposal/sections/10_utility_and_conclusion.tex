@@ -1,0 +1,45 @@
+\section{实施效果、适用范围与结论}
+\label{sec:utility_and_conclusion}
+
+\subsection{统计精度与效用表现}
+系统在基于真实业务特征构建的 50,000 名员工基准仿真数据集上进行了效用测试（默认隐私预算 $\varepsilon = 1.0 \sim 2.0$，$\delta = 1.0 \times 10^{-6}$）。典型参考结果如表~\ref{tab:utility_summary} 所示。
+
+\begin{table}[htbp]
+\centering
+\small
+\renewcommand{\arraystretch}{1.08}
+\caption{基准规模（50,000 用户）下各核心指标的差分隐私统计参考表现}
+\label{tab:utility_summary}
+\begin{tabularx}{\textwidth}{p{2.6cm}>{\raggedright\arraybackslash}p{3.8cm}cc>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{指标} & \textbf{关键参数设定} & \textbf{评估方式} & \textbf{参考误差水平} & \textbf{适用场景说明} \\
+\midrule
+总调用量 & $C_{\text{req}} = 20 \sim 100$ & 相对误差 MAPE & 约 $1\% \sim 2\%$ & 适用于容量规划与负载调度 \\
+Token 消耗 & $C_{\text{tok}} = 100,000$ & 相对误差 MAPE & 约 $1\% \sim 2\%$ & 适用于采购对账与成本分摊 \\
+员工渗透率 & $k=2 \sim 9, N_{\text{public}}=2,000$ & 绝对百分点误差 & 低于 1 个百分点 & 适用于普及度观察与采纳分析 \\
+调用成功率 & $C_{\text{rate}} = 20 \sim 50, \tau=1.0$ & 绝对百分点误差 & 约 1 个百分点量级 & 适用于供应商稳定性评估 \\
+高频任务 (扩展) & $k=5 \sim 10$, 词表加噪 & Top-5 命中率 & 前 5 大任务良好重合 & 适用于热门需求挖掘与定制微调 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+差分隐私数学机制的一个重要特性是：\textbf{注入的高斯噪声规模仅取决于单用户截断阈值，而与企业总人数 $N$ 无关}。因此，企业员工规模越大（$N$ 越大），单用户截断与加噪对宏观总和的相对扰动越微小，相对误差呈 $O(1/N)$ 迅速衰减。在万人级企业中，统计大盘精度与未加噪的真实宏观值高度接近。
+
+\subsection{适用场景与边界说明}
+为确保方案在企业内的科学应用，明确系统的数据边界如下：
+\begin{itemize}[leftmargin=1.8em, itemsep=1pt]
+  \item \textbf{推荐适用场景：}
+  \begin{itemize}[itemsep=1pt]
+    \item 500 人以上规模的中大型企业与技术研发组织；
+    \item 跨多模型（OpenAI、Kimi、DeepSeek 等）的宏观负载分析与采购对账；
+    \item 向外部云服务商或行业生态反馈服务质量（SLA）等安全共享场景。
+  \end{itemize}
+  \item \textbf{不适用场景及安全边界：}
+  \begin{itemize}[itemsep=1pt]
+    \item \textbf{微型团队或稀疏统计单元：} 样本量较小时，差分隐私噪声的相对影响会更加明显；对于成功率等比率指标，当加噪后的有效分母低于配置阈值时，系统会抑制该项结果。
+    \item \textbf{个体违规行为调查：} 差分隐私从原理上用于降低个体行为推断风险，排查个案违规应按照正规内控流程调用审计日志。
+  \end{itemize}
+\end{itemize}
+
+\subsection{方案总结}
+\textbf{\mbox{Private LLM Analytics}} 系统采用用户级差分隐私机制，构建了“单用户贡献截断 $\to$ 解析高斯加噪 $\to$ 隐私预算全生命周期记账 $\to$ 结果标识规范重放 $\to$ 分层时间持续监控”的技术架构，在降低员工个体行为推断风险的同时，提供可用的大盘宏观管理洞察，为企业大模型应用的合规治理与数字化决策提供技术支撑。

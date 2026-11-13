@@ -1,0 +1,5 @@
+sigma,sample_size,empirical_mean,empirical_var,theoretical_var,empirical_var_ratio,ci95_lower,ci95_upper,theoretical_var_ratio,relative_error,empirical_le_sigma_sq,verified_within_ci
+30.0,1000000,0.0094,898.3752,900.0,0.998195,0.995423,1.000966,1.0,0.001805,True,True
+500.0,1000000,-0.3921,250555.7421,250000.0,1.002223,0.999451,1.004995,1.0,0.002223,False,True
+1500.0,1000000,1.255,2250732.1853,2250000.0,1.000325,0.997554,1.003097,1.0,0.000325,False,True
+5200.0,1000000,-5.5894,27114533.5239,27040000.0,1.002756,0.999985,1.005528,1.0,0.002756,False,True

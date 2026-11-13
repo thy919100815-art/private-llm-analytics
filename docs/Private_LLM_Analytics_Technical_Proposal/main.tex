@@ -1,0 +1,142 @@
+\documentclass[UTF8,11pt,a4paper]{ctexart}
+
+% ==============================================================================
+% 宏包加载与基础配置
+% ==============================================================================
+\usepackage[top=2.2cm, bottom=2.2cm, left=2.3cm, right=2.3cm]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{booktabs, tabularx, multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.misc, calc, trees, backgrounds, fit}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage[hidelinks, colorlinks=true, linkcolor=navyblue, citecolor=navyblue, urlcolor=navyblue]{hyperref}
+
+% ==============================================================================
+% 色彩与版面定义
+% ==============================================================================
+\definecolor{navyblue}{RGB}{27, 54, 93}
+\definecolor{slateblue}{RGB}{44, 82, 130}
+\definecolor{charcoal}{RGB}{45, 55, 72}
+\definecolor{darkgray}{RGB}{74, 85, 104}
+\definecolor{lightbg}{RGB}{247, 250, 252}
+\definecolor{bordercolor}{RGB}{226, 232, 240}
+\definecolor{accentamber}{RGB}{180, 83, 9}
+
+\linespread{1.22}
+\setlength{\parskip}{0.32em}
+\setlength{\parindent}{2em}
+
+% 标题格式定制
+\titleformat{\section}{\color{navyblue}\Large\bfseries}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\color{slateblue}\large\bfseries}{\thesubsection}{0.7em}{}
+\titleformat{\subsubsection}{\color{charcoal}\normalsize\bfseries}{\thesubsubsection}{0.7em}{}
+
+\titlespacing*{\section}{0pt}{1.0ex plus .2ex minus .2ex}{0.6ex plus .1ex}
+\titlespacing*{\subsection}{0pt}{0.8ex plus .2ex minus .1ex}{0.4ex plus .1ex}
+\titlespacing*{\subsubsection}{0pt}{0.6ex plus .1ex minus .1ex}{0.3ex plus .1ex}
+
+% 页眉页脚配置
+\setlength{\headheight}{14pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{darkgray}企业大模型使用数据差分隐私分析系统技术方案}
+\fancyhead[R]{\small\color{darkgray}Private LLM Analytics}
+\fancyfoot[L]{\small\color{darkgray}内部评审方案 \quad\textbar\quad 版本: v1.1-dev}
+\fancyfoot[R]{\small\color{darkgray}第 \thepage\ 页\,/\,共 \pageref{LastPage}\ 页}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% 自定义高亮框
+\newtcolorbox{techbox}[2][]{
+  enhanced,
+  breakable,
+  colback=lightbg,
+  colframe=navyblue,
+  coltitle=white,
+  fonttitle=\bfseries\small,
+  title={#2},
+  boxrule=0.7pt,
+  arc=2pt,
+  left=8pt,
+  right=8pt,
+  top=4pt,
+  bottom=4pt,
+  #1
+}
+
+% ==============================================================================
+% 封面与元数据配置
+% ==============================================================================
+\title{
+  \vspace{-1.2cm}
+  {\LARGE\bfseries\color{navyblue} 企业大模型使用数据差分隐私分析系统技术方案}\\[0.25cm]
+  {\large\bfseries\color{slateblue} Private LLM Analytics: Technical Architecture and Privacy-Preserving Analytics Design}\\[0.15cm]
+  {\normalsize\color{darkgray} 面向企业内部治理、采购决策与跨组织合规发布的高可用差分隐私解决方案}
+}
+
+\author{
+  \textbf{系统架构与数据安全联合项目组} \quad\textbar\quad \textit{Private LLM Analytics Engineering Group}
+}
+
+\date{
+  \small \textbf{版本号：} v1.1-dev \quad\textbar\quad \textbf{发布日期：} 2026 年 10 月 \quad\textbar\quad \textbf{文档状态：} 正式评审方案
+  \vspace{-0.6cm}
+}
+
+% ==============================================================================
+% 正文开始
+% ==============================================================================
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\vspace{0.1cm}
+\begin{abstract}
+随着多模态大语言模型（OpenAI、Kimi、DeepSeek 等）在企业研发、办公与客服场景的深度普及，科学评估员工使用偏好、业务任务结构、Token 成本及接口成功率成为企业数字化治理的关键抓手。然而，传统基于明细日志或简单脱敏均值的统计方式，极易被攻击者结合背景知识通过高维特征反推出特定员工的隐私行为轨迹；而长尾极端调用量用户的存在，更使得统计大盘面临严重的失真与推断风险。
+
+本文系统阐述了 \textbf{\mbox{Private LLM Analytics}} 系统的完整技术方案。系统确立了以单个员工全部行为为边界的“用户级”（\mbox{User-Level DP}）差分隐私数学基石，构建了涵盖调用总量（Total Requests）、Token 消耗（Total Tokens）、员工渗透率（User Prevalence）、接口成功率（Success Rate）四项核心统计能力及扩展的高频任务（Top-K Tasks）分析能力；针对成功率等敏感比率设计了单次联合高斯释放与安全阈值抑制机制；在系统全局治理层面，采用 Rényi 差分隐私（RDP）实现持久化事务一致记账，研发基于规范语义哈希的结果标识缓存重放技术以降低重复查询带来的噪声平均风险；针对长周期监控需求，引入基于时间二叉树（Binary Time Tree）的持续观测机制，使累积噪声从线性降至对数级。在 50,000 名员工规模的基准评测中，系统将宏观相对误差控制在 $1\% \sim 2\%$ 左右，在提供企业级宏观分析能力的同时，降低统计结果泄露个体行为信息的风险。
+\end{abstract}
+
+\vspace{0.2cm}
+\begin{center}
+\small\textbf{关键词：} 差分隐私；大语言模型治理；用户级贡献截断；解析高斯机制；Rényi 差分隐私；持续观测；时间二叉树
+\end{center}
+
+\newpage
+{
+  \setlength{\parskip}{0pt}
+  \linespread{1.05}\selectfont
+  \renewcommand{\contentsname}{\vspace*{-0.8cm}\color{navyblue}\Large\bfseries 目\quad 录}
+  \setcounter{tocdepth}{2}
+  \tableofcontents
+  \thispagestyle{empty}
+}
+\newpage
+
+% 正文 10 个章节
+\input{sections/01_background_goals.tex}
+\input{sections/02_overall_solution.tex}
+\input{sections/03_system_architecture.tex}
+\input{sections/04_analytics_capabilities.tex}
+\input{sections/05_dp_mechanism.tex}
+\input{sections/06_budget_and_replay.tex}
+\input{sections/07_continual_observation.tex}
+\input{sections/08_security_and_release.tex}
+\input{sections/09_deployment_implementation.tex}
+\input{sections/10_utility_and_conclusion.tex}
+
+% 附录
+\newpage
+\appendix
+\input{appendix/appendix_core_parameters.tex}
+
+\end{document}

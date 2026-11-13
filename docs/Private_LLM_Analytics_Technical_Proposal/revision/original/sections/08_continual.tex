@@ -1,0 +1,95 @@
+\section{流式时间序列持续观测机制 (Continual Observation)}
+\label{sec:continual}
+
+\subsection{长周期动态监控的隐私与效用挑战}
+在企业大模型日常治理中，管理团队不仅需要离线的单次汇总报表，更需要连续跟踪使用趋势。例如监控过去 7 天或 14 天的滑动窗口交互量波动，以便及时捕捉因业务系统变更引发的调用激增或异常下跌。
+
+若将每一天的增量调用简单视为一次独立的差分隐私释放任务，连续发布 $T$ 天将导致两个无法克服的缺陷：
+\begin{enumerate}[label=(\arabic*), leftmargin=2em]
+  \item \textbf{隐私预算迅速耗尽：} 依据组合定理，独立加噪的 RDP 散度与发布天数 $T$ 呈严格线性增长（$\rho_{\text{total}} = O(T)$）。在一个季度（$T=90$）内，全生命周期预算上限将被迅速穿透。
+  \item \textbf{滑动窗口方差累加：} 评估一个长度为 $W$ 天的滑动窗口总量时，若由 $W$ 个独立加噪的单日数据求和得到，噪声方差将线性叠加至 $W \sigma^2$，导致区间趋势严重失真。
+\end{enumerate}
+
+针对此问题，系统将 Dwork 等人 (STOC 2010)~\cite{dwork2010continual} 与 Chan 等人 (SODA 2011)~\cite{chan2011private} 开创的\textbf{差分隐私时间二叉树机制（Binary Time Tree）}工程化引入本项目，重点赋能交互总量（Interaction Volume）的持续观测。
+
+\subsection{双层贡献截断体系 (Two-Tier Bounding)}
+在持续时间序列中，单个员工不仅在单日可能发起极端调用，还可能在整月内持续高频消耗。为了建立有限全局敏感度，系统构建了\textbf{双层贡献截断体系}：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{第一层：单日贡献截断 ($C_{\text{day}}$)：}
+    对用户 $u$ 在日期 $t$ 的单日交互计数向量 $y_{u, t} \in \mathbb{R}^D$ 实施局部 $L_2$ 范数截断：
+    \begin{equation}
+      \bar{y}_{u, t} = y_{u, t} \cdot \min\left(1, \frac{C_{\text{day}}}{\|y_{u, t}\|_2}\right)
+    \end{equation}
+  \item \textbf{第二层：代际综合贡献截断 ($C_{\text{epoch}}$)：}
+    在预设的代际周期（Epoch Horizon，如 $T_{\text{epoch}} = 16$ 或 $30$ 天）内，约束员工在该周期内全部日期的截断向量合成范数：
+    \begin{equation}
+      \sqrt{\sum_{t=1}^{T_{\text{epoch}}} \|\bar{y}_{u, t}\|_2^2} \le C_{\text{epoch}}
+    \end{equation}
+    若超标，则执行全局等比收缩，确保该员工在整个代际时间树上的综合 $L_2$ 敏感度严格受限于 $C_{\text{epoch}}$。
+\end{itemize}
+
+\subsection{时间二叉树架构与规范二进节点划分}
+系统将一个代际内的连续时间区间映射为一棵规范时间二叉树（Binary Time Tree）。以长度为 8 天的周期为例，其节点层级拓扑如图~\ref{fig:binary_tree} 所示。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.88, every node/.style={scale=0.88},
+  treenode/.style={draw=navyblue, fill=lightbg, rounded corners=3pt, thick, align=center, inner sep=4pt, font=\small},
+  leafnode/.style={draw=slateblue, fill=white, rounded corners=2pt, thick, align=center, inner sep=3pt, font=\footnotesize},
+  querynode/.style={draw=accentgreen, fill=accentgreen!15, rounded corners=3pt, very thick, align=center, inner sep=4pt, font=\small},
+  edge from parent/.style={draw=navyblue, thick, -{Latex[length=1.5mm]}},
+  level distance=1.3cm,
+  sibling distance=3.6cm
+]
+
+  % Root (Level 3)
+  \node[treenode] (root) at (0, 0) {节点 [1, 8]\\(Level 3)}
+    child {node[querynode] (n14) {节点 [1, 4]\\(Level 2)}
+      child {node[treenode] (n12) {[1, 2]\\(L1)}
+        child {node[leafnode] (d1) {第1天\\(L0)}}
+        child {node[leafnode] (d2) {第2天\\(L0)}}
+      }
+      child {node[treenode] (n34) {[3, 4]\\(L1)}
+        child {node[leafnode] (d3) {第3天\\(L0)}}
+        child {node[leafnode] (d4) {第4天\\(L0)}}
+      }
+    }
+    child {node[treenode] (n58) {节点 [5, 8]\\(Level 2)}
+      child {node[querynode] (n56) {节点 [5, 6]\\(Level 1)}
+        child {node[leafnode] (d5) {第5天\\(L0)}}
+        child {node[leafnode] (d6) {第6天\\(L0)}}
+      }
+      child {node[treenode] (n78) {[7, 8]\\(L1)}
+        child {node[querynode] (d7) {第7天\\(Level 0)}}
+        child {node[leafnode] (d8) {第8天\\(L0)}}
+      }
+    };
+
+\end{tikzpicture}
+\caption{时间二叉树（Binary Time Tree）结构与区间规范分解示意图 (查询区间 [1, 7] 仅由 3 个加噪节点精确合成：$\text{Node}_{[1,4]} + \text{Node}_{[5,6]} + \text{Node}_{[7,7]}$)}
+\label{fig:binary_tree}
+\end{figure}
+
+时间二叉树具备如下核心数学特性：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{层级正交性（Level Orthogonality）：} 树的每一层（Level）由对整个时间跨度的不重叠二进区间划分构成。因此，在任意单一层级内部，每个员工的数据至多仅落入该层级的一个节点中。
+  \item \textbf{对数级区间分解（Logarithmic Decomposition）：} 对于任意合法的历史时间区间 $[t_{\text{start}}, t_{\text{end}}]$（长度为 $W$），系统利用标准的二进区间分解算法，将其唯一分解为\textbf{至多 $2 \lfloor \log_2 W \rfloor$ 个互不相交的预置二叉树节点}。
+\end{enumerate}
+
+\subsection{持久化加噪节点与抗均值攻击}
+在工程实现中，时间二叉树中的每个二进节点在首度被物化时，注入标准差为 $\sigma_{\text{tree}}$ 的独立高斯噪声，随后持久化写入节点数据库中。
+系统确立了严格的作用域节点复用准则：\textbf{在同一隐私组合作用域（Privacy Composition Scope）内，对相同规范节点（Canonical Node）复用相同持久化加噪值（Persistent Noisy Value）}。具体行为遵循以下作用域隔离矩阵：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{相同 \texttt{GLOBAL\_EXTERNAL} 作用域：} 处于该共享作用域下的外部供应商（如 OpenAI、Kimi）请求重叠区间时，严格复用已物化的持久化加噪节点，在内存中进行线性加和，避免生成独立重复噪声样本，防范特定重复查询平均攻击；
+  \item \textbf{相同 \texttt{COLLUSION\_GROUP} 作用域：} 显式划分在同一合谋组内的接收方，共享并复用相同节点加噪值与关联预算池；
+  \item \textbf{不同 \texttt{COLLUSION\_GROUP} 与独立 \texttt{PER\_RECIPIENT} 作用域：} 依据系统配置与隔离实现进行独立验证与记账，在不同作用域间实施严格的上下文隔离，不得无条件跨独立作用域共享同一节点噪声。
+\end{itemize}
+
+\subsection{前缀稳定性与代际边界管理}
+持续观测系统在生产环境必须遵守严格的因果性准则：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{前缀稳定性（Prefix Stability）：} 随着未来日期的推移，已完成闭环封存的过去历史节点的数值不得发生任何变动。
+  \item \textbf{历史归档边界（Finalized Frontier）：} 系统引入封存时间边界 $T_{\text{finalized}}$。凡落后于该边界的迟到数据（Late-arriving Records），系统依据 Fail-Closed 策略严禁直接写回已有已发布的历史节点，防范历史区间的隐私保证界被隐式击穿。
+  \item \textbf{跨代际预算累积（Epoch Boundary）：} 当一个代际（如第 30 天）结束并开启下一个代际树时，系统明确\textbf{代际翻转绝不意味着隐私预算归零清空}。新代际二叉树的 RDP 散度无缝累加至全系统统一的持久化账本中，确保终身预算受控。
+\end{itemize}

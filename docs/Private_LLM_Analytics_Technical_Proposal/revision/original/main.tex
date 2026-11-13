@@ -1,0 +1,167 @@
+\documentclass[UTF8,12pt,a4paper]{ctexart}
+
+% ==============================================================================
+% 宏包加载与基础配置
+% ==============================================================================
+\usepackage[top=2.5cm, bottom=2.5cm, left=2.5cm, right=2.5cm]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{booktabs, tabularx, longtable, multirow}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, shapes.misc, calc, trees, backgrounds, fit}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{tcolorbox}
+\tcbuselibrary{skins, breakable}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{lastpage}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{cite}
+\usepackage[hidelinks, colorlinks=true, linkcolor=navyblue, citecolor=navyblue, urlcolor=navyblue]{hyperref}
+\usepackage{cleveref}
+
+% ==============================================================================
+% 色彩与版面定义
+% ==============================================================================
+\definecolor{navyblue}{RGB}{27, 54, 93}
+\definecolor{slateblue}{RGB}{44, 82, 130}
+\definecolor{charcoal}{RGB}{45, 55, 72}
+\definecolor{darkgray}{RGB}{74, 85, 104}
+\definecolor{lightbg}{RGB}{247, 250, 252}
+\definecolor{bordercolor}{RGB}{226, 232, 240}
+\definecolor{accentgreen}{RGB}{40, 116, 101}
+\definecolor{accentamber}{RGB}{180, 83, 9}
+
+\linespread{1.3} % 1.3 倍行距
+\setlength{\parskip}{0.5em}
+\setlength{\parindent}{2em}
+
+% 标题格式定制
+\titleformat{\section}{\color{navyblue}\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\color{slateblue}\large\bfseries}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\color{charcoal}\normalsize\bfseries}{\thesubsubsection}{1em}{}
+
+% 页眉页脚配置
+\setlength{\headheight}{15pt}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{darkgray}企业大模型使用数据差分隐私分析系统技术方案}
+\fancyhead[R]{\small\color{darkgray}Private LLM Analytics}
+\fancyfoot[L]{\small\color{darkgray}技术方案版本: v1.1-dev}
+\fancyfoot[R]{\small\color{darkgray}第 \thepage\ 页\,/\,共 \pageref{LastPage}\ 页}
+\renewcommand{\headrulewidth}{0.5pt}
+\renewcommand{\footrulewidth}{0.5pt}
+
+% 自定义高亮框
+\newtcolorbox{techbox}[2][]{
+  enhanced,
+  breakable,
+  colback=lightbg,
+  colframe=navyblue,
+  coltitle=white,
+  fonttitle=\bfseries\small,
+  title={#2},
+  boxrule=0.7pt,
+  arc=2pt,
+  left=8pt,
+  right=8pt,
+  top=6pt,
+  bottom=6pt,
+  #1
+}
+
+\newtcolorbox{definitionbox}[2][]{
+  enhanced,
+  breakable,
+  colback=white,
+  colframe=slateblue,
+  coltitle=white,
+  fonttitle=\bfseries\small,
+  title={定义: #2},
+  boxrule=0.7pt,
+  arc=2pt,
+  left=8pt,
+  right=8pt,
+  top=6pt,
+  bottom=6pt,
+  #1
+}
+
+% ==============================================================================
+% 封面与元数据
+% ==============================================================================
+\title{
+  \vspace{-1.5cm}
+  {\Huge\bfseries\color{navyblue} 企业大模型使用数据\\[0.35cm]差分隐私分析系统技术方案}\\[0.6cm]
+  {\large\bfseries\color{slateblue} Private LLM Analytics: Technical Architecture and Privacy-Preserving Analytics Design}\\[0.4cm]
+  {\normalsize\color{darkgray} 系统架构设计、差分隐私机制证明、全生命周期记账与工程实现规范}
+}
+
+\author{
+  \textbf{系统架构与数据安全联合研发团队} \\
+  \textit{Differential Privacy Engineering Group}
+}
+
+\date{
+  \vspace{0.4cm}
+  \textbf{版本号：} v1.1-dev \quad\textbar\quad \textbf{发布日期：} 2026 年 10 月 \quad\textbar\quad \textbf{文档状态：} 正式评审稿
+}
+
+% ==============================================================================
+% 正文开始
+% ==============================================================================
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\vspace{0.5cm}
+\begin{abstract}
+随着企业大规模接入多模态大语言模型（如 OpenAI、Kimi、DeepSeek 等），评估员工模型采纳率、任务结构、交互规模及端到端成功率成为内部资源调度与采购选型的重要依据；同时，部分统计结果需对外向模型供应商或产业生态进行合规反馈。然而，直接发布基于明细遥测日志的精确统计值存在通过极端活跃模式、稀疏单元交叉反推员工个体行为轨迹的重构风险。
+
+本文提出了 \textbf{Private LLM Analytics} 系统的完整技术方案。系统确立了以单个员工所有历史记录为基础的“用户级”（User-Level）邻接关系，构建了以指标为中心的“专属差分隐私机制框架”（Statistic-Specific DP Framework），针对用户使用率（User Prevalence）、用户归一化使用占比（User-Normalized Share）、交互总量（Interaction Volume）、任务成功率（Success Rate）以及热门任务发现（Top-K Tasks）分别进行用户级贡献限制和 $L_2$ 敏感度界分析，并采用与统计结构匹配的高斯释放（Gaussian release）；其中任务成功率（Success Rate）使用成功数与总量（success / total）的单次联合高斯释放。在系统隐私记账层面，采用 Rényi 差分隐私（RDP）构建持久化、事务一致的生命周期隐私账本，提出基于语义哈希的规范发布与重放机制（Canonical Release \& Replay）以降低重复查询的噪声平均攻击风险；针对多供应商外部数据共享场景，建立了接收方作用域隔离与全局外泄合并机制；针对长周期观测需求，研发了基于时间二叉树（Binary Time Tree）的持续观测机制（Continual Observation）。实验与测试结果表明，全套 542 项工程测试套件全量通过，在 50,000 用户量级的企业级基准数据上，任务成功率百分点误差小于 0.1 pp，系统能够为企业在外部接收方环境下安全开展多模型效能度量提供具有数学严格证明的差分隐私保障。
+\end{abstract}
+
+\vspace{0.5cm}
+\begin{center}
+\small\textbf{关键词：} 差分隐私；大语言模型遥测；用户级敏感度；Rényi 差分隐私；持续观测；时间二叉树；数据安全合规
+\end{center}
+
+\newpage
+\tableofcontents
+\newpage
+
+% 符号表与术语表
+\input{sections/00_abstract_notation.tex}
+
+% 正文各章节
+\input{sections/01_background.tex}
+\input{sections/02_requirements_threat_model.tex}
+\input{sections/03_architecture.tex}
+\input{sections/04_data_statistics.tex}
+\input{sections/05_dp_profiles.tex}
+\input{sections/06_gaussian.tex}
+\input{sections/07_accounting_release.tex}
+\input{sections/08_continual.tex}
+\input{sections/09_utility.tex}
+\input{sections/10_engineering.tex}
+\input{sections/11_validation.tex}
+\input{sections/12_limitations.tex}
+
+% 参考文献
+\newpage
+\bibliographystyle{plain}
+\bibliography{references}
+
+% 附录
+\newpage
+\appendix
+\input{appendix/appendix_math.tex}
+\input{appendix/appendix_tests.tex}
+\input{appendix/appendix_config.tex}
+
+\end{document}

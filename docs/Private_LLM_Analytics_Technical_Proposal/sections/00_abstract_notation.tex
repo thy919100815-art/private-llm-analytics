@@ -1,0 +1,43 @@
+\section*{符号与术语约定 (Notation and Glossary)}
+\addcontentsline{toc}{section}{符号与术语约定}
+
+为了保证全篇技术方案在数学推导、算法描述与工程实现之间的一致性，表~\ref{tab:notation} 汇总了本文所采用的数学符号体系及对应的工程变量含义。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{核心数学符号与系统术语对照表}
+\label{tab:notation}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{符号} & \textbf{工程变量 / 类型} & \textbf{数学与业务定义} \\
+\midrule
+$\mathcal{U}, u$ & \texttt{user\_id} (str) & 企业员工集合及单个员工个体索引 \\
+$N_{\text{public}}$ & \texttt{public\_population\_size} (int) & 企业固定公开在册员工总人数（使用率计算的固定基准分母） \\
+$\mathcal{P}, \mathcal{T}$ & \texttt{providers, tasks} (list) & 系统注册的模型供应商集合（基数 $P$）与业务任务集合（基数 $T$） \\
+$D$ & \texttt{d\_cells} (int) & 分类法统计单元总维度，$D = P \times T$ \\
+$m_u \in \mathbb{R}^D$ & \texttt{matrix[u, :]} (ndarray) & 用户 $u$ 在观测窗口内向各单元发起的原始交互调用计数向量 \\
+$b_u \in \{0, 1\}^D$ & \texttt{b\_u} (ndarray) & 用户 $u$ 的二值化参与指示向量，$b_{u,j} = \mathbf{1}[m_{u,j} > 0]$ \\
+$k$ & \texttt{max\_cells\_per\_user} (int) & 单用户活跃单元数 $L_0$ 范数上界（$\|b_u\|_0 \le \min(k, D)$） \\
+$x_u \in \mathbb{R}^D$ & \texttt{x\_u} (ndarray) & 用户 $u$ 的归一化工作流占比向量，$x_u = m_u / \|m_u\|_1$ \\
+$C$ & \texttt{clip\_norm} (float) & 交互总量统计的用户级 $L_2$ 范数贡献限制阈值 \\
+$C_{\text{rate}}$ & \texttt{clip\_norm\_rate} (float) & 任务成功率联合统计中分母总量向量的 $L_2$ 截断阈值 \\
+$w_u \in \mathbb{R}^{2D}$ & \texttt{w\_u} (ndarray) & 任务成功率的联合向量，$w_u = [\bar{s}_u ; \bar{n}_u]$ \\
+$\tau$ & \texttt{min\_noisy\_denominator} (float) & 成功率加噪分母阈值；本文显式配置 $\tau=1.0$，低于该值抑制 \\
+$\Delta_2$ & \texttt{sensitivity} (float) & 用户级加/删邻接关系下查询函数 $f$ 的全局 $L_2$ 敏感度 \\
+$\sigma$ & \texttt{noise\_scale / sigma} (float) & 高斯差分隐私机制采样所采用的噪声分布标准差 \\
+$\varepsilon, \delta$ & \texttt{epsilon, delta} (float) & $(\varepsilon, \delta)$-近似差分隐私的隐私损失与失效概率参数 \\
+$\alpha$ & \texttt{alpha} (float / Decimal) & Rényi 差分隐私的散度阶数，满足 $\alpha \in (1, \infty)$ \\
+$\rho(\alpha)$ & \texttt{rdp\_cost} (Decimal) & 阶数为 $\alpha$ 时的单次或累积 Rényi 差分隐私散度上界 \\
+$\varepsilon_{\text{cap}}$ & \texttt{epsilon\_cap} (float) & 企业根据合规政策配置的全生命周期累积隐私预算硬上限 \\
+$\mathcal{S}_{\text{scope}}$ & \texttt{budget\_scope\_id} (str) & 隐私记账作用域（如 \texttt{GLOBAL\_EXTERNAL}、\texttt{internal}） \\
+$C_{\text{day}}, C_{\text{epoch}}$ & \texttt{day\_l2, epoch\_l12} (float) & 持续观测的每日 $L_2$ 界与代际每日 $L_2$ 范数之和界 \\
+$E_{\text{clip}}$ & \texttt{clipping\_bias} (float) & 贡献截断引入的结构性截断偏差，$E_{\text{clip}} = M_{\text{clip}} - M_{\text{raw}}$ \\
+$E_{\text{noise}}$ & \texttt{dp\_noise\_error} (float) & 差分隐私随机噪声引入的随机扰动误差，$E_{\text{noise}} = M_{\text{DP}} - M_{\text{clip}}$ \\
+$E_{\text{total}}$ & \texttt{total\_error} (float) & 最终发布值与原始真实值之间的综合总误差，$E_{\text{total}} = M_{\text{DP}} - M_{\text{raw}}$ \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\paragraph{邻接关系规范描述：}
+本文全文遵循标准的\textbf{用户级差分隐私（User-Level DP）}定义。若两个交互数据集 $D, D'$ 满足 $D' = D \cup \{u^*\}$ 或 $D = D' \cup \{u^*\}$（即二者差异恰好为某一个员工个体 $u^*$ 在观测窗口内的\textbf{全部交互记录集合}），则称 $D$ 与 $D'$ 互为用户级邻居数据集（Neighboring Datasets），记作 $D \sim D'$。本文的静态与时间树数学界均采用此邻接关系；实现条件及尚未完成的工程保证见第~\ref{sec:engineering}、\ref{sec:limitations} 节。

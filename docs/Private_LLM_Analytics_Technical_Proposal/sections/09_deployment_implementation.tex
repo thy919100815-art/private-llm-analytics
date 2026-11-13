@@ -1,0 +1,61 @@
+\section{系统部署与实施方案}
+\label{sec:deployment_implementation}
+
+\subsection{部署拓扑与运行环境配置}
+\textbf{\mbox{Private LLM Analytics}} 遵循轻量化、高兼容性与无状态计算服务的设计规范，可无缝嵌入企业现有的私有云容器平台（如 \mbox{Kubernetes}、Docker）或内部安全网络隔离区。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.88, every node/.style={scale=0.88},
+  box/.style={draw=navyblue, fill=lightbg, rounded corners=3pt, thick, align=center, inner sep=6pt, font=\small},
+  dbbox/.style={draw=slateblue, fill=white, rounded corners=2pt, thick, align=center, inner sep=5pt, font=\small},
+  arrow/.style={-{Latex[length=2.5mm]}, thick, color=navyblue}
+]
+
+  % Source zone
+  \node[box, text width=3.4cm] (GW) at (0, 0) {企业大模型网关 / 遥测系统\\(Kong / One-API 等)};
+  
+  % Analytics core zone
+  \node[box, text width=5.6cm, draw=slateblue, fill=white, very thick] (APP) at (6.6, 0) {
+    \textbf{\color{navyblue} \mbox{Private LLM Analytics} 核心服务}\\[3pt]
+    \footnotesize
+    $\bullet$ 矢量化解析与用户矩阵聚合\\
+    $\bullet$ 专属差分隐私加噪计算引擎\\
+    $\bullet$ ReleaseKey 缓存与阈值过滤
+  };
+
+  % Ledger
+  \node[dbbox, below=1.2cm of APP, text width=4.5cm] (DB) {
+    \textbf{持久化隐私账本}\\
+    \footnotesize (SQLite / 事务 ACID 审计)
+  };
+
+  % Consumers
+  \node[box, text width=3.8cm] (INT_DASH) at (13.4, 1.2) {内部治理可视化看板\\[1pt]{\footnotesize (全景业务洞察与审计)}};
+  \node[box, text width=3.8cm] (EXT_EXP) at (13.4, -1.2) {外部合规脱敏导出\\[1pt]{\footnotesize (OpenAI / Kimi / DeepSeek)}};
+
+  % Links
+  \draw[arrow] (GW) -- node[above=2pt, font=\footnotesize] {遥测日志} (APP);
+  \draw[arrow] (APP.east) -- node[above, font=\footnotesize] {全景大屏} (INT_DASH.west);
+  \draw[arrow] (APP.east) -- node[below, font=\footnotesize] {合规导出} (EXT_EXP.west);
+  \draw[arrow, <->] (APP) -- node[right=3pt, font=\footnotesize] {预留与记账} (DB);
+
+\end{tikzpicture}
+\caption{企业大模型差分隐私分析系统部署拓扑与数据流向图}
+\label{fig:deployment}
+\end{figure}
+
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{算力与存储开销低：} 得益于高度优化的 NumPy 矢量化稀疏状态矩阵算子，系统无需昂贵的 GPU 硬件。单台标准通用服务器（8 核 CPU、16 GB 内存）即可在数秒内完成数万名员工、百万级日志的全流程聚合与加噪发布。
+  \item \textbf{环境依赖：} 运行环境支持主流 Linux 发行版（如 Ubuntu 20.04+、RHEL 8+）及现代 Windows Server 环境，运行时依赖标准 Python 3.10+，无特殊专有库绑定。
+  \item \textbf{状态持久化：} 隐私状态与账本默认采用嵌入式 SQLite（\texttt{privacy\_ledger.db}），支持单文件热备与异地容灾，亦可平滑对接企业级 \mbox{PostgreSQL} 关系型数据库。
+\end{itemize}
+
+\subsection{与企业网关及日志系统的集成步骤}
+系统与企业现有 IT 资产的对接流程清晰快捷，分为三步实施：
+\begin{enumerate}[label=\textbf{第 \arabic* 步：}, leftmargin=4em]
+  \item \textbf{确定标准遥测日志输入（Schema 对齐）：} 网关将日常大模型调用日志以 CSV 或 Parquet 格式导出。标准字段仅需包含：匿名员工标识（\texttt{user\_id}）、请求时间（\texttt{timestamp}）、模型供应商（\texttt{provider}）、业务任务标签（\texttt{task\_category}）、是否调用成功（\texttt{is\_success}）以及消耗 Token 数（\texttt{total\_tokens}）。
+  \item \textbf{隐私目标与指标策略配置：} 在企业级 YAML 配置文件中，预先审定各指标的差分隐私参数（推荐 $\varepsilon = 1.0 \sim 2.0$，$\delta = 1.0 \times 10^{-6}$）、用户级截断阈值（$C_{\text{req}}, C_{\text{tok}}, C_{\text{rate}}$）以及接收方隔离规则。
+  \item \textbf{调度流水线集成与安全导出：} 通过企业现有的调度平台（如 Airflow、DolphinScheduler 或定时任务）触发批处理或准实时计算任务。结果自动通过 RESTful API 提供给内部 BI 看板展示，或生成只包含差分隐私脱敏结果的安全 CSV 文件分发给合作供应商。
+\end{enumerate}

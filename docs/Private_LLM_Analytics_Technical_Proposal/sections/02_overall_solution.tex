@@ -1,0 +1,55 @@
+\section{系统总体方案}
+\label{sec:overall_solution}
+
+\subsection{端到端业务处理全流程}
+\textbf{\mbox{Private LLM Analytics}} 系统的核心设计思想是构建一条单向流转、前向封闭、不可逆推的隐私计算管道。整个系统从原始模型交互日志接入，到最终对外输出高可用合规分析结果，遵循如图~\ref{fig:overall_pipeline} 所示的标准业务流。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.92, every node/.style={scale=0.92},
+  stagebox/.style={draw=navyblue, fill=lightbg, rounded corners=3pt, thick, align=center, inner sep=4pt, text width=3.3cm, minimum height=1.1cm},
+  widebox/.style={draw=navyblue, fill=lightbg, rounded corners=3pt, thick, align=center, inner sep=4pt, text width=3.8cm, minimum height=1.1cm},
+  arrow/.style={-{Latex[length=2.5mm]}, thick, color=navyblue}
+]
+
+  % Row 1: Stages 1 to 4
+  \node[stagebox] (S1) at (0, 2.0) {\textbf{1. 原始数据接入}\\[2pt]\footnotesize 日志模式与指纹校验};
+  \node[stagebox] (S2) at (4.2, 2.0) {\textbf{2. 用户状态聚合}\\[2pt]\footnotesize 离散记录汇聚为向量};
+  \node[stagebox] (S3) at (8.4, 2.0) {\textbf{3. 用户贡献限制}\\[2pt]\footnotesize 单用户范数投影截断};
+  \node[stagebox] (S4) at (12.6, 2.0) {\textbf{4. 差分隐私加噪}\\[2pt]\footnotesize 解析高斯扰动注入};
+
+  % Row 2: Stages 5 to 7
+  \node[widebox] (S5) at (2.2, 0) {\textbf{5. 隐私预算检查}\\[2pt]\footnotesize 持久化账本事务扣减};
+  \node[widebox] (S6) at (6.8, 0) {\textbf{6. 结果合规处理}\\[2pt]\footnotesize 安全阈值抑制与归一};
+  \node[widebox] (S7) at (11.4, 0) {\textbf{7. 多角色安全发布}\\[2pt]\footnotesize 看板展示与脱敏导出};
+
+  % Connecting arrows - Row 1
+  \draw[arrow] (S1) -- (S2);
+  \draw[arrow] (S2) -- (S3);
+  \draw[arrow] (S3) -- (S4);
+
+  % Inter-row connector
+  \draw[arrow] (S4.south) -- ++(0,-0.45) -| (S5.north);
+
+  % Connecting arrows - Row 2
+  \draw[arrow] (S5) -- (S6);
+  \draw[arrow] (S6) -- (S7);
+
+\end{tikzpicture}
+\caption{Private LLM Analytics 系统端到端处理流水线}
+\label{fig:overall_pipeline}
+\end{figure}
+
+\subsection{关键处理环节定位与协同逻辑}
+系统的七大业务处理阶段各司其职、严密协同，确保了数据隐私与统计可用性的平衡：
+
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+  \item \textbf{原始数据接入与模式校验：} 接收来自企业统一网关或遥测系统的日志（CSV/Parquet 格式）。系统首先验证数据模式合规性，并流式计算整份数据集的 SHA-256 哈希生成版本指纹，确保分析结果与物理数据快照建立确定性绑定。
+  \item \textbf{用户级状态矩阵聚合：} 系统以单个员工（唯一匿名用户标识）为主键，将该员工在观测周期内的全部调用行为投影为状态矩阵（各供应商、各任务上的调用次数与成功次数），为后续实施用户级差分隐私提供基础。
+  \item \textbf{用户级贡献限制：} 针对长尾高频用户，系统通过数学投影将其对统计结果的总影响截断在预设的上限安全范数 $C$ 以内，有效抑制极少数高频调用对大盘的支配性影响，使敏感度保持在常数水平。
+  \item \textbf{专属差分加噪保护：} 系统根据各统计指标的理论敏感度与预设隐私参数（$\varepsilon, \delta$），通过解析高斯机制数值求解符合条件的最小噪声方差并向全局聚合向量注入高斯噪声，在淡化个体特征的同时保留宏观业务特征。
+  \item \textbf{隐私预算控制与审计记账：} 在正式发布前，系统将本次查询转录为 Rényi 差分隐私（RDP）开销，并在持久化 SQLite 账本中执行原子比对与扣减。若该接收方的剩余预算不足，系统实行硬性阻断，防止预算被超额透支。
+  \item \textbf{业务后处理与安全阈值抑制：} 对加噪后的数值执行合理的业务规则约束（例如：调用量非负、比例和为 100\%、成功数不超过总调用数）。对于样本量较小的统计单元（加噪后的有效分母低于配置阈值 $\tau$），实施阈值抑制并返回空值，防止因小分母放大引起误导。
+  \item \textbf{多角色安全发布：} 面向内部 AI 治理团队提供包含置信区间的可视化大屏；面向外部模型供应商提供权限隔离的结构化报表，实现安全可控的跨组织数据流通。
+\end{enumerate}

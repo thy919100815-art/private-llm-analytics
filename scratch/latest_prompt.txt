@@ -1,0 +1,1046 @@
+<USER_REQUEST>
+请在当前 `Private LLM Analytics Console` 基础上做一次 **UI/UX 整体美化 + Demo 演示控制增强**。
+
+本轮重点不是重构 DP 核心，而是：
+
+1. 整体界面更美观、更专业、更适合现场演示；
+2. 修复当前字体“小、密、灰、层级弱”的问题；
+3. 增加演示模式下的隐私状态重置能力；
+4. 保留当前已经完成的 90-Day Epoch、Workload Budgeting、Top-K、CSV/JSON 导出、Preview、Lifetime Exposure、RDP accountant、ReleaseKey、recipient isolation 等逻辑；
+5. 不得为了 UI 美化破坏任何已有隐私安全语义。
+
+---
+
+# 一、整体视觉目标
+
+目标风格：
+
+**现代企业级控制台 / 数据分析后台 / 隐私治理控制台**
+
+要求：
+
+- 简洁；
+- 专业；
+- 中文阅读舒服；
+- 信息层级明确；
+- 卡片有呼吸感；
+- 不要“大量小字堆在一起”；
+- 不要像工程调试页；
+- 不要做过度花哨动画；
+- 保留现有蓝色为主色，但整体更克制。
+
+参考感觉：
+
+```text
+企业级 SaaS Dashboard
++
+Privacy / Security Console
++
+Data Analytics Console
+```
+
+---
+
+# 二、全局字体统一
+
+当前中文字体观感较差，请统一字体体系。
+
+优先：
+
+```css
+font-family:
+  "Inter",
+  "Microsoft YaHei",
+  "PingFang SC",
+  "Noto Sans SC",
+  "Segoe UI",
+  sans-serif;
+```
+
+Windows 演示环境下优先：
+
+```css
+"Microsoft YaHei"
+```
+
+要求：
+
+- 中文不能发虚；
+- 英文和数字保持清晰；
+- 不要不同模块各用不同字体；
+- 表格、按钮、输入框、标签统一继承全局字体。
+
+---
+
+# 三、字号与字重重新设计
+
+统一为明确层级。
+
+建议：
+
+```text
+页面主标题：
+24px / 600
+
+一级模块标题：
+18px / 600
+
+卡片标题：
+16px / 600
+
+关键 KPI 数字：
+20～24px / 600~700
+
+普通正文：
+14px / 400
+
+表单标签：
+13～14px / 500
+
+辅助说明：
+12～13px / 400
+
+Badge / Tag：
+11～12px / 500
+```
+
+禁止大量：
+
+```text
+10px
+11px
+```
+
+的小字体堆叠。
+
+---
+
+# 四、行高和可读性
+
+统一：
+
+```css
+body {
+  line-height: 1.6;
+}
+```
+
+说明文字：
+
+```css
+line-height: 1.5;
+```
+
+标题不要过高。
+
+表格行高适当增加。
+
+---
+
+# 五、颜色体系
+
+不要满页面都是浅灰小字。
+
+统一建议：
+
+```text
+主文字：
+#1F2937
+
+次级文字：
+#6B7280
+
+弱提示：
+#9CA3AF
+
+主蓝色：
+保持现有品牌蓝
+
+成功：
+绿色
+
+警告：
+橙色
+
+危险：
+红色
+```
+
+要求：
+
+- 关键数字颜色更深；
+- 描述文字才使用灰色；
+- 不要正文全部发灰；
+- 不同状态颜色语义保持统一。
+
+---
+
+# 六、整体页面宽度与留白
+
+当前页面信息过密，请增加留白。
+
+建议：
+
+```text
+页面最大宽度：
+1440px 左右
+
+页面左右 padding：
+24～32px
+
+卡片 padding：
+20～24px
+
+卡片之间 gap：
+20～24px
+
+同一卡片内部：
+12～16px
+```
+
+---
+
+# 七、顶部 Header 美化
+
+当前顶部标题区域重新设计。
+
+建议结构：
+
+```text
+大模型隐私分析控制台
+
+Private LLM Analytics Console
+v1.0
+
+[本地演示] [90-Day Epoch] [中心化差分隐私]
+```
+
+不要把所有标签压成一排很小的文字。
+
+主标题突出。
+
+版本和模式使用 Badge。
+
+---
+
+# 八、步骤 1：数据导入卡片美化
+
+当前“导入企业 LLM 使用数据”区域重新整理。
+
+建议：
+
+顶部：
+
+```text
+步骤 1
+导入企业 LLM 使用数据
+```
+
+右侧状态：
+
+```text
+[演示数据已加载]
+```
+
+KPI 区域建议做成 4～5 个小统计块：
+
+```text
+交互记录
+活跃用户
+模型数量
+任务类型
+时间跨度
+```
+
+例如：
+
+```text
+3,011,232
+交互记录
+
+50,000
+活跃用户
+
+3
+模型
+
+12
+任务类型
+
+90 天
+时间跨度
+```
+
+不要使用：
+
+```text
+数据时间跨度：[object Object]
+```
+
+---
+
+# 九、数据格式检查区
+
+当前 6 项规则显示为绿色检查项。
+
+保留，但优化为：
+
+```text
+数据格式与质量检查
+✓ user_id
+✓ timestamp
+✓ provider
+✓ task
+✓ success
+✓ 无明文 Prompt
+```
+
+建议：
+
+- 2 列或 3 列布局；
+- 每项加统一绿色 check；
+- 不要文字挤在一起。
+
+---
+
+# 十、数据操作按钮
+
+按钮统一尺寸和样式：
+
+```text
+下载 CSV 示例模板
+查看数据格式示例
+加载演示数据
+上传 CSV / Parquet
+查看部分输入数据
+```
+
+区分：
+
+Primary：
+
+```text
+上传数据
+加载演示数据
+```
+
+Secondary：
+
+```text
+下载模板
+查看示例
+查看部分输入数据
+```
+
+不要所有按钮视觉权重一样。
+
+---
+
+# 十一、90-Day Privacy Epoch 卡片重点重做
+
+这是整个页面核心区，重点美化。
+
+顶部：
+
+```text
+当前 90 天 Privacy Epoch
+[ACTIVE]
+```
+
+右侧按钮：
+
+```text
+[隐私预算说明]
+[高级隐私设置]
+```
+
+中部突出显示：
+
+```text
+Epoch
+2026-10-01 ～ 2026-12-29
+
+当前第 34 / 90 天
+```
+
+预算 KPI：
+
+```text
+当前有效 ε
+2.9282
+
+Epoch ε 上限
+4.0000
+
+剩余 Headroom
+1.0718
+
+Global δ
+1e-6
+```
+
+进度条：
+
+```text
+Epoch Privacy Budget
+████████████████░░░░
+73.2%
+```
+
+---
+
+# 十二、Workload Budget Allocation 美化
+
+当前各任务预算卡片太密。
+
+改为统一小卡片 Grid。
+
+例如：
+
+```text
+Interaction Volume
+25%
+已用 1.93 / quota
+
+Success Rate
+20%
+
+User Prevalence
+15%
+
+Normalized Share
+10%
+
+Top-K Tasks
+10%
+
+Continual
+10%
+
+Reserve
+20%
+```
+
+每个 workload 显示：
+
+```text
+权重
+当前 spend
+quota / headroom
+状态
+```
+
+如果 Continual 未启用：
+
+```text
+Continual
+未启用
+预算已转入 Reserve
+```
+
+不要只显示一堆数字。
+
+---
+
+# 十三、Lifetime Exposure Monitor 美化
+
+单独做一个明显但不过度警告的区域。
+
+显示：
+
+```text
+Lifetime Exposure
+
+累计 Epoch
+1
+
+Lifetime Effective ε
+3.4348
+```
+
+旁边提示：
+
+```text
+历史隐私损失不会随着新 Epoch 自动消失。
+新 Epoch 只重新开放当前业务周期预算。
+```
+
+使用浅黄色提示框即可。
+
+---
+
+# 十四、查询类型选择区美化
+
+当前统计问题选择使用 radio 列表，视觉较平。
+
+改成卡片式选项。
+
+例如：
+
+```text
+○ 有多少员工在使用？
+  User Prevalence
+
+○ 员工主要使用 AI 做什么？
+  User-Normalized Share
+
+● 一共调用了多少次？
+  Interaction Volume
+
+○ AI 完成任务的成功率是多少？
+  Success Rate
+
+○ 哪些任务最热门？
+  Top-K Tasks
+```
+
+选中项：
+
+- 蓝色边框；
+- 浅蓝背景；
+- 左侧 radio；
+- 标题加粗；
+- 描述较小。
+
+---
+
+# 十五、“数据如何被处理”流程区美化
+
+当前 5 步绿色流程保留，但重新设计成：
+
+```text
+1 原始企业日志
+      →
+2 按用户聚合
+      →
+3 贡献裁剪
+      →
+4 DP 加噪
+      →
+5 生成发布结果
+```
+
+每个步骤：
+
+- 有编号；
+- 有小标题；
+- 有一句说明；
+- 视觉统一。
+
+---
+
+# 十六、Recipient 与 Reporting Window 区域
+
+两个下拉框横向排列：
+
+```text
+接收对象
+[OpenAI / provider_a]
+
+统计时间窗口
+[最近 30 天]
+```
+
+下方 Recipient Scope 信息区做成简洁详情卡：
+
+```text
+接收方：OpenAI
+Provider Scope：provider_a
+Privacy Scope：GLOBAL_EXTERNAL
+允许指标：...
+```
+
+避免很多标签挤在一行。
+
+---
+
+# 十七、Workload Budgeting 查询区
+
+显示：
+
+```text
+隐私预算分配：
+自动（Epoch Planner）
+```
+
+使用绿色 Badge：
+
+```text
+[自动预算分配]
+```
+
+说明：
+
+```text
+系统根据当前 Epoch 剩余 RDP、工作负载权重、
+查询灵敏度和已有 DP 结果自动决定预算。
+```
+
+生产模式默认不显示 epsilon 输入框。
+
+---
+
+# 十八、Provider / Task 显示筛选
+
+Provider 与 Task checkbox 区域重新排版：
+
+Provider：
+
+```text
+☑ OpenAI
+☑ Kimi
+☑ DeepSeek
+```
+
+Task：
+
+使用多列 chip / checkbox：
+
+```text
+☑ 文档
+☑ 技术
+☑ 分析
+☑ 代码
+☑ 翻译
+...
+```
+
+避免 12 个任务挤成一行。
+
+---
+
+# 十九、查询按钮
+
+底部主操作：
+
+```text
+[获取参数建议]
+[生成差分隐私结果]
+```
+
+其中：
+
+```text
+生成差分隐私结果
+```
+
+使用 Primary Blue。
+
+---
+
+# 二十、发布历史表美化
+
+当前历史表格可读性较弱。
+
+优化：
+
+- 表头背景浅灰；
+- 行高增加；
+- release_id 使用等宽字体；
+- 状态使用 Badge；
+- CSV/JSON 下载按钮缩小但清晰。
+
+列建议：
+
+```text
+Release ID
+时间
+指标
+Recipient
+隐私预算
+机制
+状态
+下载
+```
+
+状态：
+
+```text
+[已提交]
+```
+
+下载：
+
+```text
+[CSV] [JSON]
+```
+
+---
+
+# 二十一、持续观测区域
+
+如果：
+
+```text
+Continual Observation = disabled
+```
+
+不要占用太多页面空间。
+
+显示：
+
+```text
+持续观测
+[未启用]
+
+当前模式：交互式查询
+```
+
+并折叠高级参数。
+
+---
+
+# 二十二、增加 Demo 演示重置功能
+
+这是本轮必须实现的功能。
+
+只能在：
+
+```text
+DEMO_MODE=true
+```
+
+或：
+
+```text
+APP_ENV=local-demo
+```
+
+时显示。
+
+生产环境必须完全隐藏。
+
+---
+
+# 二十三、按钮设计
+
+在 90-Day Privacy Epoch 卡片右上角增加：
+
+```text
+[重置演示 Epoch]
+```
+
+在“高级演示控制”区域增加：
+
+```text
+[恢复演示初始状态]
+```
+
+不要写：
+
+```text
+重置总 epsilon
+```
+
+避免给人“生产系统 epsilon 可以随便清零”的错误理解。
+
+---
+
+# 二十四、重置当前演示 Epoch
+
+按钮：
+
+```text
+重置当前 90 天演示 Epoch
+```
+
+点击后弹出二次确认：
+
+```text
+确认重置当前演示 Epoch？
+
+该操作仅用于本地演示，将清空当前演示 Epoch 的：
+• Epoch RDP
+• Effective epsilon
+• Workload spend
+• Reserve 使用量
+• 当前演示发布历史
+
+不会修改生产环境数据。
+
+[取消]
+[确认重置]
+```
+
+---
+
+# 二十五、恢复演示初始状态
+
+按钮：
+
+```text
+恢复演示初始状态
+```
+
+二次确认：
+
+```text
+该操作将完全恢复本地 Demo 初始环境：
+
+• 清空所有演示 Epoch
+• 清空 Lifetime Exposure
+• 清空演示 Release History
+• 重置隐私预算
+• 重新加载 Demo 数据
+
+该功能仅用于演示环境。
+```
+
+---
+
+# 二十六、后端 Demo-only API
+
+建议增加：
+
+```text
+POST /api/demo/reset-epoch
+POST /api/demo/reset-all
+```
+
+要求：
+
+```text
+仅 Demo/Local 模式可访问
+生产模式返回 404 或 403
+```
+
+不能只依赖前端隐藏按钮。
+
+后端也必须强制检查：
+
+```text
+DEMO_MODE
+```
+
+---
+
+# 二十七、重置当前 Epoch 的状态
+
+`reset-epoch` 应清理当前演示 Epoch：
+
+```text
+epoch RDP state
+epoch effective epsilon
+workload spent
+reserve spent
+epoch release associations
+demo epoch release history
+```
+
+然后重新创建：
+
+```text
+ACTIVE 90-day epoch
+```
+
+默认：
+
+```text
+epsilon cap = 4
+delta = 1e-6
+```
+
+---
+
+# 二十八、reset-all
+
+`reset-all` 用于恢复演示初始状态：
+
+```text
+清除 demo privacy state
+清除 demo epoch state
+清除 demo lifetime exposure
+清除 demo release ledger
+重新初始化 demo dataset
+重新创建 epoch_001
+```
+
+此功能只能作用于：
+
+```text
+demo/local database
+```
+
+绝对禁止生产数据库调用。
+
+---
+
+# 二十九、重置后的前端行为
+
+成功重置后：
+
+自动刷新：
+
+```text
+Dataset Status
+Epoch
+Workload Allocation
+Lifetime Exposure
+Release History
+Result Area
+```
+
+并显示 toast：
+
+```text
+演示 Epoch 已重置
+```
+
+或：
+
+```text
+演示环境已恢复初始状态
+```
+
+---
+
+# 三十、重置安全说明
+
+UI 明确标注：
+
+```text
+仅用于本地演示
+```
+
+Tooltip：
+
+```text
+生产环境中的隐私损失不可重置。
+该功能仅重建本地演示账本。
+```
+
+---
+
+# 三十一、不要破坏现有 DP 功能
+
+必须继续保持：
+
+```text
+90-Day Privacy Epoch
+RDP authoritative accounting
+Lifetime Exposure Monitor
+Workload Budgeting
+Recipient isolation
+Top-K provider pre-DP scope
+ReleaseKey memoization
+Cache = 0 spend
+Post-processing = 0 spend
+CSV/JSON export = 0 spend
+Input Preview = 0 spend
+Fail Closed
+Persistent SQLite state
+```
+
+---
+
+# 三十二、不要修改已冻结的核心隐私语义
+
+不要为了演示方便：
+
+```text
+允许正式环境 reset epsilon
+允许正式环境删除 privacy ledger
+关闭 RDP accountant
+绕过 recipient policy
+关闭 ReleaseKey
+打开 allow_budget_overrun
+重新生成 DP noise 用于下载
+```
+
+---
+
+# 三十三、Responsive / 分辨率适配
+
+重点保证：
+
+```text
+1920 × 1080
+2560 × 1440
+普通 Windows 浏览器
+```
+
+显示正常。
+
+不要让页面在 1080p 下字体过小。
+
+如果页面较长，可以正常滚动，不要为了“一屏塞完”继续缩小字体。
+
+---
+
+# 三十四、交互细节
+
+增加：
+
+```text
+hover
+focus
+disabled
+loading
+success/error toast
+confirmation dialog
+```
+
+按钮点击后避免重复提交。
+
+Release 执行中显示：
+
+```text
+正在生成差分隐私结果...
+```
+
+---
+
+# 三十五、验收要求
+
+修改完成后必须实际启动 Web Console 截图或执行 E2E 检查：
+
+```text
+1. 页面字体明显改善
+2. 中文无乱码
+3. 主标题 / 卡片 / 正文层级清楚
+4. 90-Day Epoch 卡片信息清晰
+5. Workload Budget 卡片不拥挤
+6. Lifetime Exposure 清晰
+7. 查询类型卡片可正常选中
+8. Provider/Task 筛选正常
+9. Release 正常执行
+10. CSV / JSON 正常下载
+11. Demo reset-epoch 正常
+12. reset 后 epsilon 回到演示初始状态
+13. reset-all 正常
+14. Lifetime Exposure 在 reset-all 后恢复演示初始状态
+15. 非 Demo 模式不显示 reset 按钮
+16. 非 Demo 模式调用 reset API 被拒绝
+17. 全量 pytest 通过
+```
+
+---
+
+# 三十六、最终报告
+
+完成后输出：
+
+```text
+1. 修改文件列表
+2. UI 改版前后变化
+3. 全局字体与字号规范
+4. 90-Day Epoch 卡片调整
+5. Workload Budget 调整
+6. Query 区域调整
+7. Release History 调整
+8. Demo Reset 功能说明
+9. reset-epoch 清理哪些状态
+10. reset-all 清理哪些状态
+11. Demo/Production 隔离方式
+12. 新增测试
+13. pytest -q 结果
+14. 当前仍存在的问题
+```
+
+最终目标：
+
+> **在不破坏现有差分隐私语义和安全机制的前提下，把 Private LLM Analytics Console 从“工程原型界面”升级为一个适合企业演示、清晰、现代、中文阅读舒适的隐私分析控制台，并提供安全隔离的 Demo-only 隐私状态重置功能。**
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-11-03T15:05:05+08:00.
+</ADDITIONAL_METADATA>

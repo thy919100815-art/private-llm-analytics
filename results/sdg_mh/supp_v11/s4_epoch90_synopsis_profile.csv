@@ -1,0 +1,11 @@
+method,horizon_h,daily_rho,rho_h,eps_h,cross_boundary_90d_rho,cross_boundary_90d_eps
+Epoch90-Synopsis (Matched Budget),1,0.00020015,0.0002,0.1054,,
+Epoch90-Synopsis (Matched Budget),7,0.00020015,0.001401,0.2797,,
+Epoch90-Synopsis (Matched Budget),30,0.00020015,0.006005,0.582,,
+Epoch90-Synopsis (Matched Budget),90,0.00020015,0.018014,1.0157,0.018014,1.0157
+Epoch90-Synopsis (Matched Budget),365,0.00020015,0.073055,2.0823,,
+Epoch90-Synopsis (Production Setting),1,0.00186359,0.001864,0.3228,,
+Epoch90-Synopsis (Production Setting),7,0.00186359,0.013045,0.8621,,
+Epoch90-Synopsis (Production Setting),30,0.00186359,0.055908,1.8136,,
+Epoch90-Synopsis (Production Setting),90,0.00186359,0.167723,3.2122,0.167723,3.2122
+Epoch90-Synopsis (Production Setting),365,0.00186359,0.680209,6.8113,,

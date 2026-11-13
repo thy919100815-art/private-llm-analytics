@@ -1,0 +1,50 @@
+\section{附录：系统核心配置与安全参数速查}
+\label{sec:appendix_parameters}
+
+本附录汇总了 \textbf{\mbox{Private LLM Analytics}} 在标准企业级生产环境中的基准参数配置矩阵，供系统实施与安全审计人员参考。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{系统核心差分隐私机制与安全参数配置规范表}
+\label{tab:parameter_reference}
+\begin{tabularx}{\textwidth}{ll>{\raggedright\arraybackslash}X}
+\toprule
+\textbf{参数类别} & \textbf{配置项名称} & \textbf{生产默认值与业务约束说明} \\
+\midrule
+\multirow{3}{*}{基础隐私预算} 
+  & 目标单次预算 $\varepsilon$ & $1.0 \sim 2.0$（平衡效用与隐私的推荐工业界区间） \\
+  & 目标失效率 $\delta$ & $1.0 \times 10^{-6}$（远低于硬件随机故障率） \\
+  & 全局生命周期上限 $\varepsilon_{\text{cap}}$ & $4.0$（达到上限自动触发记账熔断保护） \\
+\midrule
+\multirow{4}{*}{贡献截断阈值} 
+  & 调用量截断 $C_{\text{req}}$ & $20.0 \sim 100.0$ 次 / 周期（规范单用户调用量欧氏范数界） \\
+  & Token 截断 $C_{\text{tok}}$ & $100,000$ Token / 周期（规范单用户 Token 欧氏范数界） \\
+  & 渗透率跨度限制 $k$ & $2 \sim 9$（单员工最多计入 $k$ 个分类，$\Delta_2 \le \sqrt{k}$） \\
+  & 成功率联合限制 $C_{\text{rate}}$ & $20.0 \sim 50.0$（联合向量 $w_u = [\bar{s}_u; \bar{n}_u]$，$\Delta_2 \le \sqrt{2}C_{\text{rate}}$） \\
+\midrule
+\multirow{2}{*}{发布安全规则} 
+  & 成功率最小发布分母 $\tau$ & $1.0$（对应 \texttt{min\_noisy\_denominator}；加噪后的有效分母低于该值时不发布成功率） \\
+  & 公开基准人数 $N_{\text{public}}$ & $2,000$（基于人事花名册公开总编制，消除分母偏差） \\
+\midrule
+\multirow{3}{*}{持续观测机制} 
+  & 时间二叉树代际跨度 & $16$ 或 $32$ 天（任意区间至多分解为 $\lceil \log_2 T \rceil$ 个规范节点） \\
+  & 节点前缀复用 & 自动复用历史加噪节点，累积噪声仅随时间呈对数级增长 \\
+  & 代际平滑滚动 & 到期自动生成新代际树，历史节点归档为只读快照 \\
+\midrule
+\multirow{3}{*}{权限作用域} 
+  & 内部治理（\texttt{internal}） & 全指标、全模型可见（OpenAI、Kimi、DeepSeek 统一透视） \\
+  & 外部供应商隔离 & \texttt{provider\_a/b/c} 相互隔离，只能查看自身脱敏数据 \\
+  & 外部合并上限 & \texttt{GLOBAL\_EXTERNAL} 追踪跨外部供应商的合并外泄 \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\begin{techbox}{合规发布核对清单（Compliance Checklist）}
+\begin{enumerate}[leftmargin=1.5em, itemsep=2pt]
+  \item \textbf{无明细暴露：} 系统向外部或大屏发布的任何数据均经过用户级差分加噪，不包含任何单条明细或未加噪真实计数。
+  \item \textbf{重放无增量消耗：} 相同 ReleaseKey 查询直接复用已有受保护结果，增量预算消耗记为 0。
+  \item \textbf{生产随机数防注入：} 生产环境下禁止调用方指定外部随机种子或生成器，扰动噪声由系统内部模块独立生成。
+  \item \textbf{小分母抑制生效：} 有效分母低于 $\tau=1.0$ 的统计单元均被自动遮蔽为 SUPPRESSED（空值），防范孤立个案推断。
+\end{enumerate}
+\end{techbox}

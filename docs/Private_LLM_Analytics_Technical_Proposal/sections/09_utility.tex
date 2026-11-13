@@ -1,0 +1,125 @@
+\section{差分隐私效用与精度实证评测}
+\label{sec:utility}
+
+\subsection{效用度量定义与两层误差分解规范}
+在评估差分隐私发布算法的工程可用性时，必须建立严谨的误差基准。本系统对统计过程中的三个核心状态建立明确的数学定义：
+\begin{enumerate}[label=(\alph*), leftmargin=2.5em]
+  \item \textbf{原始精确值 ($M_{\text{raw}}$)：} 在完全未施加任何隐私干预（无截断、无噪声）的前提下，基于输入遥测明细（本章为合成数据）计算得到的数学真值；
+  \item \textbf{截断精确值 ($M_{\text{clip}}$)：} 经过用户级贡献限制算子（如 $L_0$ 单元截断、单纯形映射或 $L_2$ 范数截断）处理后、但在注入差分隐私高斯噪声之前计算得到的中间真值；
+  \item \textbf{差分隐私估计值 ($M_{\text{DP}}$)：} 叠加高斯噪声并执行合法后处理（如值域截断、归一化与小样本抑制）后，最终面向接收方发布的脱敏估计值。
+\end{enumerate}
+
+系统确立了\textbf{两层误差解耦分析准则}：
+\begin{equation}
+  \label{eq:two_tier_decomp}
+  E_{\text{total}} = M_{\text{DP}} - M_{\text{raw}} = \underbrace{(M_{\text{clip}} - M_{\text{raw}})}_{E_{\text{clip}}\text{ (结构性截断偏差)}} + \underbrace{(M_{\text{DP}} - M_{\text{clip}})}_{E_{\text{noise}}\text{ (差分隐私加噪误差)}}
+\end{equation}
+针对不同业务指标，系统采用针对性的客观误差度量指标：
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{百分点绝对误差（Percentage-Point Error, pp）：} 适用于 Prevalence 与 Success Rate 等比率指标，定义为 $E_{\text{pp}} = |\hat{r} - r_{\text{raw}}| \times 100$；
+  \item \textbf{平均相对误差（Mean Relative Error, MRE）：} 适用于 Interaction Volume 等总量计数指标，定义为 $\text{MRE} = \frac{|\hat{M} - M_{\text{raw}}|}{\max(|M_{\text{raw}}|, 1.0)}$；
+  \item \textbf{总变差距离（TV Distance）：} 适用于 Normalized Share 概率分布向量，定义为 $\operatorname{TV}(s_{\text{raw}}, \hat{s}) = \frac{1}{2} \sum_{j=1}^D |s_{\text{raw}, j} - \hat{s}_j|$；
+  \item \textbf{Top-$K$ 命中率与 Jaccard 指数：} 适用于排序挖掘指标，评估候选集合与真实排名的重合比例。
+\end{itemize}
+
+\subsection{用户使用率 (Prevalence) 实测与 92.85\% 根因剖析}
+在 50,000 用户企业级合成基准中（公开总体 $N_{\text{public}} = 50,000$，包含 3,011,232 条合成交互记录的数据集 \texttt{interactions\_n50000.parquet}，安全配置 $\varepsilon = 1.0, \delta = 10^{-6}$）下，系统对全部 9 个细分业务单元执行了全量实测，结果如表~\ref{tab:prevalence_benchmark} 所示。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{用户使用率 (User Prevalence) 50,000 用户合成基准实测表 ($\varepsilon=1.0, \delta=10^{-6}, N=50,000$)}
+\label{tab:prevalence_benchmark}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llccccc}
+\toprule
+\textbf{模型供应商} & \textbf{业务任务} & \textbf{原始参与用户数} & \textbf{原始使用率} & \textbf{截断使用率} & \textbf{DP 估计值} & \textbf{百分点误差 (pp)} \\
+\midrule
+OpenAI (\texttt{provider\_a}) & Technical & $46,423$ & $92.85\%$ & $92.85\%$ & $92.85\%$ & $+0.01\text{ pp}$ \\
+OpenAI (\texttt{provider\_a}) & Document & $35,941$ & $71.88\%$ & $71.88\%$ & $71.86\%$ & $-0.03\text{ pp}$ \\
+OpenAI (\texttt{provider\_a}) & Analysis & $37,374$ & $74.75\%$ & $74.75\%$ & $74.77\%$ & $+0.02\text{ pp}$ \\
+Kimi (\texttt{provider\_b}) & Technical & $38,451$ & $76.90\%$ & $76.90\%$ & $76.93\%$ & $+0.02\text{ pp}$ \\
+Kimi (\texttt{provider\_b}) & Document & $46,379$ & $92.76\%$ & $92.76\%$ & $92.71\%$ & $-0.05\text{ pp}$ \\
+Kimi (\texttt{provider\_b}) & Analysis & $37,543$ & $75.09\%$ & $75.09\%$ & $75.05\%$ & $-0.03\text{ pp}$ \\
+DeepSeek (\texttt{provider\_c}) & Technical & $35,772$ & $71.54\%$ & $71.54\%$ & $71.55\%$ & $+0.00\text{ pp}$ \\
+DeepSeek (\texttt{provider\_c}) & Document & $38,483$ & $76.97\%$ & $76.97\%$ & $76.96\%$ & $-0.01\text{ pp}$ \\
+DeepSeek (\texttt{provider\_c}) & Analysis & $45,734$ & $91.47\%$ & $91.47\%$ & $91.47\%$ & $+0.00\text{ pp}$ \\
+\midrule
+\multicolumn{6}{l}{\textbf{全局平均百分点绝对误差 (Mean Absolute pp Error)：}} & $\mathbf{0.02\text{ pp}}$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\paragraph{92.85\% 数值事实的深入调查与澄清：}
+在前期内部评审中，曾有审查意见提出疑虑：“页面显示 OpenAI 编程辅助使用率仅约 92.85\%，若全员使用率接近 100\%，是否存在系统导致了约 7 个百分点的异常下降？”
+
+经本期审计建立的端到端数值回溯，得出了确定性事实澄清：
+\begin{enumerate}[label=(\arabic*), leftmargin=2em]
+  \item \textbf{统计口径的混淆：} 合成场景的 50,000 名用户中，至少调用过大模型一次的用户总数确实为 50,000 人（该合成总体使用率为 100.0\%）；曾使用过 OpenAI 处理任意任务的用户为 49,592 人（占 99.18\%）。但是，\textbf{具体到“使用 OpenAI 处理编程辅助（Technical）”这一单元的独立用户数为 46,423 人}。
+  \item \textbf{数据事实结论：} 原始真实使用率即为 $46,423 / 50,000 = \mathbf{92.846\% \approx 92.85\%}$。该差距反映合成场景中的用户行为分布：3,577 名用户未参与该供应商的 Technical 单元；不能据此推断他们从不执行其他供应商的编程任务，更不能推断真实员工分工。
+  \item \textbf{差分隐私极微误差：} 高斯噪声在此处的实际扰动仅为 $+3.86$ 人，折合百分点误差仅为 $\mathbf{+0.01\text{ pp}}$。这说明该次合成基准试验中，此单元的噪声误差较小。
+\end{enumerate}
+
+\subsection{任务成功率 (Success Rate) 实测结果}
+任务成功率机制在共享截断算子（$C_{\text{rate}} = 20$）与联合释放设计下用于评估基准场景的误差。在 1,000 用户与 50,000 用户合成基准下的历史示例结果如表~\ref{tab:success_rate_benchmark} 所示。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{任务成功率 (Success Rate) 实测精度对比表 ($\varepsilon=1.0, \delta=10^{-6}$)}
+\label{tab:success_rate_benchmark}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{测试数据集} & \textbf{真实成功数} & \textbf{真实调用量} & \textbf{原始成功率} & \textbf{截断成功率} & \textbf{DP 估计值} & \textbf{百分点误差 (pp)} \\
+\midrule
+$N=1,000$ (合成基准) & $5,434$ & $6,396$ & $84.96\%$ & $84.88\%$ & $86.52\%$ & $+1.56\text{ pp}$ \\
+$N=50,000$ (合成基准) & $272,118$ & $320,182$ & $84.99\%$ & $84.99\%$ & $85.08\%$ & $\mathbf{+0.09\text{ pp}}$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+该历史示例在合成企业基准下给出 $0.09\text{ pp}$ 的误差，不能外推真实企业 SLA。本文统一采用 $C_{\text{rate}}=20,\tau=1.0$；仓库所存 Parquet 不含 success 列，Success Rate 需由带成功标记的合成生成器另行构造。原表完整种子与生成快照尚未留存，本次不将这组历史数值计为已复现实验。
+
+\subsection{用户归一化占比 (Normalized Share) 实测结果}
+在 50,000 用户基准下，用户工作流结构分布的实测对比表明：各业务单元的真实占比位于 $7.25\%$ 至 $20.66\%$ 之间，DP 估计值与真实值的平均百分点误差为 $\mathbf{0.015\text{ pp}}$，单纯形曼哈顿距离 $L_1 < 0.0003$，输出严格满足和为 1 的概率分布性质。
+
+\subsection{交互总量 (Interaction Volume) 评测与截断偏差归因}
+交互总量统计的实测数据如表~\ref{tab:volume_benchmark} 所示，该结果深刻揭示了长尾数据在差分隐私截断下的本质挑战。
+
+\begin{table}[htbp]
+\centering
+\small
+\caption{交互总量 (Interaction Volume) 两层误差解耦实测数据表 ($C=20, \varepsilon=1.0, \delta=10^{-6}$)}
+\label{tab:volume_benchmark}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{lcccccc}
+\toprule
+\textbf{数据规模} & \textbf{原始真实值 $M_{\text{raw}}$} & \textbf{截断真值 $M_{\text{clip}}$} & \textbf{DP 发布值 $M_{\text{DP}}$} & \textbf{截断偏差 $E_{\text{clip}}$} & \textbf{加噪误差 $E_{\text{noise}}$} & \textbf{综合相对误差} \\
+\midrule
+$N=1,000$ & $12,380$ & $7,606.6$ & $7,632.4$ & $-4,773.4$ ($-38.56\%$) & $+25.7$ ($+0.21\%$) & $38.35\%$ \\
+$N=50,000$ & $622,241$ & $374,208$ & $374,120$ & $-248,033$ ($-39.86\%$) & $-88$ ($-0.02\%$) & $\mathbf{39.88\%}$ \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+\paragraph{效用归因的客观技术结论：}
+在两组测试中，综合相对误差均接近 $40\%$。但通过系统的两层误差解耦公式：
+\begin{itemize}[leftmargin=2em]
+  \item 差分隐私高斯加噪产生的随机误差 $E_{\text{noise}}$ 仅为 $-88$ 次，对总量的相对扰动仅为 $\mathbf{0.02\%}$；
+  \item \textbf{超过 99.9\% 的效用损失来自于预设的常数贡献截断阈值 $C=20$。} 当前合成用户的计数向量超出 $L_2$ 界 $C=20$ 时按比例收缩；这不是把每位用户的总调用次数直接截为 20。
+\end{itemize}
+这一发现明确了系统的架构边界：\textbf{交互总量的误差瓶颈不在于高斯机制，而在于静态截断参数与重度用户调用长尾之间的结构性矛盾}。
+
+\subsection{热门任务 (Top-K Tasks) 挖掘效用}
+对存储的合成 Parquet 重新按任务跨供应商去重，原始独立参与用户数依次为 Document (48,490)、Technical (48,432)、Analysis (48,311)。这不是交互调用量排名，原文混入了单供应商单元计数。当前 $K=5,T=3$，代码实际取 $K_{\text{eff}}=3$，仍按保守敏感度 $\sqrt{5}$ 加噪（$\sigma=9.4467$）。无额外阈值时，选择全部三个任务使 Top-3 集合命中率和 Jaccard 必为 1，不能据此证明排序效用；位次稳定性须另作多次试验。
+
+\subsection{隐私预算 \texorpdfstring{$\varepsilon$}{Epsilon} 与统计效用敏感性扫描 (\texorpdfstring{$\varepsilon$}{Epsilon}-Sweep)}
+为了给数据治理团队制定合理的发布政策提供实证支撑，系统在隔离实验环境执行了多轮参数扫描（$\varepsilon \in [0.1, 4.0]$，每点运行 10 次独立随机试验取均值）。实测趋势表明：
+\begin{itemize}[leftmargin=2em]
+  \item 比率类指标（Prevalence 与 Success Rate）在 $\varepsilon \ge 0.5$ 时即已收敛至 $0.2\text{ pp}$ 以内的极高精度区间，进一步放大 $\varepsilon$ 对可用性的边际改善递减；
+  \item 当 $\varepsilon < 0.25$ 时，高斯噪声标度剧增，小样本单元的被抑制率显著上升。因此，系统将默认单次查询预算推荐设定为 $\varepsilon = 1.0$。
+\end{itemize}

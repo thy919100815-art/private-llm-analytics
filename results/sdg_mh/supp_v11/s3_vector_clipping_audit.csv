@@ -1,0 +1,8 @@
+dataset,channel,release_object,is_vector,dimension,actual_or_hypothetical,ledger_sensitivity,user_day_count,max_l2_norm,p99_l2_norm,p999_l2_norm,mean_l2_norm,exceeds_ledger
+Enterprise (365d),Additive,sdg_additive_req (Scalar Total Requests),False,1,Actual Release,104.0,290272,104.0,102.0,104.0,16.4343,False
+Enterprise (365d),Additive,sdg_additive_fail (Scalar Total Failures),False,1,Actual Release,7.0,59875,7.0,5.0,7.0,1.425,False
+Enterprise (365d),Additive,Hypothetical Marginal Vector (5 Serv + 20 Task) Scalar-Clipped,True,25,Hypothetical (Overlapping Marginals),104.0,290272,79.4748,66.7142,73.4678,11.9322,False
+Enterprise (365d),Additive,Hypothetical Disjoint Partition (5 Serv x 20 Task = 100 Cells),True,100,Hypothetical (Disjoint Partition),104.0,290272,30.3029,21.0108,24.8797,4.91,False
+WildChat (845d),Additive,"Daily Interaction Volume (Scalar, C=30.0)",False,1,Actual Release,30.0,2103872,30.0,9.0,30.0,1.3571,False
+WildChat (845d),Additive,"Daily Interaction Volume (Scalar, C=19.0)",False,1,Actual Release,19.0,2103872,19.0,9.0,19.0,1.3324,False
+GH Archive (730d),Additive,"Daily Event Volume (Scalar, C=10.0)",False,1,Actual Release,10.0,3109351,10.0,10.0,10.0,1.896,False

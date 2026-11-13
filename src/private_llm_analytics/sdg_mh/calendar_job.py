@@ -90,6 +90,7 @@ class CalendarJob:
         services_list: Sequence[str] = DEFAULT_DISTINCT_SERVICES,
         tasks_list: Sequence[str] = DEFAULT_DISTINCT_TASKS,
         k_tasks_per_user: int = 3,
+        rolling_state: Optional[Any] = None,
     ):
         self.calendar_store = calendar_store
         self.ledger = ledger
@@ -97,31 +98,45 @@ class CalendarJob:
         self.services_list = list(services_list)
         self.tasks_list = list(tasks_list)
         self.k_tasks_per_user = int(k_tasks_per_user)
+        self.rolling_state = rolling_state
         self.delta_sq = float(len(self.services_list) + 2 * self.k_tasks_per_user)
         self.sensitivity = math.sqrt(self.delta_sq)
 
     def execute_day(
         self,
         current_day: int,
-        df_history_fn: Any,  # Callable[[int, int], pd.DataFrame] returning interactions in [s, e]
+        df_history_fn: Optional[Any] = None,  # Legacy callable for backwards compatibility
+        rolling_state: Optional[Any] = None,   # RollingDistinctState instance
         rng: Optional[np.random.Generator] = None,
         seed: Optional[int] = None,
     ) -> List[CalendarReleaseRecord]:
         """Check all entries in calendar schedule for current_day and release if current_day % s == 0."""
         executed: List[CalendarReleaseRecord] = []
+        state = rolling_state if rolling_state is not None else self.rolling_state
 
         for w, s, sigma_w in self.calendar_schedule:
             if current_day % s == 0:
                 start_day = max(1, current_day - w + 1)
-                df_window = df_history_fn(start_day, current_day)
-
-                # Compute bounded distinct counts
-                srv_counts, tsk_counts = compute_distinct_window_histogram(
-                    df_window=df_window,
-                    services_list=self.services_list,
-                    tasks_list=self.tasks_list,
-                    k_tasks_per_user=self.k_tasks_per_user,
-                )
+                if state is not None:
+                    # Preferred: compute strictly from RollingDistinctState (no raw data access)
+                    srv_counts, tsk_counts = state.compute_window_histogram(
+                        start_day=start_day,
+                        end_day=current_day,
+                        services_list=self.services_list,
+                        tasks_list=self.tasks_list,
+                        k_tasks_per_user=self.k_tasks_per_user,
+                    )
+                elif df_history_fn is not None:
+                    # Legacy fallback
+                    df_window = df_history_fn(start_day, current_day)
+                    srv_counts, tsk_counts = compute_distinct_window_histogram(
+                        df_window=df_window,
+                        services_list=self.services_list,
+                        tasks_list=self.tasks_list,
+                        k_tasks_per_user=self.k_tasks_per_user,
+                    )
+                else:
+                    raise ValueError("Either rolling_state or df_history_fn must be provided to execute_day.")
 
                 # Add discrete Gaussian noise
                 noise_srv = sample_discrete_gaussian(

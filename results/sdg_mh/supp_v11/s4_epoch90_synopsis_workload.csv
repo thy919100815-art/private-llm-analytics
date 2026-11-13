@@ -1,0 +1,3 @@
+method,setting_desc,rho_epoch_cap,ledger_rho_90,availability,sigma_30,analytical_noise_mape_30d,pure_noise_mape_mean_pct,e2e_mape_mean_pct
+Epoch90-Synopsis (Matched Budget),rho_epoch = 0.0272 (Matches SDG-MH 90d budget),0.027204,0.027204,100.0%,28470.9,5.25,5.25,5.64
+Epoch90-Synopsis (Production Setting),"rho_epoch = 0.2533 (Production setting, eps ~ 4.0)",0.253295,0.253295,100.0%,9330.5,1.72,1.72,3.0

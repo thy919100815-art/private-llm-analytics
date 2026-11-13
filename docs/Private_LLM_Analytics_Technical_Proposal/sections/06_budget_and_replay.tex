@@ -1,0 +1,25 @@
+\section{隐私预算与重复查询控制}
+\label{sec:budget_and_replay}
+
+在差分隐私工程落地中，仅有优秀的加噪算法是不够的。如果系统缺乏对历史发布的全局管控，恶意分析人员可以通过发起多次重复查询，将多次加噪的结果进行简单平均，从而逐步抵消高斯噪声、还原出原始数据特征（即“噪声消除与重构风险”）。\textbf{\mbox{Private LLM Analytics}} 通过引入 \textbf{RDP 隐私记账机制}与 \textbf{ReleaseKey 规范重放机制}，从工程架构上有效应对此类风险。
+
+\subsection{隐私预算记账机制（RDP Accountant）}
+传统的差分隐私累加规则（如基础组合定理 Basic Composition）往往较为保守，若简单按逐次相加计算，多项联合发布或连续发布时会过快耗尽预算，或者迫使系统添加过大噪声。
+
+为此，系统记录每一次新发布带来的隐私消耗，并累计计算总预算；达到配置上限后停止新的发布。底层采用 RDP 记账，在预设的一组 RDP 阶数上累计隐私消耗，并在给定 $\delta$ 下选择对应的最小 $\varepsilon$ 上界，以获得比简单逐次相加更合理的累计预算估计。
+
+在具体工程实现上，系统隐私账本采用轻量级嵌入式 SQLite 存储，支持 ACID 事务特性。在多线程或微服务并发调用时，系统采用“比对预留（Compare-and-Reserve）”原子事务机制，确保并发场景下隐私预算不发生超额扣减或透支。
+
+\subsection{ReleaseKey 规范重放机制：降低重复查询带来的噪声平均风险}
+\begin{itemize}[leftmargin=2em]
+  \item \textbf{安全考量（噪声平均风险）：} 假设针对某一固定时段的企业调用总量发起 100 次相同的统计请求。若系统每次都重新注入独立的高斯随机噪声，根据统计学大数定律，将这 100 次返回的加噪值求简单平均，其随机噪声的标准差将衰减至原始噪声的 $\frac{1}{\sqrt{100}} = \frac{1}{10}$，导致差分隐私防护水平大幅下降。
+  \item \textbf{解决方案（结果标识生成与安全复用）：} 系统根据数据版本、指标、查询参数和接收方等信息生成结果标识（ReleaseKey），相同的已发布查询可直接复用原结果：
+  \begin{equation}
+    \text{ReleaseKey} = \operatorname{SHA256}\Big(\text{Dataset\_Fingerprint} \parallel \text{Metric} \parallel \text{Params} \parallel \text{Recipient}\Big)
+  \end{equation}
+  \begin{enumerate}[label=\alph*., leftmargin=1.5em]
+    \item \textbf{命中历史查询：} 若该 ReleaseKey 已在持久化账本中存在，系统直接调取历史已发布的受保护结果与置信区间并返回。该过程不重新调用随机加噪引擎，增量隐私预算消耗记为 0。重复查询获得的结果保持一致，有效防范了多次重复查询抵消噪声的风险。
+    \item \textbf{查询参数或数据变更：} 若分析人员调整了过滤条件、时间范围或截断范数，或者底层遥测日志文件发生了更新（Dataset SHA-256 改变），系统计算得出全新的 ReleaseKey，正常执行预算扣减与加噪发布流程。
+  \end{enumerate}
+  \item \textbf{管理收益：} 该机制既防范了恶意统计攻击，又为高并发可视化大屏和日常重复报表刷新节省了宝贵的差分隐私预算资产。
+\end{itemize}

@@ -1,0 +1,21 @@
+interaction_id,user_id,timestamp,provider,task,success
+i0001,u001,2026-10-20 09:31:20,provider_a,technical,true
+i0002,u001,2026-10-20 09:35:42,provider_a,technical,false
+i0003,u001,2026-10-20 10:01:13,provider_a,document,true
+i0004,u002,2026-10-20 10:15:08,provider_a,technical,true
+i0005,u003,2026-10-20 10:27:31,provider_b,analysis,true
+i0006,u003,2026-10-20 10:45:00,provider_b,document,true
+i0007,u004,2026-10-20 11:02:15,provider_c,technical,true
+i0008,u004,2026-10-20 11:20:49,provider_c,analysis,false
+i0009,u005,2026-10-20 11:35:10,provider_a,technical,true
+i0010,u005,2026-10-20 12:00:22,provider_a,document,true
+i0011,u006,2026-10-20 13:10:05,provider_b,technical,false
+i0012,u006,2026-10-20 13:25:40,provider_b,analysis,true
+i0013,u007,2026-10-20 14:01:18,provider_c,document,true
+i0014,u007,2026-10-20 14:15:33,provider_c,technical,true
+i0015,u008,2026-10-20 14:40:02,provider_a,analysis,true
+i0016,u008,2026-10-20 15:05:19,provider_a,technical,true
+i0017,u009,2026-10-20 15:30:44,provider_b,document,false
+i0018,u009,2026-10-20 15:55:01,provider_b,technical,true
+i0019,u010,2026-10-20 16:10:12,provider_c,analysis,true
+i0020,u010,2026-10-20 16:30:55,provider_c,technical,true

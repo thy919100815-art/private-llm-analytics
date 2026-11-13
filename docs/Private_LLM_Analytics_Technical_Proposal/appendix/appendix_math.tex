@@ -1,0 +1,75 @@
+\section{核心数学定理推导与形式化证明}
+\label{app:math}
+
+\subsection{用户使用率 (Prevalence) 紧致敏感度证明}
+\begin{techbox}{定理 A.1 (Prevalence $L_2$ 敏感度界限)}
+设企业分类单元总维度为 $D$，单用户参与单元数受限于 $\|b_u\|_0 \le k$。则对直方图聚合查询 $H(D) = \sum_{u \in \mathcal{U}} b_u$，在用户级加/删邻接关系下的全局 $L_2$ 敏感度为 $\Delta_2 = \sqrt{\min(k, D)}$。
+\end{techbox}
+
+\begin{proof}
+设相邻数据集为 $D_1$ 与 $D_2$，且 $D_2 = D_1 \cup \{u^*\}$（增加一个用户 $u^*$）。则聚合直方图的差值为：
+\begin{equation}
+  H(D_2) - H(D_1) = \sum_{u \in D_2} b_u - \sum_{u \in D_1} b_u = b_{u^*}
+\end{equation}
+根据欧几里得范数的定义：
+\begin{equation}
+  \|H(D_2) - H(D_1)\|_2 = \|b_{u^*}\|_2 = \sqrt{\sum_{j=1}^D b_{u^*, j}^2}
+\end{equation}
+由于每个单元的指示变量 $b_{u^*, j} \in \{0, 1\}$，故 $b_{u^*, j}^2 = b_{u^*, j}$。因此：
+\begin{equation}
+  \sum_{j=1}^D b_{u^*, j}^2 = \sum_{j=1}^D b_{u^*, j} = \|b_{u^*}\|_0
+\end{equation}
+由截断算子的定义，非零单元数不得超过 $k$；同时，非零单元数绝不可能超过系统总维度 $D$。因此 $\|b_{u^*}\|_0 \le \min(k, D)$。代入得：
+\begin{equation}
+  \|H(D_2) - H(D_1)\|_2 \le \sqrt{\min(k, D)}
+\end{equation}
+当构造一个在 $\min(k, D)$ 个单元中每个单元均恰好调用 1 次的用户时，等号严格成立。证毕。
+\end{proof}
+
+\subsection{用户归一化占比 (Normalized Share) 天然有界性证明}
+\begin{techbox}{定理 A.2 (Normalized Share 敏感度上界)}
+设用户工作流占比向量定义为 $x_u = m_u / \|m_u\|_1$（若 $\|m_u\|_1 = 0$ 则为 $\mathbf{0}$）。则聚合查询 $X(D) = \sum_{u \in \mathcal{U}} x_u$ 的全局 $L_2$ 敏感度满足 $\Delta_2 \le 1.0$。
+\end{techbox}
+
+\begin{proof}
+对于任意被添加或删除的员工个体 $u^*$：
+若 $\|m_{u^*}\|_1 = 0$，则 $x_{u^*} = \mathbf{0}$，$\|x_{u^*}\|_2 = 0 \le 1.0$。
+若 $\|m_{u^*}\|_1 > 0$，向量 $x_{u^*}$ 各分量满足 $x_{u^*, j} \ge 0$ 且 $\sum_{j=1}^D x_{u^*, j} = 1$。展开 $L_2$ 范数的平方：
+\begin{equation}
+  \|x_{u^*}\|_2^2 = \sum_{j=1}^D x_{u^*, j}^2 \le \sum_{j=1}^D x_{u^*, j}^2 + \sum_{i \ne j} x_{u^*, i} x_{u^*, j} = \left(\sum_{j=1}^D x_{u^*, j}\right)^2 = \|x_{u^*}\|_1^2 = 1.0
+\end{equation}
+两侧开平方可得 $\|x_{u^*}\|_2 \le 1.0$。因此：
+\begin{equation}
+  \Delta_2 = \max_{u^*} \|X(D \cup \{u^*\}) - X(D)\|_2 = \max_{u^*} \|x_{u^*}\|_2 \le 1.0
+\end{equation}
+当某个用户的所有调用全部集中于单一单元时，$\|x_{u^*}\|_2 = 1.0$ 达到上界。证毕。
+\end{proof}
+
+\subsection{任务成功率联合向量敏感度证明}
+\begin{techbox}{定理 A.3 (Success Rate 联合向量敏感度界限)}
+设用户成功量向量为 $s_u$，总量向量为 $n_u$，满足 $0 \le s_{u, j} \le n_{u, j}$。在共享截断算子 $a_u = \min(1, C_{\text{rate}}/\|n_u\|_2)$ 下，联合向量 $w_u = [a_u s_u ; a_u n_u] \in \mathbb{R}^{2D}$ 的全局 $L_2$ 敏感度满足 $\Delta_2 \le \sqrt{2} C_{\text{rate}}$。
+\end{techbox}
+
+\begin{proof}
+对于任意新增或删除的员工 $u^*$：
+\begin{equation}
+  \|w_{u^*}\|_2^2 = \|\bar{s}_{u^*}\|_2^2 + \|\bar{n}_{u^*}\|_2^2 = a_{u^*}^2 \|s_{u^*}\|_2^2 + a_{u^*}^2 \|n_{u^*}\|_2^2 = a_{u^*}^2 \left( \sum_{j=1}^D s_{u^*, j}^2 + \sum_{j=1}^D n_{u^*, j}^2 \right)
+\end{equation}
+由于单次调用的成功数不可能超过调用总数，故对于每一个分量均有 $0 \le s_{u^*, j} \le n_{u^*, j}$，从而 $s_{u^*, j}^2 \le n_{u^*, j}^2$。因此：
+\begin{equation}
+  \sum_{j=1}^D s_{u^*, j}^2 \le \sum_{j=1}^D n_{u^*, j}^2 = \|n_{u^*}\|_2^2
+\end{equation}
+将其代入联合范数不等式中：
+\begin{equation}
+  \|w_{u^*}\|_2^2 \le a_{u^*}^2 \left( \|n_{u^*}\|_2^2 + \|n_{u^*}\|_2^2 \right) = 2 a_{u^*}^2 \|n_{u^*}\|_2^2
+\end{equation}
+由截断比例因子定义 $a_{u^*} = \min\left(1, \frac{C_{\text{rate}}}{\|n_{u^*}\|_2}\right)$，若 $\|n_{u^*}\|_2 \le C_{\text{rate}}$，则 $a_{u^*} = 1$，此时 $a_{u^*} \|n_{u^*}\|_2 \le C_{\text{rate}}$；若 $\|n_{u^*}\|_2 > C_{\text{rate}}$，则 $a_{u^*} \|n_{u^*}\|_2 = C_{\text{rate}}$。在所有情形下均有：
+\begin{equation}
+  a_{u^*} \|n_{u^*}\|_2 \le C_{\text{rate}}
+\end{equation}
+代入可得 $\|w_{u^*}\|_2^2 \le 2 C_{\text{rate}}^2$，两侧开方即得：
+\begin{equation}
+  \|w_{u^*}\|_2 \le \sqrt{2} C_{\text{rate}}
+\end{equation}
+因此联合查询的全局敏感度满足 $\Delta_2 \le \sqrt{2} C_{\text{rate}}$。证毕。
+\end{proof}

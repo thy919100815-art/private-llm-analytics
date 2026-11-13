@@ -1,0 +1,147 @@
+\section{系统总体架构}
+\label{sec:architecture}
+
+\subsection{分层架构设计与核心组件}
+为了实现差分隐私数学机制、全生命周期记账与高并发企业级服务之间的解耦，\textbf{Private LLM Analytics} 采用了模块化、高内聚的分层架构体系。整个系统自底向上划分为六个核心层级，如图~\ref{fig:architecture} 所示。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.88, every node/.style={scale=0.88},
+  layerbox/.style={draw=navyblue, fill=lightbg, rounded corners=4pt, thick, inner sep=8pt, text width=14cm},
+  subbox/.style={draw=slateblue, fill=white, rounded corners=2pt, font=\small, align=center, inner sep=4pt, minimum height=0.8cm},
+  arrow/.style={-{Latex[length=2.5mm]}, thick, color=navyblue}
+]
+
+  % Layer 1: Ingestion
+  \node[layerbox] (L1) at (0, 0) {
+    \textbf{\color{navyblue} 1. 遥测日志接入与校验层 (Data Ingestion \& Validation Layer)}\\[3pt]
+    \begin{tikzpicture}
+      \node[subbox, text width=3.8cm] at (0,0) {CSV / Parquet 校验解析\\(\texttt{Schema Validation})};
+      \node[subbox, text width=3.8cm] at (4.4,0) {流式 SHA-256 数据指纹\\(\texttt{Dataset Fingerprint})};
+      \node[subbox, text width=3.8cm] at (8.8,0) {动态分类学元数据映射\\(\texttt{Dynamic Taxonomy})};
+    \end{tikzpicture}
+  };
+
+  % Layer 2: Aggregation
+  \node[layerbox, below=0.45cm of L1] (L2) {
+    \textbf{\color{navyblue} 2. 用户级状态矩阵聚合层 (User Matrix Aggregation Layer)}\\[3pt]
+    \begin{tikzpicture}
+      \node[subbox, text width=3.8cm] at (0,0) {单用户调用量聚合矩阵\\$\mathbf{M} \in \mathbb{R}^{N \times D}$};
+      \node[subbox, text width=3.8cm] at (4.4,0) {单用户成功量聚合矩阵\\$\mathbf{S} \in \mathbb{R}^{N \times D}$};
+      \node[subbox, text width=3.8cm] at (8.8,0) {固定公开人口基准绑定\\$N_{\text{public}}$};
+    \end{tikzpicture}
+  };
+
+  % Layer 3: Statistic Profile
+  \node[layerbox, below=0.45cm of L2] (L3) {
+    \textbf{\color{navyblue} 3. 统计专属机制层 (Statistic-Specific DP Framework Layer)}\\[3pt]
+    \begin{tikzpicture}
+      \node[subbox, text width=2.4cm] at (0,0) {User Prevalence\\($L_0$ 截断, $\Delta_2 \le \sqrt{k}$)};
+      \node[subbox, text width=2.5cm] at (2.8,0) {Normalized Share\\(单纯形映射, $\Delta_2 \le 1$)};
+      \node[subbox, text width=2.5cm] at (5.7,0) {Interaction Volume\\($L_2$ 截断, $\Delta_2 = C$)};
+      \node[subbox, text width=2.5cm] at (8.6,0) {Success Rate\\(联合向量, $\Delta_2 \le \sqrt{2}C_{\text{rate}}$)};
+      \node[subbox, text width=2.1cm] at (11.3,0) {Top-K Tasks\\(全字典加噪)};
+    \end{tikzpicture}
+  };
+
+  % Layer 4: Mechanism & Sampling
+  \node[layerbox, below=0.45cm of L3] (L4) {
+    \textbf{\color{navyblue} 4. 差分隐私机制与参数校准层 (Mechanism \& Calibration Layer)}\\[3pt]
+    \begin{tikzpicture}
+      \node[subbox, text width=3.8cm] at (0,0) {解析高斯校准引擎\\(\texttt{Analytic Gaussian})};
+      \node[subbox, text width=3.8cm] at (4.4,0) {操作系统物理真随机数控制\\(\texttt{OS Entropy RNG})};
+      \node[subbox, text width=3.8cm] at (8.8,0) {持续观测时间二叉树机制\\(\texttt{Binary Time Tree})};
+    \end{tikzpicture}
+  };
+
+  % Layer 5: Accounting & Governance
+  \node[layerbox, below=0.45cm of L4] (L5) {
+    \textbf{\color{navyblue} 5. 全生命周期记账与发布控制层 (Accounting \& Governance Layer)}\\[3pt]
+    \begin{tikzpicture}
+      \node[subbox, text width=3.8cm] at (0,0) {Rényi 差分隐私紧致组合\\(\texttt{RDP Accountant})};
+      \node[subbox, text width=3.8cm] at (4.4,0) {规范重放零增量缓存引擎\\(\texttt{Canonical Replay})};
+      \node[subbox, text width=3.8cm] at (8.8,0) {接收方作用域隔离与账本持久化\\(\texttt{SQLite State Manager})};
+    \end{tikzpicture}
+  };
+
+  % Layer 6: Application & Presentation
+  \node[layerbox, below=0.45cm of L5] (L6) {
+    \textbf{\color{navyblue} 6. 业务应用与可解释性导出层 (Application \& Presentation Layer)}\\[3pt]
+    \begin{tikzpicture}
+      \node[subbox, text width=3.8cm] at (0,0) {合规发布脱敏 CSV/JSON 导出\\(\texttt{Secure Exporter})};
+      \node[subbox, text width=3.8cm] at (4.4,0) {差分隐私 Web 控制台向导\\(\texttt{Interactive Console})};
+      \node[subbox, text width=3.8cm] at (8.8,0) {内部效用对比与 $\varepsilon$-Sweep 评估\\(\texttt{Utility Evaluator})};
+    \end{tikzpicture}
+  };
+
+  % 连接线
+  \draw[arrow] (L1) -- (L2);
+  \draw[arrow] (L2) -- (L3);
+  \draw[arrow] (L3) -- (L4);
+  \draw[arrow] (L4) -- (L5);
+  \draw[arrow] (L5) -- (L6);
+
+\end{tikzpicture}
+\caption{Private LLM Analytics 系统六层技术架构图}
+\label{fig:architecture}
+\end{figure}
+
+\subsection{核心层级职能描述}
+各层级具体职能与设计考量说明如下：
+\begin{enumerate}[label=\textbf{\arabic*.}, leftmargin=2em]
+  \item \textbf{遥测日志接入与校验层：} 支持百万级规模的 CSV 与 Parquet 格式交互遥测数据输入。负责严格检验必需列的存在性与类型合法性；采用文件流与内容双重 SHA-256 哈希计算数据集指纹，确保所有后续发布均与明确的数据集快照版本形成强绑定。
+  \item \textbf{用户级状态矩阵聚合层：} 依托高度优化的矢量化算子，将离散日志快速投影为以单个员工为维度的稀疏/密集矩阵 \texttt{UserMatrix}。该层负责将每个用户的全部离散行为聚合为状态向量，奠定用户级差分隐私的数学输入基础。
+  \item \textbf{统计专属机制层：} 系统的核心创新组件。针对不同业务查询，实例化专有的统计 Profile（如 \texttt{UserPrevalenceProfile}、\texttt{SuccessRateProfile} 等）。由各 Profile 自主负责实现该统计指标的用户级贡献限制（Contribution Bounding）和理论敏感度求取。
+  \item \textbf{差分隐私机制与参数校准层：} 基于精确的解析高斯机制（Analytic Gaussian Mechanism）求解最优噪声标准差 $\sigma$；生产模式下严密阻断任何调用方对随机数发生器（RNG）的控制，确保噪声样本源自操作系统提供的熵源（OS-provided entropy）初始化的随机数生成器。对于流式时间序列，该层挂载时间二叉树机制实现增量加噪。
+  \item \textbf{全生命周期记账与发布控制层：} 维护持久化、事务一致的生命周期隐私账本；正常服务重启不会自动重置历史状态。通过对比查询的规范语义哈希判断是否存在历史结果：命中则直接返回已有结果且增量预算为零（规范重放）；未命中则执行原子预留（Compare-and-Reserve）与多阶 Rényi 差分隐私累加记账。
+  \item \textbf{业务应用与可解释性导出层：} 负责对加噪后的向量执行合规后处理（如值域截断、归一化与阈值抑制）；向外部接收方提供纯脱敏的 CSV 与 JSON 结构化数据下载；向企业内部管理员提供两层误差拆解与 $\varepsilon$ 效用敏感度扫描报告。
+\end{enumerate}
+
+\subsection{端到端请求流转与状态时序}
+一次典型的差分隐私发布请求在系统内部经历如图~\ref{fig:flowchart} 所示的状态生命周期。
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}[
+  scale=0.88, every node/.style={scale=0.88},
+  node distance=1.2cm,
+  startstop/.style={draw=navyblue, fill=navyblue!10, rounded corners=3pt, thick, align=center, inner sep=5pt, text width=3.6cm},
+  process/.style={draw=slateblue, fill=white, rounded corners=2pt, thick, align=center, inner sep=5pt, text width=3.8cm},
+  decision/.style={draw=accentamber, fill=accentamber!10, diamond, aspect=2, thick, align=center, inner sep=2pt, text width=2.4cm},
+  arrow/.style={-{Latex[length=2.5mm]}, thick, color=navyblue}
+]
+
+  \node[startstop] (start) {收到查询请求\\(\texttt{ReleaseRequest})};
+  \node[process, below=0.8cm of start] (hash) {计算规范语义哈希\\(\texttt{Canonical Key})};
+  \node[decision, below=0.8cm of hash] (cache) {存在完全匹配\\的历史发布？};
+  
+  % 缓存分支
+  \node[process, right=2.2cm of cache] (replay) {规范重放 (Canonical Replay)\\$\Delta\text{RDP} = 0$, 零预算消耗};
+  \node[startstop, below=3.5cm of replay] (finish) {返回发布结果与导出视图\\(\texttt{DP Estimate})};
+
+  % 未命中分支
+  \node[process, below=1.0cm of cache] (reserve) {原子预算预留校验\\$\varepsilon_{\text{current}} + \Delta\varepsilon \le \varepsilon_{\text{cap}}$};
+  \node[decision, below=0.8cm of reserve] (budget) {预算校验\\通过？};
+  \node[process, left=2.2cm of budget] (fail) {\color{red}\bfseries 拒绝服务\\(\texttt{BudgetExceeded})\\Fail-Closed 阻断};
+  
+  \node[process, below=1.0cm of budget] (exec) {执行统计专属机制\\(截断 + 解析高斯加噪)};
+  \node[process, below=0.8cm of exec] (commit) {提交 RDP 账本与生成缓存\\(\texttt{Commit Release})};
+
+  % 连线
+  \draw[arrow] (start) -- (hash);
+  \draw[arrow] (hash) -- (cache);
+  \draw[arrow] (cache) -- node[above]{\small 命中} (replay);
+  \draw[arrow] (replay) -- (finish);
+  
+  \draw[arrow] (cache) -- node[right]{\small 未命中} (reserve);
+  \draw[arrow] (reserve) -- (budget);
+  \draw[arrow] (budget) -- node[above]{\small 否} (fail);
+  \draw[arrow] (budget) -- node[right]{\small 是} (exec);
+  \draw[arrow] (exec) -- (commit);
+  \draw[arrow] (commit) |- (finish);
+
+\end{tikzpicture}
+\caption{差分隐私查询原子生命周期与安全流转时序图}
+\label{fig:flowchart}
+\end{figure}

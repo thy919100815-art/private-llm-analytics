@@ -1,0 +1,2 @@
+t_span_days,n_releases,full_check_duration_sec,full_check_duration_ms,rho_at_tspan,total_budget_sum,asymptotic_constant_verified,exceeded_grid_points_count,max_exceed_ratio,worst_horizon_h,margin_headroom_pct,grid_max_rho_new,full_max_rho_new,gap_interval,test_rho_new,grid_gate_passed,full_gate_passed
+3650,8458,0.2671,267.15,2.871768,2.871768,True,257,1.151585,2,20.0,0.00018603,0.00015184,"(0.00015184, 0.00018603]",0.00016894,True,False
