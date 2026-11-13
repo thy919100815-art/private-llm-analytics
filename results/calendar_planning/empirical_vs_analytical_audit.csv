@@ -1,0 +1,13 @@
+group,query,trials,total_noisy_samples,analytical_sigma,empirical_noise_rmse,empirical_mean_bias,ratio_empirical_to_analytical,is_consistent_with_theory
+A_Baseline,Daily_Requests,100,9000,2274.61,2273.91,20.193,0.9997,True
+A_Baseline,Rolling_7d_Distinct,100,1200,59.96,58.18,-0.761,0.9704,True
+A_Baseline,Rolling_30d_Distinct,100,900,59.96,60.93,0.918,1.0163,True
+B_BudgetOnly,Daily_Requests,100,9000,1628.86,1628.49,14.111,0.9998,True
+B_BudgetOnly,Rolling_7d_Distinct,100,1200,74.71,72.62,-1.133,0.972,True
+B_BudgetOnly,Rolling_30d_Distinct,100,900,74.71,76.13,0.83,1.019,True
+C_PhaseOnly,Daily_Requests,100,9000,2274.61,2273.91,20.193,0.9997,True
+C_PhaseOnly,Rolling_7d_Distinct,100,1200,59.96,58.18,-0.761,0.9704,True
+C_PhaseOnly,Rolling_30d_Distinct,100,900,59.96,60.93,0.918,1.0163,True
+D_JointPlanning,Daily_Requests,100,9000,1628.86,1628.49,14.111,0.9998,True
+D_JointPlanning,Rolling_7d_Distinct,100,1200,74.71,72.62,-1.133,0.972,True
+D_JointPlanning,Rolling_30d_Distinct,100,900,74.71,76.13,0.83,1.019,True
