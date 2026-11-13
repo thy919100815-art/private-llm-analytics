@@ -1,0 +1,5 @@
+dataset,group,query,mean_events,noise_sigma,noise_rmse,mape_percent
+GH_Archive,A_Baseline,Daily_Events,2.0,454.92,454.92,17713.2306
+GH_Archive,B_BudgetOnly,Daily_Events,2.0,325.77,325.77,12684.5862
+GH_Archive,C_PhaseOnly,Daily_Events,2.0,454.92,454.92,17713.2306
+GH_Archive,D_JointPlanning,Daily_Events,2.0,325.77,325.77,12684.5862

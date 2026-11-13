@@ -1,0 +1,13 @@
+metric,value,unit
+Planner_Group_A_Latency_ms,2.21,ms
+Planner_Group_B_Latency_ms,3.27,ms
+Planner_Group_C_Latency_ms,115.74,ms
+Planner_Group_D_Latency_ms,634.7,ms
+Gate_Check_Latency_p50_ms,1.421,ms
+Gate_Check_Latency_p95_ms,2.42,ms
+Gate_Check_Latency_p99_ms,3.382,ms
+Ledger_Memory_1Year_KB,26.66,KB
+Ledger_Memory_10Year_KB,266.51,KB
+Ledger_Total_Records_1Year,481.0,count
+Ledger_Total_Records_10Year,4813.0,count
+Crash_Consistency_Atomic_Rollback,1.0,boolean

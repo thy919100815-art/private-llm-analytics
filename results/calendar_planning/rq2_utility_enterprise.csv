@@ -1,0 +1,17 @@
+dataset,group,query,ground_truth_mean,clipping_bias,noise_sigma,noise_rmse,total_rmse,mape_percent
+Enterprise,A_Baseline,Daily_Requests,10386.5,1112.71,2274.61,2274.61,2532.19,28.187
+Enterprise,A_Baseline,Rolling_7d_Distinct,1120.0,0.0,59.96,59.96,59.96,4.271
+Enterprise,A_Baseline,Rolling_30d_Distinct,1680.0,0.0,59.96,59.96,59.96,2.848
+Enterprise,A_Baseline,Rolling_90d_Distinct,1910.0,0.0,59.96,59.96,59.96,2.505
+Enterprise,B_BudgetOnly,Daily_Requests,10386.5,1112.71,1628.86,1628.86,1972.64,23.226
+Enterprise,B_BudgetOnly,Rolling_7d_Distinct,1120.0,0.0,74.71,74.71,74.71,5.322
+Enterprise,B_BudgetOnly,Rolling_30d_Distinct,1680.0,0.0,74.71,74.71,74.71,3.548
+Enterprise,B_BudgetOnly,Rolling_90d_Distinct,1910.0,0.0,65.29,65.29,65.29,2.727
+Enterprise,C_PhaseOnly,Daily_Requests,10386.5,1112.71,2274.61,2274.61,2532.19,28.187
+Enterprise,C_PhaseOnly,Rolling_7d_Distinct,1120.0,0.0,59.96,59.96,59.96,4.271
+Enterprise,C_PhaseOnly,Rolling_30d_Distinct,1680.0,0.0,59.96,59.96,59.96,2.848
+Enterprise,C_PhaseOnly,Rolling_90d_Distinct,1910.0,0.0,59.96,59.96,59.96,2.505
+Enterprise,D_JointPlanning,Daily_Requests,10386.5,1112.71,1628.86,1628.86,1972.64,23.226
+Enterprise,D_JointPlanning,Rolling_7d_Distinct,1120.0,0.0,74.71,74.71,74.71,5.322
+Enterprise,D_JointPlanning,Rolling_30d_Distinct,1680.0,0.0,74.71,74.71,74.71,3.548
+Enterprise,D_JointPlanning,Rolling_90d_Distinct,1910.0,0.0,65.29,65.29,65.29,2.727
