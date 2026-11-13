@@ -20,7 +20,12 @@ import pandas as pd
 
 from private_llm_analytics.sdg_mh.clipping import clip_daily_additive
 from private_llm_analytics.sdg_mh.discrete_gaussian import sample_discrete_gaussian
-from private_llm_analytics.sdg_mh.ledger import PrivacyAdmissionError, ReleaseRecord, UnifiedPrivacyLedger
+from private_llm_analytics.sdg_mh.ledger import (
+    PrivacyAdmissionError,
+    ReleaseRecord,
+    ReleaseStatus,
+    UnifiedPrivacyLedger,
+)
 from private_llm_analytics.sdg_mh.sealed_store import DailySealedRecord, SealedStore
 
 
@@ -165,10 +170,15 @@ class SealJob:
                 )
             )
 
-        for cand in cands:
-            admitted, reason = self.ledger.check_admission(cand)
-            if not admitted:
-                raise PrivacyAdmissionError(f"SealJob rejected day {day_index}: {reason}")
+        # 2. Group Atomic Admission and Commit in Unified Ledger (Fail-closed)
+        try:
+            self.ledger.admit_and_commit_batch(
+                candidate_records=cands,
+                as_status=ReleaseStatus.COMMITTED.value,
+                allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
+            )
+        except PrivacyAdmissionError as e:
+            raise PrivacyAdmissionError(f"SealJob rejected day {day_index}: {e}") from e
 
         # 3. User daily contribution clipping
         c_req, c_fail, c_prov, diags = clip_daily_additive(
@@ -216,23 +226,12 @@ class SealJob:
             sealed_at=now_iso,
         )
 
-        # 6. Register in Unified Ledger
-        for cand in cands:
-            self.ledger.record_gaussian_release(
-                release_id=cand.release_id,
-                days_accessed=list(cand.days_accessed),
-                sensitivity=cand.sensitivity,
-                sigma=cand.params["sigma"],
-                tag=cand.tag,
-                enforce_admission=False,  # Already pre-checked
-            )
-
-        # 7. Append to SealedStore (with atomic rollback on store failure)
+        # 6. Append to SealedStore (with atomic rollback on store failure)
         try:
             self.sealed_store.append(record)
         except Exception:
             for cand in cands:
-                self.ledger.rollback_release(cand.release_id)
+                self.ledger.rollback_release(cand.release_id, allow_committed=True)
             raise
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0

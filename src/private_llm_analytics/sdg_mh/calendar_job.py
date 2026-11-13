@@ -20,7 +20,12 @@ import pandas as pd
 
 from private_llm_analytics.sdg_mh.clipping import compute_distinct_window_histogram
 from private_llm_analytics.sdg_mh.discrete_gaussian import sample_discrete_gaussian
-from private_llm_analytics.sdg_mh.ledger import PrivacyAdmissionError, ReleaseRecord, UnifiedPrivacyLedger
+from private_llm_analytics.sdg_mh.ledger import (
+    PrivacyAdmissionError,
+    ReleaseRecord,
+    ReleaseStatus,
+    UnifiedPrivacyLedger,
+)
 
 
 DEFAULT_CALENDAR_A = [(7, 1, 60.0), (30, 7, 60.0), (90, 30, 60.0)]
@@ -168,7 +173,7 @@ class CalendarJob:
                 days_accessed = list(range(start_day, current_day + 1))
                 rho_cost = float(self.delta_sq / (2.0 * sigma_w * sigma_w))
 
-                # 2. Privacy admission pre-check (Fail-closed!)
+                # 2. Group Atomic Admission and Commit in Unified Ledger (Fail-closed)
                 cand = ReleaseRecord(
                     release_id=rel_id,
                     days_accessed=frozenset(days_accessed),
@@ -178,9 +183,14 @@ class CalendarJob:
                     rho_cost=rho_cost,
                     tag=f"calendar_{w}_{s}",
                 )
-                admitted, reason = self.ledger.check_admission(cand)
-                if not admitted:
-                    raise PrivacyAdmissionError(f"CalendarJob rejected release {rel_id}: {reason}")
+                try:
+                    self.ledger.admit_and_commit_batch(
+                        candidate_records=[cand],
+                        as_status=ReleaseStatus.COMMITTED.value,
+                        allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
+                    )
+                except PrivacyAdmissionError as e:
+                    raise PrivacyAdmissionError(f"CalendarJob rejected release {rel_id}: {e}") from e
 
                 # 3. Compute bounded distinct window histogram
                 if state is not None:
@@ -234,22 +244,12 @@ class CalendarJob:
                     released_at=datetime.now(timezone.utc).isoformat(),
                 )
 
-                # 5. Atomic registration in Unified Ledger
-                self.ledger.record_gaussian_release(
-                    release_id=rel_id,
-                    days_accessed=days_accessed,
-                    sensitivity=self.sensitivity,
-                    sigma=sigma_w,
-                    tag=f"calendar_{w}_{s}",
-                    enforce_admission=False,  # Already pre-checked
-                )
-
-                # 6. Append to store (with rollback on error)
+                # 5. Append to store (with rollback on error)
                 try:
                     self.calendar_store.append(rec)
                     executed.append(rec)
                 except Exception:
-                    self.ledger.rollback_release(rel_id)
+                    self.ledger.rollback_release(rel_id, allow_committed=True)
                     raise
 
         return executed

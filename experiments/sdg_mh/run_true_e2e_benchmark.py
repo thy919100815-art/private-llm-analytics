@@ -144,7 +144,7 @@ def run_e2e_benchmark(
 
                 for grp_key, plan in plans.items():
                     print(f"      Executing Pipeline: Workload={wl_name}, Curve={curve_name}, Group={grp_key} (Status={plan.status})...")
-                    if plan.status == "BREACHED":
+                    if plan.status in ("BREACHED", "INFEASIBLE", "NO_FEASIBLE_POLICY"):
                         results_records.append({
                             "workload": wl_name,
                             "commitment_curve": curve_name,
@@ -156,30 +156,47 @@ def run_e2e_benchmark(
                             "cost_x30": plan.distinct_costs[1],
                             "cost_x90": plan.distinct_costs[2],
                             "actual_daily_rho_sum": float("nan"),
-                            "weighted_utility": plan.weighted_workload_error,
+                            "planner_abstract_objective": float("inf"),
                             "min_slack": plan.min_slack,
                             "tightest_h": plan.tightest_horizon_h,
-                            "requests_clipping_bias": round(float(np.mean(daily_raw_req[1:] - daily_clipped_req[1:])), 2),
-                            "requests_noise_rmse": float("nan"),
+                            "requests_clipping_bias": round(float(np.mean(daily_clipped_req[1:] - daily_raw_req[1:])), 2),
+                            "requests_raw_noise_rmse": float("nan"),
+                            "requests_postproc_rmse": float("nan"),
+                            "requests_postproc_bias": float("nan"),
                             "requests_total_rmse": float("nan"),
                             "requests_analytical_sigma": float("nan"),
-                            "failures_clipping_bias": round(float(np.mean(daily_raw_fail[1:] - daily_clipped_fail[1:])), 2),
-                            "failures_noise_rmse": float("nan"),
+                            "failures_clipping_bias": round(float(np.mean(daily_clipped_fail[1:] - daily_raw_fail[1:])), 2),
+                            "failures_raw_noise_rmse": float("nan"),
+                            "failures_postproc_rmse": float("nan"),
+                            "failures_postproc_bias": float("nan"),
                             "failures_total_rmse": float("nan"),
                             "failures_analytical_sigma": float("nan"),
-                            "distinct_7d_rmse": float("nan"),
+                            "distinct_7d_raw_noise_rmse": float("nan"),
+                            "distinct_7d_total_rmse": float("nan"),
+                            "distinct_7d_postproc_impact_rmse": float("nan"),
                             "distinct_7d_mape_pct": float("nan"),
                             "distinct_7d_analytical_sigma": float("nan"),
-                            "distinct_30d_rmse": float("nan"),
+                            "distinct_30d_raw_noise_rmse": float("nan"),
+                            "distinct_30d_total_rmse": float("nan"),
+                            "distinct_30d_postproc_impact_rmse": float("nan"),
                             "distinct_30d_mape_pct": float("nan"),
                             "distinct_30d_analytical_sigma": float("nan"),
-                            "distinct_90d_rmse": float("nan"),
+                            "distinct_90d_raw_noise_rmse": float("nan"),
+                            "distinct_90d_total_rmse": float("nan"),
+                            "distinct_90d_postproc_impact_rmse": float("nan"),
                             "distinct_90d_mape_pct": float("nan"),
                             "distinct_90d_analytical_sigma": float("nan"),
-                            "refresh_latency_7d_days": 7,
-                            "refresh_latency_30d_days": 7,
-                            "refresh_latency_90d_days": 30,
-                            "execution_path_verified": "TRUE_SYSTEM_PIPELINE",
+                            "distinct_90d_sample_note": "N=1 window (unexecuted due to INFEASIBLE status)",
+                            "refresh_step_7d_days": 7,
+                            "refresh_step_30d_days": 7,
+                            "refresh_step_90d_days": 30,
+                            "avg_staleness_7d_days": 3.0,
+                            "avg_staleness_30d_days": 3.0,
+                            "avg_staleness_90d_days": 14.5,
+                            "worst_staleness_7d_days": 6,
+                            "worst_staleness_30d_days": 6,
+                            "worst_staleness_90d_days": 29,
+                            "execution_path_verified": "EXCLUDED_INFEASIBLE",
                         })
                         continue
 
@@ -199,14 +216,22 @@ def run_e2e_benchmark(
                     sigma_90 = math.sqrt(11.0 / (2.0 * max(1e-12, x90)))
 
                     # Monte Carlo trials over the REAL execution pipeline
-                    trial_req_noise_errs = []
+                    trial_req_raw_noise_errs = []
+                    trial_req_post_errs = []
                     trial_req_total_errs = []
-                    trial_fail_noise_errs = []
+
+                    trial_fail_raw_noise_errs = []
+                    trial_fail_post_errs = []
                     trial_fail_total_errs = []
 
-                    trial_dist_7_errs = []
-                    trial_dist_30_errs = []
-                    trial_dist_90_errs = []
+                    trial_dist_7_raw_errs = []
+                    trial_dist_7_total_errs = []
+
+                    trial_dist_30_raw_errs = []
+                    trial_dist_30_total_errs = []
+
+                    trial_dist_90_raw_errs = []
+                    trial_dist_90_total_errs = []
 
                     trial_mape_7 = []
                     trial_mape_30 = []
@@ -219,6 +244,7 @@ def run_e2e_benchmark(
 
                         # Spin up isolated true system instances
                         trial_ledger = UnifiedPrivacyLedger(delta=1e-6)
+                        trial_ledger.set_active_plan(plan=plan, commitment=curve)
                         trial_sealed_store = SealedStore()
                         trial_cal_store = DistinctCalendarStore()
 
@@ -277,13 +303,23 @@ def run_e2e_benchmark(
                         # Query reconstruction through ReadOnlySealedQueryService
                         # 1. Daily additive requests & failures
                         for day in range(1, n_days + 1):
+                            s_rec = trial_sealed_store.get_day(day)
+                            y_r = float(s_rec.y_requests)
+                            y_f = float(s_rec.y_failures)
+
                             add_res = query_service.query_additive_window(start_day=day, end_day=day)
                             r_est = float(add_res["requests_estimate"])
                             f_est = float(add_res["failures_estimate"])
 
-                            trial_req_noise_errs.append(r_est - daily_clipped_req[day])
+                            # Raw mechanism noise RMSE error: Y - f_C(D)
+                            trial_req_raw_noise_errs.append(y_r - daily_clipped_req[day])
+                            # Post-processing error rel to clipped: hat{f}(D) - f_C(D)
+                            trial_req_post_errs.append(r_est - daily_clipped_req[day])
+                            # Total end-to-end query error: hat{f}(D) - f(D)
                             trial_req_total_errs.append(r_est - daily_raw_req[day])
-                            trial_fail_noise_errs.append(f_est - daily_clipped_fail[day])
+
+                            trial_fail_raw_noise_errs.append(y_f - daily_clipped_fail[day])
+                            trial_fail_post_errs.append(f_est - daily_clipped_fail[day])
                             trial_fail_total_errs.append(f_est - daily_raw_fail[day])
 
                         # 2. Distinct calendar queries
@@ -291,53 +327,71 @@ def run_e2e_benchmark(
                             if day % 7 == phi7 % 7:
                                 start_d = day - 7 + 1
                                 gt_s, _, _ = gt_windows[(start_d, day)]
+                                cal_rec = trial_cal_store.get_release(window_length=7, end_day=day)
                                 q_dist = query_service.query_distinct_prevalence(window_length=7, end_day=day)
                                 for idx, s_name in enumerate(services_list):
-                                    noisy_val = float(q_dist["services"].get(s_name, 0.0))
-                                    true_val = float(gt_s[idx])
-                                    err = noisy_val - true_val
-                                    trial_dist_7_errs.append(err)
-                                    if true_val > 0:
-                                        trial_mape_7.append(abs(err) / true_val)
+                                    y_val = float(cal_rec.noisy_services[idx])
+                                    true_c_val = float(gt_s[idx])
+                                    post_val = float(q_dist["services"].get(s_name, 0.0))
+
+                                    trial_dist_7_raw_errs.append(y_val - true_c_val)
+                                    trial_dist_7_total_errs.append(post_val - true_c_val)
+                                    if true_c_val > 0:
+                                        trial_mape_7.append(abs(post_val - true_c_val) / true_c_val)
 
                         for day in range(30, n_days + 1):
                             if day % 7 == phi30 % 7:
                                 start_d = day - 30 + 1
                                 gt_s, _, _ = gt_windows[(start_d, day)]
+                                cal_rec = trial_cal_store.get_release(window_length=30, end_day=day)
                                 q_dist = query_service.query_distinct_prevalence(window_length=30, end_day=day)
                                 for idx, s_name in enumerate(services_list):
-                                    noisy_val = float(q_dist["services"].get(s_name, 0.0))
-                                    true_val = float(gt_s[idx])
-                                    err = noisy_val - true_val
-                                    trial_dist_30_errs.append(err)
-                                    if true_val > 0:
-                                        trial_mape_30.append(abs(err) / true_val)
+                                    y_val = float(cal_rec.noisy_services[idx])
+                                    true_c_val = float(gt_s[idx])
+                                    post_val = float(q_dist["services"].get(s_name, 0.0))
+
+                                    trial_dist_30_raw_errs.append(y_val - true_c_val)
+                                    trial_dist_30_total_errs.append(post_val - true_c_val)
+                                    if true_c_val > 0:
+                                        trial_mape_30.append(abs(post_val - true_c_val) / true_c_val)
 
                         for day in range(90, n_days + 1):
                             if day % 30 == phi90 % 30:
                                 start_d = day - 90 + 1
                                 gt_s, _, _ = gt_windows[(start_d, day)]
+                                cal_rec = trial_cal_store.get_release(window_length=90, end_day=day)
                                 q_dist = query_service.query_distinct_prevalence(window_length=90, end_day=day)
                                 for idx, s_name in enumerate(services_list):
-                                    noisy_val = float(q_dist["services"].get(s_name, 0.0))
-                                    true_val = float(gt_s[idx])
-                                    err = noisy_val - true_val
-                                    trial_dist_90_errs.append(err)
-                                    if true_val > 0:
-                                        trial_mape_90.append(abs(err) / true_val)
+                                    y_val = float(cal_rec.noisy_services[idx])
+                                    true_c_val = float(gt_s[idx])
+                                    post_val = float(q_dist["services"].get(s_name, 0.0))
+
+                                    trial_dist_90_raw_errs.append(y_val - true_c_val)
+                                    trial_dist_90_total_errs.append(post_val - true_c_val)
+                                    if true_c_val > 0:
+                                        trial_mape_90.append(abs(post_val - true_c_val) / true_c_val)
 
                     # Aggregated Empirical Metrics
-                    emp_clip_bias_r = float(np.mean(daily_raw_req[1:] - daily_clipped_req[1:]))
-                    emp_noise_rmse_r = float(np.sqrt(np.mean(np.array(trial_req_noise_errs) ** 2)))
+                    emp_clip_bias_r = float(np.mean(daily_clipped_req[1:] - daily_raw_req[1:]))
+                    emp_raw_noise_rmse_r = float(np.sqrt(np.mean(np.array(trial_req_raw_noise_errs) ** 2)))
+                    emp_post_rmse_r = float(np.sqrt(np.mean(np.array(trial_req_post_errs) ** 2)))
+                    emp_post_bias_r = float(np.mean(trial_req_post_errs))
                     emp_total_rmse_r = float(np.sqrt(np.mean(np.array(trial_req_total_errs) ** 2)))
 
-                    emp_clip_bias_f = float(np.mean(daily_raw_fail[1:] - daily_clipped_fail[1:]))
-                    emp_noise_rmse_f = float(np.sqrt(np.mean(np.array(trial_fail_noise_errs) ** 2)))
+                    emp_clip_bias_f = float(np.mean(daily_clipped_fail[1:] - daily_raw_fail[1:]))
+                    emp_raw_noise_rmse_f = float(np.sqrt(np.mean(np.array(trial_fail_raw_noise_errs) ** 2)))
+                    emp_post_rmse_f = float(np.sqrt(np.mean(np.array(trial_fail_post_errs) ** 2)))
+                    emp_post_bias_f = float(np.mean(trial_fail_post_errs))
                     emp_total_rmse_f = float(np.sqrt(np.mean(np.array(trial_fail_total_errs) ** 2)))
 
-                    emp_dist_7_rmse = float(np.sqrt(np.mean(np.array(trial_dist_7_errs) ** 2))) if trial_dist_7_errs else float("nan")
-                    emp_dist_30_rmse = float(np.sqrt(np.mean(np.array(trial_dist_30_errs) ** 2))) if trial_dist_30_errs else float("nan")
-                    emp_dist_90_rmse = float(np.sqrt(np.mean(np.array(trial_dist_90_errs) ** 2))) if trial_dist_90_errs else float("nan")
+                    emp_dist_7_raw_rmse = float(np.sqrt(np.mean(np.array(trial_dist_7_raw_errs) ** 2))) if trial_dist_7_raw_errs else float("nan")
+                    emp_dist_7_total_rmse = float(np.sqrt(np.mean(np.array(trial_dist_7_total_errs) ** 2))) if trial_dist_7_total_errs else float("nan")
+
+                    emp_dist_30_raw_rmse = float(np.sqrt(np.mean(np.array(trial_dist_30_raw_errs) ** 2))) if trial_dist_30_raw_errs else float("nan")
+                    emp_dist_30_total_rmse = float(np.sqrt(np.mean(np.array(trial_dist_30_total_errs) ** 2))) if trial_dist_30_total_errs else float("nan")
+
+                    emp_dist_90_raw_rmse = float(np.sqrt(np.mean(np.array(trial_dist_90_raw_errs) ** 2))) if trial_dist_90_raw_errs else float("nan")
+                    emp_dist_90_total_rmse = float(np.sqrt(np.mean(np.array(trial_dist_90_total_errs) ** 2))) if trial_dist_90_total_errs else float("nan")
 
                     emp_mape_7 = float(np.mean(trial_mape_7) * 100.0) if trial_mape_7 else float("nan")
                     emp_mape_30 = float(np.mean(trial_mape_30) * 100.0) if trial_mape_30 else float("nan")
@@ -354,29 +408,46 @@ def run_e2e_benchmark(
                         "cost_x30": plan.distinct_costs[1],
                         "cost_x90": plan.distinct_costs[2],
                         "actual_daily_rho_sum": round(verified_daily_rho_sum, 8) if verified_daily_rho_sum is not None else float("nan"),
-                        "weighted_utility": round(plan.weighted_workload_error, 2),
+                        "planner_abstract_objective": round(plan.weighted_workload_error, 2),
                         "min_slack": plan.min_slack,
                         "tightest_h": plan.tightest_horizon_h,
                         "requests_clipping_bias": round(emp_clip_bias_r, 2),
-                        "requests_noise_rmse": round(emp_noise_rmse_r, 2),
+                        "requests_raw_noise_rmse": round(emp_raw_noise_rmse_r, 2),
+                        "requests_postproc_rmse": round(emp_post_rmse_r, 2),
+                        "requests_postproc_bias": round(emp_post_bias_r, 2),
                         "requests_total_rmse": round(emp_total_rmse_r, 2),
                         "requests_analytical_sigma": round(sigma_req, 2),
                         "failures_clipping_bias": round(emp_clip_bias_f, 2),
-                        "failures_noise_rmse": round(emp_noise_rmse_f, 2),
+                        "failures_raw_noise_rmse": round(emp_raw_noise_rmse_f, 2),
+                        "failures_postproc_rmse": round(emp_post_rmse_f, 2),
+                        "failures_postproc_bias": round(emp_post_bias_f, 2),
                         "failures_total_rmse": round(emp_total_rmse_f, 2),
                         "failures_analytical_sigma": round(sigma_fail, 2),
-                        "distinct_7d_rmse": round(emp_dist_7_rmse, 2),
+                        "distinct_7d_raw_noise_rmse": round(emp_dist_7_raw_rmse, 2),
+                        "distinct_7d_total_rmse": round(emp_dist_7_total_rmse, 2),
+                        "distinct_7d_postproc_impact_rmse": round(emp_dist_7_total_rmse - emp_dist_7_raw_rmse, 2),
                         "distinct_7d_mape_pct": round(emp_mape_7, 2),
                         "distinct_7d_analytical_sigma": round(sigma_7, 2),
-                        "distinct_30d_rmse": round(emp_dist_30_rmse, 2),
+                        "distinct_30d_raw_noise_rmse": round(emp_dist_30_raw_rmse, 2),
+                        "distinct_30d_total_rmse": round(emp_dist_30_total_rmse, 2),
+                        "distinct_30d_postproc_impact_rmse": round(emp_dist_30_total_rmse - emp_dist_30_raw_rmse, 2),
                         "distinct_30d_mape_pct": round(emp_mape_30, 2),
                         "distinct_30d_analytical_sigma": round(sigma_30, 2),
-                        "distinct_90d_rmse": round(emp_dist_90_rmse, 2),
+                        "distinct_90d_raw_noise_rmse": round(emp_dist_90_raw_rmse, 2),
+                        "distinct_90d_total_rmse": round(emp_dist_90_total_rmse, 2),
+                        "distinct_90d_postproc_impact_rmse": round(emp_dist_90_total_rmse - emp_dist_90_raw_rmse, 2),
                         "distinct_90d_mape_pct": round(emp_mape_90, 2),
                         "distinct_90d_analytical_sigma": round(sigma_90, 2),
-                        "refresh_latency_7d_days": 7,
-                        "refresh_latency_30d_days": 7,
-                        "refresh_latency_90d_days": 30,
+                        "distinct_90d_sample_note": "Single-window (N=1 window over 90d, M=10 MC noise draws)",
+                        "refresh_step_7d_days": 7,
+                        "refresh_step_30d_days": 7,
+                        "refresh_step_90d_days": 30,
+                        "avg_staleness_7d_days": 3.0,
+                        "avg_staleness_30d_days": 3.0,
+                        "avg_staleness_90d_days": 14.5,
+                        "worst_staleness_7d_days": 6,
+                        "worst_staleness_30d_days": 6,
+                        "worst_staleness_90d_days": 29,
                         "execution_path_verified": "TRUE_SYSTEM_PIPELINE",
                     })
 
@@ -385,7 +456,7 @@ def run_e2e_benchmark(
         df_out.to_csv(out_csv, index=False)
         print(f"\n[4/4] Successfully saved true end-to-end benchmark results to: {out_csv}")
         print("\nBenchmark Summary Table:")
-        print(df_out[["workload", "commitment_curve", "group", "status", "requests_noise_rmse", "distinct_7d_mape_pct", "distinct_30d_mape_pct", "distinct_90d_mape_pct"]].to_string())
+        print(df_out[["workload", "commitment_curve", "group", "status", "requests_raw_noise_rmse", "requests_total_rmse", "distinct_7d_mape_pct", "distinct_30d_mape_pct", "distinct_90d_mape_pct"]].to_string())
         return df_out
 
 

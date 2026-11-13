@@ -39,7 +39,12 @@ from private_llm_analytics.sdg_mh.calendar_accounting import (
     PrivacyCommitmentCurve,
     count_intersections_fast_vectorized,
 )
-from private_llm_analytics.sdg_mh.ledger import ReleaseRecord, UnifiedPrivacyLedger
+from private_llm_analytics.sdg_mh.ledger import (
+    PrivacyAdmissionError,
+    ReleaseRecord,
+    ReleaseStatus,
+    UnifiedPrivacyLedger,
+)
 
 
 DEFAULT_HISTORICAL_B: float = 0.000302
@@ -435,9 +440,25 @@ class JointCalendarPlanner:
         runtime = time.time() - t0
         is_secure = best_min_slack >= -1e-12 and (best_slope <= self.commitment.beta_tail + 1e-12)
 
+        if not is_secure:
+            return PlanningResult(
+                group="C_PhaseOnly",
+                status="INFEASIBLE",
+                phases=best_phi,
+                daily_d=float(v_orig[0]),
+                distinct_costs=(float(v_orig[1]), float(v_orig[2]), float(v_orig[3])),
+                weighted_workload_error=float("inf"),
+                min_slack=best_min_slack,
+                tightest_horizon_h=best_tightest_h,
+                asymptotic_slope=best_slope,
+                is_infinite_horizon_secure=False,
+                runtime_seconds=runtime,
+                diagnostics={"best_phase": best_phi, "raw_workload_error": float(np.sum(c / v_orig)), "breached": True},
+            )
+
         return PlanningResult(
             group="C_PhaseOnly",
-            status="OPTIMAL" if is_secure else "CALIBRATED_BASELINE",
+            status="OPTIMAL",
             phases=best_phi,
             daily_d=float(v_orig[0]),
             distinct_costs=(float(v_orig[1]), float(v_orig[2]), float(v_orig[3])),
@@ -445,7 +466,7 @@ class JointCalendarPlanner:
             min_slack=best_min_slack,
             tightest_horizon_h=best_tightest_h,
             asymptotic_slope=best_slope,
-            is_infinite_horizon_secure=is_secure,
+            is_infinite_horizon_secure=True,
             runtime_seconds=runtime,
             diagnostics={"best_phase": best_phi},
         )
@@ -524,8 +545,8 @@ class JointCalendarPlanner:
         populate_records: bool = True,
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """Atomic reservation and validation of planning policy in UnifiedPrivacyLedger."""
-        if plan.status == "NO_FEASIBLE_POLICY":
-            return False, "Cannot commit infeasible policy", {"status": plan.status}
+        if plan.status in ("NO_FEASIBLE_POLICY", "INFEASIBLE"):
+            return False, f"Cannot commit infeasible policy: {plan.status}", {"status": plan.status}
 
         sched = plan.schedule
         cert = sched.verify_periodicity_and_long_term_security(
@@ -537,51 +558,72 @@ class JointCalendarPlanner:
         if not cert["is_infinite_horizon_secure"]:
             return False, "Schedule failed infinite-horizon privacy verification", cert
 
-        # Generate tentative release records for the simulated horizon
+        # Generate tentative release records with canonical IDs and status=RESERVED
         records: List[ReleaseRecord] = []
+        eta = 25.0 / 26.0
+        rho_r = eta * plan.daily_d
+        rho_f = (1.0 - eta) * plan.daily_d
+        sigma_iso = math.sqrt(2600.0 / (2.0 * plan.daily_d))
+
         for day in range(start_day, start_day + simulated_days):
-            # Daily additive base seal
+            # Daily additive base seal (Requests & Failures split)
             records.append(
                 ReleaseRecord(
-                    release_id=f"daily_seal_day_{day:04d}",
+                    release_id=f"sdg_additive_req_{day}",
                     days_accessed=frozenset([day]),
                     mechanism_type="gaussian",
-                    params={"sigma": float(math.sqrt(2600.0 / (2.0 * plan.daily_d)))},
-                    sensitivity=math.sqrt(2600.0),
-                    rho_cost=plan.daily_d,
-                    tag="daily_seal",
+                    params={"sigma": float(sigma_iso)},
+                    sensitivity=50.0,
+                    rho_cost=rho_r,
+                    tag="sdg_requests",
+                    status=ReleaseStatus.RESERVED.value,
                 )
             )
+            records.append(
+                ReleaseRecord(
+                    release_id=f"sdg_additive_fail_{day}",
+                    days_accessed=frozenset([day]),
+                    mechanism_type="gaussian",
+                    params={"sigma": float(sigma_iso)},
+                    sensitivity=10.0,
+                    rho_cost=rho_f,
+                    tag="sdg_failures",
+                    status=ReleaseStatus.RESERVED.value,
+                )
+            )
+
             # Distinct calendar families
             for fam, phi, cost in zip(sched.families, sched.phases, sched.costs):
-                if day % fam.step_days == phi % fam.step_days:
-                    w_start = max(1, day - fam.window_days + 1)
+                w = fam.window_days
+                s = fam.step_days
+                if day % s == phi % s:
+                    w_start = max(1, day - w + 1)
                     w_days = frozenset(range(w_start, day + 1))
+                    sigma_w = math.sqrt(11.0 / (2.0 * cost))
                     records.append(
                         ReleaseRecord(
-                            release_id=f"{fam.name}_day_{day:04d}",
+                            release_id=f"calendar_{w}_{s}_day_{day}",
                             days_accessed=w_days,
                             mechanism_type="gaussian",
-                            params={"sigma": float(math.sqrt(11.0 / (2.0 * cost)))},
+                            params={"sigma": float(sigma_w)},
                             sensitivity=math.sqrt(11.0),
                             rho_cost=cost,
-                            tag=fam.name,
+                            tag=f"calendar_{w}_{s}",
+                            status=ReleaseStatus.RESERVED.value,
                         )
                     )
 
-        # Check full horizon gate
-        passed, msg, diag = ledger.check_full_horizon_gate(
-            candidate_records=records,
-            max_profile_bound_fn_or_array=self.commitment.rho_bar,
-            t_span=simulated_days,
-        )
+        # Atomic reservation in UnifiedPrivacyLedger
+        ledger.set_active_plan(plan, commitment=self.commitment)
+        if populate_records:
+            try:
+                ledger.admit_and_commit_batch(
+                    candidate_records=records,
+                    commitment_bound=self.commitment,
+                    as_status=ReleaseStatus.RESERVED.value,
+                    allow_unconfigured_policy=False,
+                )
+            except PrivacyAdmissionError as e:
+                return False, f"Policy rejected at ledger gate: {e}", {"error": str(e), "cert": cert}
 
-        if passed:
-            with ledger._lock:
-                ledger.set_active_plan(plan, commitment=self.commitment)
-                if populate_records:
-                    for r in records:
-                        ledger._add_record(r)
-            return True, f"Policy successfully bound: {len(records) if populate_records else 0} releases committed to ledger.", diag
-        else:
-            return False, f"Policy rejected at ledger gate: {msg}", diag
+        return True, f"Policy successfully bound: {len(records) if populate_records else 0} releases reserved in ledger.", {"exceeded_count": 0, "cert": cert}

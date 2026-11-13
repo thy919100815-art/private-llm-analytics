@@ -62,7 +62,7 @@ def test_released_vector_l2_sensitivity_matches_ledger():
     sigma_f = 489.9
 
     store = SealedStore()
-    ledger = UnifiedPrivacyLedger()
+    ledger = UnifiedPrivacyLedger(allow_unconfigured_policy=True)
     job = SealJob(sealed_store=store, ledger=ledger, C_r=C_r, C_f=C_f, sigma_r=sigma_r, sigma_f=sigma_f)
 
     df_day = _generate_synthetic_day(n_users=100, max_req_per_user=250, seed=123)

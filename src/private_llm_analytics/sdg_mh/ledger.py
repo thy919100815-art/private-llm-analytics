@@ -25,6 +25,16 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
 
 
+from enum import Enum
+
+
+class ReleaseStatus(str, Enum):
+    """Lifecycle status of privacy release records in UnifiedPrivacyLedger."""
+    RESERVED = "RESERVED"      # Future task budget reserved; no output generated yet
+    COMMITTED = "COMMITTED"    # Private release executed; cost is irrevocable
+    CANCELLED = "CANCELLED"    # Unreleased reservation cancelled; budget freed
+
+
 class PrivacyAdmissionError(RuntimeError):
     """Raised when a candidate release violates the privacy envelope."""
     pass
@@ -32,15 +42,16 @@ class PrivacyAdmissionError(RuntimeError):
 
 @dataclass(frozen=True)
 class ReleaseRecord:
-    """Record of a committed privacy release in the unified ledger."""
+    """Record of a committed or reserved privacy release in the unified ledger."""
 
     release_id: str
     days_accessed: frozenset[int]  # 1-based day indices B_n
-    mechanism_type: str            # 'gaussian' or 'laplace'
+    mechanism_type: str            # 'gaussian', 'laplace', or 'zcdp'
     params: Dict[str, float]       # {'sigma': ...} or {'epsilon': ...}
     sensitivity: float             # Delta_n
     rho_cost: float                # Single-release zCDP rho
     tag: str = ""                  # 'sdg_additive', 'distinct_calendar', 'baseline', etc.
+    status: str = "COMMITTED"      # 'RESERVED', 'COMMITTED', 'CANCELLED'
 
 
 @dataclass(frozen=True)
@@ -123,10 +134,11 @@ class UnifiedPrivacyLedger:
 
     DEFAULT_HORIZONS: Tuple[int, ...] = (1, 7, 30, 90, 365)
 
-    def __init__(self, delta: float = 1e-6):
+    def __init__(self, delta: float = 1e-6, allow_unconfigured_policy: bool = False):
         if not (0 < delta < 1):
             raise ValueError(f"delta must be in (0, 1), got {delta}")
         self.delta: float = float(delta)
+        self.allow_unconfigured_policy: bool = allow_unconfigured_policy
         self.records: List[ReleaseRecord] = []
         self._day_to_records: Dict[int, List[int]] = {}  # day -> list of record indices
         self._release_ids: Dict[str, ReleaseRecord] = {}  # release_id -> record
@@ -147,6 +159,189 @@ class UnifiedPrivacyLedger:
         with self._lock:
             return self._release_ids.get(release_id)
 
+    def admit_and_commit_batch(
+        self,
+        candidate_records: Sequence[ReleaseRecord],
+        commitment_bound: Optional[Any] = None,
+        as_status: str = ReleaseStatus.COMMITTED.value,
+        allow_unconfigured_policy: bool = False,
+    ) -> List[ReleaseRecord]:
+        """Atomically validate privacy envelope and commit a batch of release records.
+
+        Guarantees:
+        1. Group Atomic Admission: Checks aggregate zCDP cost across all candidates together.
+        2. Zero Race Window: Envelope verification and commit occur within single RLock.
+        3. Reservation Conversion: If candidates match pre-existing RESERVED records, transitions
+           them to COMMITTED without adding a second privacy charge.
+        4. Idempotency & Conflict Check: If already COMMITTED with identical parameters, returns existing.
+           If conflicting parameters, raises ValueError.
+        5. Fail-Closed Default: If no privacy commitment is set and allow_unconfigured_policy is False,
+           raises PrivacyAdmissionError.
+        """
+        if not candidate_records:
+            return []
+
+        with self._lock:
+            # 1. Check internal batch validity & conflicts
+            seen_batch_ids: Dict[str, ReleaseRecord] = {}
+            for cand in candidate_records:
+                if cand.rho_cost < 0:
+                    raise ValueError(f"rho_cost must be >= 0, got {cand.rho_cost}")
+                if cand.release_id in seen_batch_ids:
+                    prev = seen_batch_ids[cand.release_id]
+                    if abs(prev.rho_cost - cand.rho_cost) > 1e-12 or prev.days_accessed != cand.days_accessed:
+                        raise ValueError(f"Conflicting duplicate release_id in batch: '{cand.release_id}'")
+                seen_batch_ids[cand.release_id] = cand
+
+            # 2. Resolve candidates against existing ledger records
+            effective_candidates: List[ReleaseRecord] = []
+            reserved_to_commit: List[Tuple[int, ReleaseRecord]] = []
+            all_idempotent = True
+
+            for cand in candidate_records:
+                if cand.release_id in self._release_ids:
+                    existing = self._release_ids[cand.release_id]
+                    if existing.status == ReleaseStatus.COMMITTED.value:
+                        # Idempotency check: identical parameters required
+                        if abs(existing.rho_cost - cand.rho_cost) > 1e-12 or existing.days_accessed != cand.days_accessed:
+                            raise ValueError(
+                                f"Conflicting parameters for already committed release '{cand.release_id}': "
+                                f"existing cost {existing.rho_cost} != candidate {cand.rho_cost}"
+                            )
+                        # Already committed, keep existing record
+                        continue
+                    elif existing.status == ReleaseStatus.RESERVED.value:
+                        all_idempotent = False
+                        if cand.rho_cost > existing.rho_cost + 1e-12:
+                            raise PrivacyAdmissionError(
+                                f"Candidate release '{cand.release_id}' cost {cand.rho_cost:.8f} exceeds "
+                                f"reserved budget {existing.rho_cost:.8f}"
+                            )
+                        idx = next(i for i, r in enumerate(self.records) if r.release_id == cand.release_id)
+                        updated = ReleaseRecord(
+                            release_id=cand.release_id,
+                            days_accessed=cand.days_accessed,
+                            mechanism_type=cand.mechanism_type,
+                            params=cand.params,
+                            sensitivity=cand.sensitivity,
+                            rho_cost=cand.rho_cost,
+                            tag=cand.tag,
+                            status=as_status,
+                        )
+                        reserved_to_commit.append((idx, updated))
+                    elif existing.status == ReleaseStatus.CANCELLED.value:
+                        all_idempotent = False
+                        idx = next(i for i, r in enumerate(self.records) if r.release_id == cand.release_id)
+                        updated = ReleaseRecord(
+                            release_id=cand.release_id,
+                            days_accessed=cand.days_accessed,
+                            mechanism_type=cand.mechanism_type,
+                            params=cand.params,
+                            sensitivity=cand.sensitivity,
+                            rho_cost=cand.rho_cost,
+                            tag=cand.tag,
+                            status=as_status,
+                        )
+                        reserved_to_commit.append((idx, updated))
+                else:
+                    all_idempotent = False
+                    new_rec = ReleaseRecord(
+                        release_id=cand.release_id,
+                        days_accessed=cand.days_accessed,
+                        mechanism_type=cand.mechanism_type,
+                        params=cand.params,
+                        sensitivity=cand.sensitivity,
+                        rho_cost=cand.rho_cost,
+                        tag=cand.tag,
+                        status=as_status,
+                    )
+                    effective_candidates.append(new_rec)
+
+            if all_idempotent and not effective_candidates and not reserved_to_commit:
+                return [self._release_ids[c.release_id] for c in candidate_records]
+
+            # 3. Envelope evaluation (Fail-closed Gate)
+            bound = commitment_bound or self.active_commitment
+            if bound is None:
+                if not (allow_unconfigured_policy or self.allow_unconfigured_policy):
+                    raise PrivacyAdmissionError(
+                        "No privacy commitment bound configured on ledger (production fail-closed default). "
+                        "Set active plan or pass commitment_bound."
+                    )
+            else:
+                # Active records are COMMITTED or RESERVED
+                active_records = [
+                    r for r in self.records
+                    if r.status in (ReleaseStatus.COMMITTED.value, ReleaseStatus.RESERVED.value)
+                ]
+                transition_ids = {u.release_id: u for _, u in reserved_to_commit}
+                test_records = [
+                    transition_ids[r.release_id] if r.release_id in transition_ids else r
+                    for r in active_records
+                ]
+                test_records.extend(effective_candidates)
+
+                if test_records:
+                    max_d = max(
+                        [self._max_day] + [max(r.days_accessed) for r in test_records if r.days_accessed] + [1]
+                    )
+                    T = min(max_d, 575)
+                    starts = np.array([min(r.days_accessed) for r in test_records if r.days_accessed], dtype=np.int64)
+                    ends = np.array([max(r.days_accessed) for r in test_records if r.days_accessed], dtype=np.int64)
+                    costs = np.array([r.rho_cost for r in test_records if r.days_accessed], dtype=np.float64)
+
+                    for h in range(1, T + 1):
+                        max_s = max_d - h + 1
+                        diff = np.zeros(max_s + 2, dtype=np.float64)
+                        l = np.maximum(1, starts - h + 1)
+                        r = np.minimum(max_s, ends)
+                        valid = l <= r
+                        np.add.at(diff, l[valid], costs[valid])
+                        np.add.at(diff, r[valid] + 1, -costs[valid])
+                        curr_rho = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
+
+                        bound_val = bound.rho_bar(h) if hasattr(bound, "rho_bar") else (bound(h) if callable(bound) else bound[h])
+                        if curr_rho > bound_val + 1e-9:
+                            raise PrivacyAdmissionError(
+                                f"Group atomic privacy admission rejected: breached bound at h={h}: "
+                                f"projected={curr_rho:.8f} > bound={bound_val:.8f}"
+                            )
+
+            # 4. Atomic Commit
+            for idx, updated in reserved_to_commit:
+                self.records[idx] = updated
+                self._release_ids[updated.release_id] = updated
+
+            for new_rec in effective_candidates:
+                self._add_record(new_rec)
+
+            return [self._release_ids[c.release_id] for c in candidate_records]
+
+    def cancel_reservation(self, release_id: str) -> bool:
+        """Cancel an unreleased reservation, freeing up privacy headroom."""
+        with self._lock:
+            if release_id not in self._release_ids:
+                return False
+            rec = self._release_ids[release_id]
+            if rec.status == ReleaseStatus.COMMITTED.value:
+                raise ValueError(f"Cannot cancel committed release '{release_id}'; privacy spend is irrevocable.")
+            if rec.status == ReleaseStatus.CANCELLED.value:
+                return True
+            idx = next(i for i, r in enumerate(self.records) if r.release_id == release_id)
+            updated = ReleaseRecord(
+                release_id=rec.release_id,
+                days_accessed=rec.days_accessed,
+                mechanism_type=rec.mechanism_type,
+                params=rec.params,
+                sensitivity=rec.sensitivity,
+                rho_cost=rec.rho_cost,
+                tag=rec.tag,
+                status=ReleaseStatus.CANCELLED.value,
+            )
+            self.records[idx] = updated
+            self._release_ids[release_id] = updated
+            return True
+
     def check_admission(
         self,
         candidate_record: ReleaseRecord,
@@ -158,12 +353,19 @@ class UnifiedPrivacyLedger:
             if bound is None:
                 return True, "No commitment bound enforced"
 
-            # Check if this release_id is already committed (idempotent)
             if candidate_record.release_id in self._release_ids:
-                return True, "Release already committed (idempotent)"
+                existing = self._release_ids[candidate_record.release_id]
+                if existing.status == ReleaseStatus.COMMITTED.value:
+                    return True, "Release already committed (idempotent)"
+                if existing.status == ReleaseStatus.RESERVED.value and candidate_record.rho_cost <= existing.rho_cost + 1e-12:
+                    return True, "Covered by existing reservation"
 
             # Construct hypothetical record set
-            test_records = list(self.records) + [candidate_record]
+            active_records = [
+                r for r in self.records
+                if r.status in (ReleaseStatus.COMMITTED.value, ReleaseStatus.RESERVED.value)
+            ]
+            test_records = list(active_records) + [candidate_record]
             max_d = max(
                 [self._max_day] + (list(candidate_record.days_accessed) if candidate_record.days_accessed else [1])
             )
@@ -203,36 +405,31 @@ class UnifiedPrivacyLedger:
 
         Enforces idempotency, thread-safety, and fail-closed privacy admission.
         """
-        with self._lock:
-            # Idempotency: if already recorded, return existing without re-charging
-            if release_id in self._release_ids:
-                return self._release_ids[release_id]
+        if sigma <= 0:
+            raise ValueError(f"sigma must be > 0, got {sigma}")
+        if sensitivity < 0:
+            raise ValueError(f"sensitivity must be >= 0, got {sensitivity}")
 
-            if sigma <= 0:
-                raise ValueError(f"sigma must be > 0, got {sigma}")
-            if sensitivity < 0:
-                raise ValueError(f"sensitivity must be >= 0, got {sensitivity}")
+        days_set = frozenset(int(d) for d in days_accessed)
+        rho_cost = float((sensitivity * sensitivity) / (2.0 * sigma * sigma))
+        record = ReleaseRecord(
+            release_id=release_id,
+            days_accessed=days_set,
+            mechanism_type="gaussian",
+            params={"sigma": float(sigma)},
+            sensitivity=float(sensitivity),
+            rho_cost=rho_cost,
+            tag=tag,
+            status=ReleaseStatus.COMMITTED.value,
+        )
 
-            days_set = frozenset(int(d) for d in days_accessed)
-            rho_cost = float((sensitivity * sensitivity) / (2.0 * sigma * sigma))
-            record = ReleaseRecord(
-                release_id=release_id,
-                days_accessed=days_set,
-                mechanism_type="gaussian",
-                params={"sigma": float(sigma)},
-                sensitivity=float(sensitivity),
-                rho_cost=rho_cost,
-                tag=tag,
-            )
-
-            # Pre-check privacy admission if active commitment is configured
-            if enforce_admission and self.active_commitment is not None:
-                admitted, reason = self.check_admission(record)
-                if not admitted:
-                    raise PrivacyAdmissionError(f"Privacy admission rejected release '{release_id}': {reason}")
-
-            self._add_record(record)
-            return record
+        committed = self.admit_and_commit_batch(
+            [record],
+            commitment_bound=self.active_commitment if enforce_admission else None,
+            as_status=ReleaseStatus.COMMITTED.value,
+            allow_unconfigured_policy=not enforce_admission or (self.active_commitment is None),
+        )
+        return committed[0]
 
     def record_laplace_release(
         self,
@@ -244,30 +441,27 @@ class UnifiedPrivacyLedger:
         enforce_admission: bool = True,
     ) -> ReleaseRecord:
         """Record a pure Laplace release: rho = eps^2 / 2."""
-        with self._lock:
-            if release_id in self._release_ids:
-                return self._release_ids[release_id]
-
-            if epsilon <= 0:
-                raise ValueError(f"epsilon must be > 0, got {epsilon}")
-            days_set = frozenset(int(d) for d in days_accessed)
-            rho_cost = epsilon_to_rho(epsilon)
-            record = ReleaseRecord(
-                release_id=release_id,
-                days_accessed=days_set,
-                mechanism_type="laplace",
-                params={"epsilon": float(epsilon)},
-                sensitivity=float(sensitivity),
-                rho_cost=rho_cost,
-                tag=tag,
-            )
-            if enforce_admission and self.active_commitment is not None:
-                admitted, reason = self.check_admission(record)
-                if not admitted:
-                    raise PrivacyAdmissionError(f"Privacy admission rejected release '{release_id}': {reason}")
-
-            self._add_record(record)
-            return record
+        if epsilon <= 0:
+            raise ValueError(f"epsilon must be > 0, got {epsilon}")
+        days_set = frozenset(int(d) for d in days_accessed)
+        rho_cost = epsilon_to_rho(epsilon)
+        record = ReleaseRecord(
+            release_id=release_id,
+            days_accessed=days_set,
+            mechanism_type="laplace",
+            params={"epsilon": float(epsilon)},
+            sensitivity=float(sensitivity),
+            rho_cost=rho_cost,
+            tag=tag,
+            status=ReleaseStatus.COMMITTED.value,
+        )
+        committed = self.admit_and_commit_batch(
+            [record],
+            commitment_bound=self.active_commitment if enforce_admission else None,
+            as_status=ReleaseStatus.COMMITTED.value,
+            allow_unconfigured_policy=not enforce_admission or (self.active_commitment is None),
+        )
+        return committed[0]
 
     def record_zcdp_release(
         self,
@@ -279,33 +473,37 @@ class UnifiedPrivacyLedger:
         enforce_admission: bool = True,
     ) -> ReleaseRecord:
         """Directly record a release with known zCDP cost rho."""
-        with self._lock:
-            if release_id in self._release_ids:
-                return self._release_ids[release_id]
+        if rho_cost < 0:
+            raise ValueError(f"rho_cost must be >= 0, got {rho_cost}")
+        days_set = frozenset(int(d) for d in days_accessed)
+        record = ReleaseRecord(
+            release_id=release_id,
+            days_accessed=days_set,
+            mechanism_type="zcdp",
+            params={"rho": float(rho_cost)},
+            sensitivity=float(sensitivity),
+            rho_cost=float(rho_cost),
+            tag=tag,
+            status=ReleaseStatus.COMMITTED.value,
+        )
+        committed = self.admit_and_commit_batch(
+            [record],
+            commitment_bound=self.active_commitment if enforce_admission else None,
+            as_status=ReleaseStatus.COMMITTED.value,
+            allow_unconfigured_policy=not enforce_admission or (self.active_commitment is None),
+        )
+        return committed[0]
 
-            days_set = frozenset(int(d) for d in days_accessed)
-            record = ReleaseRecord(
-                release_id=release_id,
-                days_accessed=days_set,
-                mechanism_type="zcdp",
-                params={"rho": float(rho_cost)},
-                sensitivity=float(sensitivity),
-                rho_cost=float(rho_cost),
-                tag=tag,
-            )
-            if enforce_admission and self.active_commitment is not None:
-                admitted, reason = self.check_admission(record)
-                if not admitted:
-                    raise PrivacyAdmissionError(f"Privacy admission rejected release '{release_id}': {reason}")
-
-            self._add_record(record)
-            return record
-
-    def rollback_release(self, release_id: str) -> bool:
+    def rollback_release(self, release_id: str, allow_committed: bool = False) -> bool:
         """Roll back a release if storage or execution fails (atomicity/recovery)."""
         with self._lock:
             if release_id not in self._release_ids:
                 return False
+            rec = self._release_ids[release_id]
+            if rec.status == ReleaseStatus.COMMITTED.value and not allow_committed:
+                raise ValueError(
+                    f"Cannot rollback committed release '{release_id}'; committed privacy spend is irrevocable."
+                )
             del self._release_ids[release_id]
             self.records = [r for r in self.records if r.release_id != release_id]
             # Synchronously rebuild indexes
@@ -336,14 +534,18 @@ class UnifiedPrivacyLedger:
 
         rho(h) = max_{s} sum_{n: B_n cap [s, s + h - 1] != emptyset} rho_n
         """
-        if h <= 0 or not self.records:
+        active_records = [
+            r for r in self.records
+            if getattr(r, "status", ReleaseStatus.COMMITTED.value) != ReleaseStatus.CANCELLED.value
+        ]
+        if h <= 0 or not active_records:
             return 0.0
 
         # Fast-path: pure single-day additive releases
-        is_all_single_day = all(len(r.days_accessed) == 1 for r in self.records)
+        is_all_single_day = all(len(r.days_accessed) == 1 for r in active_records)
         if is_all_single_day:
             day_costs: Dict[int, float] = {}
-            for r in self.records:
+            for r in active_records:
                 d = next(iter(r.days_accessed))
                 day_costs[d] = day_costs.get(d, 0.0) + r.rho_cost
             if not day_costs:
@@ -367,7 +569,7 @@ class UnifiedPrivacyLedger:
         # General discrete interval enumeration
         # Active candidate interval start points: all unique boundary days of releases
         start_candidates: Set[int] = set()
-        for r in self.records:
+        for r in active_records:
             for d in r.days_accessed:
                 # Potential start point s such that d is inside [s, s + h - 1]
                 start_candidates.add(d)
@@ -380,9 +582,8 @@ class UnifiedPrivacyLedger:
         for s in start_candidates:
             end = s + h - 1
             cost_for_interval = 0.0
-            for r in self.records:
+            for r in active_records:
                 # Check intersection: any d in B_n with s <= d <= end
-                # Fast check using set intersection if small
                 intersects = any(s <= d <= end for d in r.days_accessed)
                 if intersects:
                     cost_for_interval += r.rho_cost

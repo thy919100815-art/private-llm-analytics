@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from private_llm_analytics.sdg_mh.calendar_accounting import WEEK1_V2_CURVE
 from private_llm_analytics.sdg_mh.calendar_job import (
     CalendarJob,
     DEFAULT_CALENDAR_B,
@@ -91,7 +92,7 @@ def test_end_to_end_1000_repeated_queries_and_zero_ledger_drift():
     Verify same window queried 1,000 times returns 100% identical outputs
     and ledger record count remains completely unchanged.
     """
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     store = SealedStore()
     cal_store = DistinctCalendarStore()
     seal_job = SealJob(sealed_store=store, ledger=ledger, sigma_r=100.0, sigma_f=50.0)
@@ -121,6 +122,7 @@ def test_end_to_end_1000_repeated_queries_and_zero_ledger_drift():
 def test_distinct_calendar_and_topk_ties():
     """Verify Distinct calendar execution and Top-K tie detection."""
     ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger.set_active_plan(plan=None, commitment=WEEK1_V2_CURVE)
     cal_store = DistinctCalendarStore()
     cal_job = CalendarJob(
         calendar_store=cal_store,

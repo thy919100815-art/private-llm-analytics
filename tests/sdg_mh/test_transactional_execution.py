@@ -20,6 +20,7 @@ import pytest
 from private_llm_analytics.sdg_mh.ledger import (
     UnifiedPrivacyLedger,
     ReleaseRecord,
+    ReleaseStatus,
     PrivacyAdmissionError,
 )
 from private_llm_analytics.sdg_mh.seal_job import SealJob
@@ -165,7 +166,7 @@ def test_calendar_job_phase_execution_matches_analytical(phases):
             expected_releases_per_day[d].append(fam.name)
 
     cal_store = DistinctCalendarStore()
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     schedule = [
         (7, 7, sigma, phi_7),
         (30, 7, sigma, phi_30),
@@ -215,6 +216,7 @@ def test_seal_job_idempotency():
     """Verify executing seal_day twice returns the existing record without duplicate spending."""
     store = SealedStore()
     ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger.set_active_plan(plan=None, commitment=WEEK1_V2_CURVE)
     job = SealJob.from_budget(sealed_store=store, ledger=ledger, daily_d=0.0001)
 
     df_day = pd.DataFrame([
@@ -235,7 +237,7 @@ def test_seal_job_idempotency():
 def test_calendar_job_idempotency():
     """Verify executing execute_day twice does not charge ledger or store twice."""
     cal_store = DistinctCalendarStore()
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     schedule = [(7, 7, 30.0, 0)]
     job = CalendarJob(
         calendar_store=cal_store,
@@ -309,6 +311,7 @@ def test_atomic_rollback_on_storage_failure():
     """Verify that if store persistence fails, ledger records are rolled back."""
     broken_store = BrokenSealedStore()
     ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger.set_active_plan(plan=None, commitment=WEEK1_V2_CURVE)
     job = SealJob.from_budget(sealed_store=broken_store, ledger=ledger, daily_d=0.0001)
 
     df_day = pd.DataFrame([
@@ -397,3 +400,233 @@ def test_plan_update_preserves_historical_spend():
     for d in range(1, 11):
         assert ledger.get_release(f"hist_req_{d}") is not None
         assert d in ledger._day_to_records
+
+
+# ==============================================================================
+# 8. P0 Minimal Counterexample: Group Atomic Rejection
+# ==============================================================================
+
+def test_minimal_counterexample_batch_rejection():
+    """P0 Counterexample Test:
+    rho_bar(1) = 0.0001.
+    rho_r = 0.00008, rho_f = 0.00008.
+    Each individual check succeeds (0.00008 <= 0.0001).
+    Group admission must fail atomically (0.00016 > 0.0001).
+    Fail-closed: exactly 0 records committed to ledger.
+    """
+    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    bound = {1: 0.0001}
+
+    cand_r = ReleaseRecord(
+        release_id="sdg_req_test",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.00008},
+        sensitivity=50.0,
+        rho_cost=0.00008,
+        tag="sdg_requests",
+    )
+    cand_f = ReleaseRecord(
+        release_id="sdg_fail_test",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.00008},
+        sensitivity=10.0,
+        rho_cost=0.00008,
+        tag="sdg_failures",
+    )
+
+    # 1. Verify that naive individual checks would pass falsely
+    admitted_r, _ = ledger.check_admission(cand_r, commitment_bound=bound)
+    admitted_f, _ = ledger.check_admission(cand_f, commitment_bound=bound)
+    assert admitted_r is True, "Individual check r must pass"
+    assert admitted_f is True, "Individual check f must pass"
+
+    # 2. Group atomic admission must reject the entire batch
+    with pytest.raises(PrivacyAdmissionError) as exc_info:
+        ledger.admit_and_commit_batch([cand_r, cand_f], commitment_bound=bound)
+
+    assert "breached bound at h=1" in str(exc_info.value)
+    # 3. Fail-closed guarantee: zero residual records in ledger
+    assert len(ledger.records) == 0
+    assert ledger.get_release("sdg_req_test") is None
+    assert ledger.get_release("sdg_fail_test") is None
+
+
+# ==============================================================================
+# 9. P0 Fail-Closed Default on Unconfigured Commitment
+# ==============================================================================
+
+def test_fail_closed_unconfigured_commitment():
+    """Verify that ledger rejects admissions fail-closed if no commitment is configured."""
+    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    cand = ReleaseRecord(
+        release_id="unconf_1",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.0001},
+        sensitivity=1.0,
+        rho_cost=0.0001,
+    )
+
+    # Default: allow_unconfigured_policy=False -> must reject
+    with pytest.raises(PrivacyAdmissionError) as exc_info:
+        ledger.admit_and_commit_batch([cand])
+
+    assert "No privacy commitment bound configured" in str(exc_info.value)
+    assert len(ledger.records) == 0
+
+    # Explicit escape hatch: allow_unconfigured_policy=True -> admitted
+    committed = ledger.admit_and_commit_batch([cand], allow_unconfigured_policy=True)
+    assert len(committed) == 1
+    assert len(ledger.records) == 1
+
+
+# ==============================================================================
+# 10. P1 Reservation Conversion: Zero Double-Charging
+# ==============================================================================
+
+def test_reservation_conversion_zero_double_charging():
+    """Verify Planner reservation transitions in-place to COMMITTED with zero budget double-counting."""
+    config = PlannerConfig(commitment=WEEK1_V2_CURVE)
+    planner = JointCalendarPlanner(config)
+    plan_D = planner.plan_group_d()
+
+    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    passed, msg, diag = planner.commit_plan_to_ledger(
+        plan_D, ledger, start_day=1, simulated_days=30, populate_records=True
+    )
+    assert passed is True
+
+    # Check Day 1 reservations
+    req_res = ledger.get_release("sdg_additive_req_1")
+    fail_res = ledger.get_release("sdg_additive_fail_1")
+    assert req_res is not None and req_res.status == ReleaseStatus.RESERVED.value
+    assert fail_res is not None and fail_res.status == ReleaseStatus.RESERVED.value
+
+    rec_count_before = len(ledger.records)
+    rho_1_before = ledger.compute_rho(1)
+
+    # Execute SealJob for Day 1
+    store = SealedStore()
+    job = SealJob.from_budget(sealed_store=store, ledger=ledger, daily_d=plan_D.daily_d)
+    df_day = pd.DataFrame([
+        {"user_id": "u1", "provider": "prov1", "task": "t1", "timestamp": "2025-01-01 10:00:00", "success": True},
+    ])
+    sealed_rec = job.seal_day(day_index=1, date_str="2025-01-01", df_day=df_day, seed=42)
+    assert sealed_rec is not None
+
+    # Check that status transitioned in-place to COMMITTED
+    req_after = ledger.get_release("sdg_additive_req_1")
+    fail_after = ledger.get_release("sdg_additive_fail_1")
+    assert req_after.status == ReleaseStatus.COMMITTED.value
+    assert fail_after.status == ReleaseStatus.COMMITTED.value
+
+    # Verify zero double-charging: record count and rho(1) remain identical
+    assert len(ledger.records) == rec_count_before
+    assert math.isclose(ledger.compute_rho(1), rho_1_before, rel_tol=1e-9)
+
+
+# ==============================================================================
+# 11. P1 Cancellation Frees Headroom
+# ==============================================================================
+
+def test_cancel_reservation_frees_headroom():
+    """Verify cancelling an unreleased RESERVED record frees up budget headroom."""
+    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    bound = {1: 0.0001}
+
+    rec_res = ReleaseRecord(
+        release_id="res_blocker",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.0001},
+        sensitivity=1.0,
+        rho_cost=0.0001,
+        status=ReleaseStatus.RESERVED.value,
+    )
+    ledger.admit_and_commit_batch([rec_res], commitment_bound=bound, as_status=ReleaseStatus.RESERVED.value)
+    assert ledger.compute_rho(1) == 0.0001
+
+    # Candidate release that would exceed bound if res_blocker is active
+    rec_next = ReleaseRecord(
+        release_id="next_rel",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.00005},
+        sensitivity=1.0,
+        rho_cost=0.00005,
+    )
+    with pytest.raises(PrivacyAdmissionError):
+        ledger.admit_and_commit_batch([rec_next], commitment_bound=bound)
+
+    # Cancel unreleased reservation
+    cancelled = ledger.cancel_reservation("res_blocker")
+    assert cancelled is True
+    assert ledger.get_release("res_blocker").status == ReleaseStatus.CANCELLED.value
+    assert ledger.compute_rho(1) == 0.0  # Headroom freed!
+
+    # Now candidate release passes admission
+    committed = ledger.admit_and_commit_batch([rec_next], commitment_bound=bound)
+    assert len(committed) == 1
+    assert ledger.compute_rho(1) == 0.00005
+
+
+# ==============================================================================
+# 12. P1 Committed Spend Irrevocability
+# ==============================================================================
+
+def test_committed_spend_irrevocability():
+    """Verify committed releases cannot be cancelled or rolled back without recovery flag."""
+    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    bound = {1: 0.0005}
+
+    rec = ReleaseRecord(
+        release_id="committed_release",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.0001},
+        sensitivity=1.0,
+        rho_cost=0.0001,
+    )
+    ledger.admit_and_commit_batch([rec], commitment_bound=bound, as_status=ReleaseStatus.COMMITTED.value)
+
+    # cancel_reservation must refuse
+    with pytest.raises(ValueError) as exc1:
+        ledger.cancel_reservation("committed_release")
+    assert "privacy spend is irrevocable" in str(exc1.value)
+
+    # rollback_release without allow_committed=True must refuse
+    with pytest.raises(ValueError) as exc2:
+        ledger.rollback_release("committed_release", allow_committed=False)
+    assert "committed privacy spend is irrevocable" in str(exc2.value)
+
+
+# ==============================================================================
+# 13. Batch Parameter Conflict Detection
+# ==============================================================================
+
+def test_conflicting_batch_parameters_rejected():
+    """Verify duplicate release_ids with different parameters in same batch raise ValueError."""
+    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    c1 = ReleaseRecord(
+        release_id="dup_id",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.0001},
+        sensitivity=1.0,
+        rho_cost=0.0001,
+    )
+    c2 = ReleaseRecord(
+        release_id="dup_id",
+        days_accessed=frozenset([1]),
+        mechanism_type="zcdp",
+        params={"rho": 0.0002},  # Conflicting cost
+        sensitivity=1.0,
+        rho_cost=0.0002,
+    )
+
+    with pytest.raises(ValueError) as exc_info:
+        ledger.admit_and_commit_batch([c1, c2], allow_unconfigured_policy=True)
+
+    assert "Conflicting duplicate release_id" in str(exc_info.value)

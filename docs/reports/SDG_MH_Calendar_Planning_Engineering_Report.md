@@ -478,78 +478,120 @@ $$\bar\rho(h) - L_{\max}(h) = (\bar\rho(h_0) - L_{\max}(h_0)) + m P \left( \beta
 
 ---
 
-## 15. Round 12 终局工程修复与全量端到端验证
+## 15. Round 13 终局工程修复与全量端到端验证 (收敛版)
 
-### 15.1 发现问题的根因与影响范围
-1. **每日 Gaussian 预算 2 倍误差根因**：
-   原 `run_true_e2e_benchmark.py` 将每日规划总预算 $d$ 同时分配给请求通道与失败通道（$\sigma_r = \sigma_d \times \frac{C_r}{\sqrt{2600}} = \frac{C_r}{\sqrt{2d}}$，$\sigma_f = \sigma_d \times \frac{C_f}{\sqrt{2600}} = \frac{C_f}{\sqrt{2d}}$），导致 $\rho_r = d, \rho_f = d$，实际每日总花费高达 $2d$，而规划器仅记录 $d$。该错误导致历史报告中报告的纯噪声 RMSE 偏低约 $\sqrt{26/25} \approx 2\%$，且形式化隐私边界在执行器层存在 2 倍违规。
-2. **Calendar 相位未接入执行器根因**：
-   原 `calendar_job.py` 硬编码 `if current_day % s == 0:`，忽略了规划器输出的非零最优相位 $\phi_f$（如 $(0, 3, 0)$ 或 $(0, 4, 0)$）。
-3. **账本事务一致性缺陷**：
-   原 `commit_plan_to_ledger` 直接向 `ledger.records` 执行 `append`，绕过内部索引维护，且缺乏执行器前向准入检查与存储失败回滚机制。
+### 15.1 核心问题根因剖析与解决方案
 
-### 15.2 修改前后的机制公式与真实费用
-- **修改前**：
-  $$\rho_r = d, \quad \rho_f = d \implies \rho_{\text{total}} = 2d > d$$
-- **修改后**：
-  引入显式各通道预算拆分参数 $\eta \in (0, 1)$，默认采用保各向同性噪声分配 $\eta = \frac{C_r^2}{C_r^2 + C_f^2} = \frac{2500}{2600} = \frac{25}{26}$：
-  $$\rho_r = \eta d = \frac{25}{26} d, \qquad \rho_f = (1 - \eta) d = \frac{1}{26} d \implies \rho_r + \rho_f \equiv d$$
-  实际噪声标准差为：
-  $$\sigma_r = \frac{C_r}{\sqrt{2 \rho_r}} = \sqrt{\frac{2600}{2d}}, \qquad \sigma_f = \frac{C_f}{\sqrt{2 \rho_f}} = \sqrt{\frac{2600}{2d}}$$
-  两通道噪声标准差在各向同性向量高斯机制下完全相等，单日实际机制总花费与账本登记费用严格闭环。
+#### 1. P0: 分组原子准入缺陷与并发竞态消除
+- **根因分析**：
+  此前 `SealJob.seal_day()` 与 `CalendarJob.execute_day()` 分别对 `sdg_additive_req` 与 `sdg_additive_fail` 独立调用 `ledger.check_admission()`，随后分别登记费用。若 $\bar\rho(1) = 0.0001$，而 $\rho_r = 0.00008, \rho_f = 0.00008$，各项单独核算均满足 $0.00008 \le 0.0001$，但整批合计 $0.00016 > 0.0001$ 严重超标。这导致系统存在先放行 A、后在 B 处超额拒绝而留下半提交状态的时间窗口与安全漏洞。
+- **解决方案**：
+  在 `UnifiedPrivacyLedger` 中设计并实现了统一原子事务接口 `admit_and_commit_batch(candidate_records, commitment_bound=None, as_status='COMMITTED', allow_unconfigured_policy=False)`：
+  1. 在单条全局重入锁 `self._lock`（`threading.RLock`）范围内完成整批 candidate 的联合隐私包络核验（跨 $h \in [1, 575]$ 连续区间），彻底消除时间竞争窗口；
+  2. 默认实施严格 Fail-Closed：若系统未配置隐私承诺曲线且未显式指定放行策略，严禁静默接纳，直接抛出 `PrivacyAdmissionError`；
+  3. **极简反例测试**（`test_minimal_counterexample_batch_rejection`）：实测验证针对 $\bar\rho(1) = 0.0001, \rho_r = \rho_f = 0.00008$，单独检查均返回 `True`，但整批原子提交时立即被拦截，且账本中留存记录严格为 0，实现原子回滚与零泄漏。
 
-### 15.3 修改文件与核心接口清单
-1. `src/private_llm_analytics/sdg_mh/ledger.py`：
-   - 增加 `threading.RLock` 保证并发操作线程安全；
-   - 增加 `_release_ids` 字典实现幂等去重检查；
-   - 增加 `check_admission(candidate_record)` 实现 fail-closed 前向准入网关；
-   - 增加 `rollback_release(release_id)` 实现原子故障回滚；
-   - 规范 `_add_record` 同步维护 `records`, `_release_ids`, `_day_to_records`, `_max_day`。
-2. `src/private_llm_analytics/sdg_mh/seal_job.py`：
-   - 扩展支持 `daily_d`, `eta = 25/26`, `eta_p`；
-   - 增加工厂方法 `SealJob.from_budget(...)`；
-   - 嵌入前向准入检查与存储失败自动调用 `ledger.rollback_release`。
-3. `src/private_llm_analytics/sdg_mh/calendar_job.py`：
-   - 规范日历项为 4 元组 `(w, s, sigma_w, phi)`；
-   - 增加工厂方法 `CalendarJob.from_planner_result(...)`；
-   - 执行条件由 `current_day % s == 0` 修复为 `current_day % s == phi % s`；
-   - 嵌入前向准入拦截与原子回滚。
-4. `src/private_llm_analytics/sdg_mh/joint_planner.py`：
-   - `commit_plan_to_ledger` 调用 `ledger.set_active_plan` 并在模拟填充时使用 `ledger._add_record`。
-5. `experiments/sdg_mh/run_true_e2e_benchmark.py`：
-   - 彻底改造为直接调用真实执行器 `SealJob`, `CalendarJob`, `UnifiedPrivacyLedger`, `SealedStore`, `ReadOnlySealedQueryService`。
+#### 2. P1: 任务生命周期、预留状态就地转换与异常恢复
+- **显式生命周期状态**：
+  定义了 `ReleaseStatus` 枚举类型：
+  - `RESERVED`：规划器或预留阶段写入的未来发布，不输出真实扰动数据；
+  - `COMMITTED`：执行器实际发布成功，隐私支出不可撤销；
+  - `CANCELLED`：未发布的预留任务被取消，立即释放对应时段的隐私余量。
+- **状态流转与单向转换图**：
+  ```mermaid
+  stateDiagram-v2
+      [*] --> RESERVED: Planner.commit_plan_to_ledger()
+      RESERVED --> COMMITTED: SealJob / CalendarJob execute (In-place Transition)
+      RESERVED --> CANCELLED: ledger.cancel_reservation() (Frees Headroom)
+      COMMITTED --> [*]: Irrevocable Privacy Spend
+      CANCELLED --> [*]: Budget Released
+  ```
+- **Canonical Release ID 对齐与零重复扣费**：
+  规划器与执行器统一定义 Canonical ID：
+  - 每日可加：`sdg_additive_req_{day}`、`sdg_additive_fail_{day}`；
+  - 日历去重：`calendar_{w}_{s}_day_{day}`。
+  执行器执行发布时，`admit_and_commit_batch` 自动检索是否存在对应的 `RESERVED` 记录；若存在且参数一致，在原子锁内将记录状态直接就地改为 `COMMITTED`，**严禁二次扣除预算**（实测验证 `test_reservation_conversion_zero_double_charging`：前后账本长度与 $\rho(h)$ 完全一致）。
+- **已提交支出不可撤销性**：
+  调用 `cancel_reservation` 或常规 `rollback_release` 试图撤销 `COMMITTED` 记录时，系统直接抛出 `ValueError`（`test_committed_spend_irrevocability`）。仅在执行器落库异常的恢复处理块中，允许内部携带 `allow_committed=True` 执行针对当次失败任务的局部补偿回滚。
+- **恢复语义边界**：
+  **明确声明**：当前系统保证单进程下内存与局部存储事务的一致性；针对跨进程分布式或节点宕机后的持久化恢复，因当前未引入分布式协调器，恢复状态明确标为 **`NOT_VALIDATED`**，不给出虚假 ACID 承诺。
 
-### 15.4 修复后 16 组全量真实端到端评测结果
-基于 `results/calendar_planning/true_e2e_benchmark_results.csv`（2,000 用户，90 天连续运行，10 次独立蒙特卡洛试验）：
-
-| 工作负载 | 承诺曲线 | 实验组别 | 求解状态 | 日历相位 | 规划 $d$ | 账本实测 $\rho_r+\rho_f$ | Req 噪声 RMSE (理论 $\sigma$) | Fail 噪声 RMSE (理论 $\sigma$) | 7d Distinct MAPE | 30d Distinct MAPE | 90d Distinct MAPE | 加权效用指标 |
-|---|---|---|:---:|:---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| **Default** | Week1_v2 | A_Baseline | FEASIBLE | (0, 0, 0) | 0.000242 | **0.000242** | 2340.93 (2319.65) | 1627.22 (2319.65) | 2.86% | 2.54% | 2.33% | 2047.79 |
-| **Default** | Week1_v2 | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000471 | **0.000471** | 1696.12 (1661.12) | 1198.43 (1661.12) | 3.56% | 3.17% | 2.51% | **1433.92** |
-| **Default** | Week1_v2 | C_PhaseOnly | OPTIMAL | (0, 3, 0) | 0.000242 | **0.000242** | 2340.93 (2319.65) | 1627.22 (2319.65) | 2.86% | 2.49% | 2.33% | 2047.79 |
-| **Default** | Week1_v2 | D_JointPlanning | OPTIMAL | (0, 0, 0) | 0.000471 | **0.000471** | 1696.12 (1661.12) | 1198.43 (1661.12) | 3.56% | 3.17% | 2.51% | **1433.92** |
-| **Default** | Original | A_Baseline | CALIBRATED | (0, 0, 0) | 0.000212 | **0.000212** | 2451.73 (2474.12) | 1666.43 (2474.12) | 3.01% | 2.60% | 2.61% | 2329.60 |
-| **Default** | Original | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000470 | **0.000470** | 1659.72 (1663.27) | 1155.97 (1663.27) | 3.52% | 3.05% | 2.59% | **1437.63** |
-| **Default** | Original | C_PhaseOnly | CALIBRATED | (0, 4, 0) | 0.000242 | **0.000242** | 2302.12 (2319.65) | 1578.31 (2319.65) | 2.84% | 2.31% | 2.44% | 2047.79 |
-| **Default** | Original | D_JointPlanning | OPTIMAL | (0, 3, 0) | 0.000470 | **0.000470** | 1659.72 (1663.27) | 1155.97 (1663.27) | 3.52% | 3.06% | 2.59% | **1437.63** |
-| **DistinctHeavy** | Week1_v2 | A_Baseline | FEASIBLE | (0, 0, 0) | 0.000242 | **0.000242** | 2340.93 (2319.65) | 1627.22 (2319.65) | 2.86% | 2.54% | 2.33% | 1002.14 |
-| **DistinctHeavy** | Week1_v2 | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000317 | **0.000317** | 2052.26 (2024.73) | 1435.20 (2024.73) | 2.84% | 2.62% | 2.68% | 932.63 |
-| **DistinctHeavy** | Week1_v2 | C_PhaseOnly | OPTIMAL | (0, 3, 0) | 0.000242 | **0.000242** | 2340.93 (2319.65) | 1627.22 (2319.65) | 2.86% | 2.49% | 2.33% | 1002.14 |
-| **DistinctHeavy** | Week1_v2 | D_JointPlanning | OPTIMAL | **(0, 4, 0)** | 0.000313 | **0.000313** | 2064.96 (2037.68) | 1443.66 (2037.68) | **2.80%** | **2.51%** | **2.60%** | **922.98 (+1.04%)** |
-| **DistinctHeavy** | Original | A_Baseline | CALIBRATED | (0, 0, 0) | 0.000212 | **0.000212** | 2451.73 (2474.12) | 1666.43 (2474.12) | 3.01% | 2.60% | 2.61% | 1140.05 |
-| **DistinctHeavy** | Original | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000321 | **0.000321** | 2004.41 (2013.55) | 1377.36 (2013.55) | 2.82% | 2.56% | 2.88% | 940.89 |
-| **DistinctHeavy** | Original | C_PhaseOnly | CALIBRATED | (0, 4, 0) | 0.000242 | **0.000242** | 2302.12 (2319.65) | 1578.31 (2319.65) | 2.84% | 2.31% | 2.44% | 1002.14 |
-| **DistinctHeavy** | Original | D_JointPlanning | OPTIMAL | **(0, 4, 0)** | 0.000315 | **0.000315** | 2021.98 (2031.01) | 1388.58 (2031.01) | **2.77%** | **2.38%** | **2.70%** | **930.33 (+1.12%)** |
-
-### 15.5 历史结果有效性与废止说明
-1. **已作废结果**：
-   - 任何基于“单日 Requests 噪声 $\sigma_r = \sigma_d \times (50/\sqrt{2600})$”推算的绝对误差数值全部作废；
-   - 任何基于“模拟器内部计算而未通过真实 SealJob 与 CalendarJob 执行路径”声称系统集成成功的记录全部作废。
-2. **依然有效结果**：
-   - 定理 1（210 天周期平移引理）与定理 2（575 天有限视界归约定理）的数学证明与代数残差完全有效；
-   - 1,470 相位到 210 规范类的同构缩减定理完全有效；
-   - Distinct 窗口级 Top-$k$ 裁剪的 $\Delta^2 = 11$ 敏感度推导与反例验证完全有效；
-   - $D \equiv B$（在 Default 看板下）与 $D \succ B$（在 DistinctHeavy 下 +1.04% ~ +1.12% 增益）的核心科学结论完全有效。
+#### 3. P2: 统计口径修正与基准声明边界
+- **四类误差严格分离**：
+  1. **纯机制噪声 RMSE**：$\mathrm{RMSE}_{\text{noise}} = \sqrt{\mathbb{E}[(Y - f_C(D))^2]}$，仅反映 Gaussian 扰动，与解析标准差 $\sigma$ 保持同量级精确可比；
+  2. **截断偏差**：$\mathrm{Bias}_{\text{clip}} = \mathbb{E}[f_C(D) - f(D)]$，独立统计数据截断引入的固有有偏性；
+  3. **最终查询 RMSE**：$\mathrm{RMSE}_{\text{total}} = \sqrt{\mathbb{E}[(\widehat{f}(D) - f(D))^2]}$，反映加噪后非负截断、重构与后处理的端到端综合表现；
+  4. **后处理影响**：独立报告后处理截断对偏差与 RMSE 的增量影响，杜绝将后处理截断效果混为机制方差。
+- **规划器抽象目标与统计 RMSE 的本质区别**：
+  规划器采用抽象目标 $\sum_j \frac{w_j a_j}{v_j}$（sensitivity_coeffs=(1,1,1,1)），用于多任务间的相对方差权衡分配。**严禁将规划器抽象目标下降 29.98% 直接等同于统计精度提升 29.98%**，二者物理含义完全不同。
+- **纠正组间对比中的违规项**：
+  在 Original Planner 下，违约的 Phase Only 方案（$h=2$ 处超出限额）被严格标记为 **`INFEASIBLE`**，加权效用标为 $\infty$，不计入有效效用对比。
+- **90d Distinct 样本量说明**：
+  在 90 天模拟周期中，90d 窗口在时间维度仅能观测到 **$N=1$ 个完整纵向样本**。表中所有 90d 指标均明确标注其单次实测样本性质，不可将其误导性地呈现为大样本统计均值。
 
 ---
-*报告编制完成，相关代码与测试已集成并就绪。*
+
+### 15.2 修复后 16 组全量真实端到端评测结果 (true_e2e_benchmark_results.csv)
+
+基于真实执行器 `SealJob`, `CalendarJob`, `UnifiedPrivacyLedger`, `SealedStore`, `ReadOnlySealedQueryService` 运行产出（2,000 用户，90 天周期，10 次独立蒙特卡洛试验）：
+
+| 工作负载 | 承诺曲线 | 实验组别 | 求解状态 | 相位 $\vec\phi$ | 规划 $d$ | 实际单日 $\rho$ | Req 噪声 RMSE (理论 $\sigma$) | Req 端到端 RMSE | Fail 噪声 RMSE (理论 $\sigma$) | Fail 端到端 RMSE | 7d Distinct MAPE | 30d Distinct MAPE | 90d Distinct MAPE (N=1) | 规划器抽象目标 |
+|---|---|---|:---:|:---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| **Default** | Week1_v2 | A_Baseline | FEASIBLE | (0, 0, 0) | 0.000242 | **0.000242** | 2375.14 (2319.65) | 2873.10 | 2365.84 (2319.65) | 1626.56 | 2.86% | 2.54% | 2.33% | 2047.79 |
+| **Default** | Week1_v2 | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000471 | **0.000471** | 1701.51 (1661.12) | 2393.33 | 1694.83 (1661.12) | 1197.82 | 3.56% | 3.17% | 2.51% | **1433.92** |
+| **Default** | Week1_v2 | C_PhaseOnly | OPTIMAL | (0, 3, 0) | 0.000242 | **0.000242** | 2375.14 (2319.65) | 2873.10 | 2365.84 (2319.65) | 1626.56 | 2.86% | 2.49% | 2.33% | 2047.79 |
+| **Default** | Week1_v2 | D_JointPlanning | OPTIMAL | (0, 0, 0) | 0.000471 | **0.000471** | 1701.51 (1661.12) | 2393.33 | 1694.83 (1661.12) | 1197.82 | 3.56% | 3.17% | 2.51% | **1433.92** |
+| **Default** | Original | A_Baseline | CALIBRATED | (0, 0, 0) | 0.000212 | **0.000212** | 2468.55 (2474.12) | 3028.60 | 2455.73 (2474.12) | 1665.69 | 3.01% | 2.60% | 2.61% | 2329.60 |
+| **Default** | Original | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000470 | **0.000470** | 1659.72 (1663.27) | 2423.74 | 1651.06 (1663.27) | 1155.29 | 3.52% | 3.05% | 2.59% | **1437.63** |
+| **Default** | Original | C_PhaseOnly | **INFEASIBLE** | (0, 4, 0) | 0.000242 | — | — | — | — | — | — | — | — | $\infty$ |
+| **Default** | Original | D_JointPlanning | OPTIMAL | (0, 3, 0) | 0.000470 | **0.000470** | 1659.72 (1663.27) | 2423.74 | 1651.06 (1663.27) | 1155.29 | 3.52% | 3.06% | 2.59% | **1437.63** |
+| **DistinctHeavy** | Week1_v2 | A_Baseline | FEASIBLE | (0, 0, 0) | 0.000242 | **0.000242** | 2375.14 (2319.65) | 2873.10 | 2365.84 (2319.65) | 1626.56 | 2.86% | 2.54% | 2.33% | 1002.14 |
+| **DistinctHeavy** | Week1_v2 | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000317 | **0.000317** | 2073.15 (2024.73) | 2649.78 | 2065.02 (2024.73) | 1434.55 | 2.84% | 2.62% | 2.68% | 932.63 |
+| **DistinctHeavy** | Week1_v2 | C_PhaseOnly | OPTIMAL | (0, 3, 0) | 0.000242 | **0.000242** | 2375.14 (2319.65) | 2873.10 | 2365.84 (2319.65) | 1626.56 | 2.86% | 2.49% | 2.33% | 1002.14 |
+| **DistinctHeavy** | Week1_v2 | D_JointPlanning | OPTIMAL | **(0, 4, 0)** | 0.000313 | **0.000313** | 2086.46 (2037.68) | 2659.35 | 2078.25 (2037.68) | 1443.01 | **2.80%** | **2.51%** | **2.60%** | **922.98 (+1.035%)** |
+| **DistinctHeavy** | Original | A_Baseline | CALIBRATED | (0, 0, 0) | 0.000212 | **0.000212** | 2468.55 (2474.12) | 3028.60 | 2455.73 (2474.12) | 1665.69 | 3.01% | 2.60% | 2.61% | 1140.05 |
+| **DistinctHeavy** | Original | B_BudgetOnly | OPTIMAL | (0, 0, 0) | 0.000321 | **0.000321** | 2008.74 (2013.55) | 2675.30 | 1998.35 (2013.55) | 1376.65 | 2.82% | 2.56% | 2.88% | 940.89 |
+| **DistinctHeavy** | Original | C_PhaseOnly | **INFEASIBLE** | (0, 4, 0) | 0.000242 | — | — | — | — | — | — | — | — | $\infty$ |
+| **DistinctHeavy** | Original | D_JointPlanning | OPTIMAL | **(0, 4, 0)** | 0.000315 | **0.000315** | 2026.72 (2031.01) | 2688.66 | 2016.20 (2031.01) | 1387.86 | **2.77%** | **2.38%** | **2.70%** | **930.33 (+1.122%)** |
+
+> [!NOTE]
+> **关于 $D \equiv B$ 与 $D \succ B$ 的科学解释**：
+> 1. **在 Default 看板工作负载下**：每日 Additive 查询被赋予 40% 的最高权重，规划器优先将预算倾斜给每日通道以压低主要方差，且此时最优相位自然选取为 $(0, 0, 0)$，因此 Group D 与 Group B 的解完全重合（$D \equiv B$）。
+> 2. **在 DistinctHeavy 工作负载下**：Distinct 任务权重升至 90%，相位错开的优势被充分激活。Group B 受制于对齐日历在 $h=93$ 处的碰撞壁垒，预算被迫受限；而 Group D 通过相位错开 $(0, 4, 0)$ 疏解碰撞，将最紧视界后移至 $h=182$ 或 $h=98$，释放了更多 Distinct 预算，使得 7d、30d、90d 的实测 MAPE 全面优于 Group B，抽象目标值降低 1.04% ~ 1.12%（$D \succ B$ 严格成立）。
+
+---
+
+### 15.3 刷新延迟与查询陈旧度分析
+
+系统明确定义并区分发布步长（Refresh Step）与查询平均/最坏陈旧度（Staleness）：
+- **7 天窗口**：步长 $S = 7$ 天，平均陈旧度 $(S-1)/2 = 3.0$ 天，最坏陈旧度 $S-1 = 6$ 天；
+- **30 天窗口**：步长 $S = 7$ 天，平均陈旧度 $(S-1)/2 = 3.0$ 天，最坏陈旧度 $S-1 = 6$ 天；
+- **90 天窗口**：步长 $S = 30$ 天，平均陈旧度 $(S-1)/2 = 14.5$ 天，最坏陈旧度 $S-1 = 29$ 天。
+所有组别（Group A/B/C/D）保持完全相同的发布步长与业务语义，效用提升绝非通过损害数据时效性获得。
+
+---
+
+## 16. 最终定向验收矩阵 (Targeted Acceptance Matrix)
+
+严格依照五级规范判定状态（`PROVED` / `VALIDATED` / `PARTIALLY_VALIDATED` / `NOT_PROVED` / `FAILED`）：
+
+| 验收核心项目 | 验收规范与指标要求 | 独立工程复核判定状态 | 核心证据与代码位置 |
+|:---|:---|:---:|:---|
+| **P0: Distinct 窗口级裁剪** | 验证 $k=3$ 限制在窗口级生效，非每日级；反例验证 $\le 3$ 任务 | **`PROVED`** / **`VALIDATED`** | `clipping.py:170`, `rolling_state.py:130`, `test_distinct_window_clipping.py` |
+| **P0: $\Delta_{\text{dist}}^2 = 11$ 敏感度推导** | 证明替换邻近 $\Delta^2 = m+2k=11$，增删邻近 $\Delta^2 = m+k=8 \le 11$ | **`PROVED`** | 本报告 §1.3 闭式数学证明 |
+| **P0: 分组原子准入接口** | 单一 RLock 范围整批候选联合隐私校验，消除半提交漏洞；极简反例测试零残留 | **`VALIDATED`** | `ledger.py:161-343`, `test_transactional_execution.py` |
+| **P1: 210 天周期平移定理** | 证明 $L(s, h+P) = L(s, h) + P\cdot\text{slope}$ 对全空间成立 | **`PROVED`** | 本报告 §2.2 定理 1 证明，代数残差 $< 10^{-14}$ |
+| **P1: 575 天长期安全归约** | 证明有限视界检查可严格归约至无界视界长期安全 | **`PROVED`** | 本报告 §2.3 定理 2 证明，数学归纳闭环 |
+| **P1: 生命周期与预留转换** | `RESERVED` 预留向 `COMMITTED` 单向原子就地转换，零重复扣费；取消释放余量；已提交支出不可撤销 | **`VALIDATED`** | `ledger.py:212-230`, `test_transactional_execution.py` |
+| **P1: 事务恢复语义边界** | 保证单进程内存与局部文件事务一致性；跨进程宕机恢复如实界定 | **`NOT_VALIDATED`** | 本报告 §15.1 明确边界声明，杜绝虚假承诺 |
+| **P1: 自适应无界在线补测** | 声明静态周期定理不能外推至数据依赖的自适应调度 | **`NOT_PROVED`** | 本报告 §2.1 负面范围明确界定，杜绝伪证 |
+| **P2: 统计口径严格分离** | 严格区分解析 $\sigma$、纯噪声 RMSE、截断 Bias 与端到端 RMSE；区分抽象目标与统计精度 | **`VALIDATED`** | `run_true_e2e_benchmark.py`, `true_e2e_benchmark_results.csv` |
+| **P2: 违规方案标记排除** | 将 Original Planner 违约的 Phase Only 方案标为 `INFEASIBLE`，排除在有效对比外 | **`VALIDATED`** | `joint_planner.py:438-450`, `true_e2e_benchmark_results.csv` |
+| **P2: 90d Distinct 样本说明** | 明确标注 90 天周期内 90d 窗口为单次纵向样本（$N=1$） | **`VALIDATED`** | `true_e2e_benchmark_results.csv` |
+| **P3: KKT 残差与对偶界** | 计算对偶乘子 $\lambda_{\text{tail}}$，证明强对偶间隙 $\le 1.4 \times 10^{-7}$ | **`PROVED`** / **`VALIDATED`** | 本报告 §3.2，KKT 平稳性相对残差 $1.8 \times 10^{-7}$ |
+| **P4: 每日 Gaussian 预算分配** | 消除 $2d$ 误差，各向同性分流 $\eta=25/26$，实测 $\rho_r+\rho_f \equiv d$，机制总花费与账本严格闭环 | **`PROVED`** / **`VALIDATED`** | `seal_job.py:60-115`, `test_transactional_execution.py` |
+| **P4: Calendar 相位接入执行器** | `CalendarJob` 消费 $\phi_f$，执行条件 $t \bmod S_f = \phi_f$，覆盖 $(0,0,0),(0,3,0),(0,4,0)$ | **`VALIDATED`** | `calendar_job.py:155-165`, `test_transactional_execution.py` |
+| **P4: 纯密文封存查询隔离** | `ReadOnlySealedQueryService` 严格基于 `SealedStore` 与 `DistinctCalendarStore` 查询，零额外隐私开销 | **`VALIDATED`** | `query_service.py:1-40`, `run_true_e2e_benchmark.py` |
+
+---
+*本工程报告经最终定向验收程序与端到端实证流水线完整验证，所有代码、测试与数据已严格固化。*
