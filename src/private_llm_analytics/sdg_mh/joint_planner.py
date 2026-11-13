@@ -521,6 +521,7 @@ class JointCalendarPlanner:
         ledger: UnifiedPrivacyLedger,
         start_day: int = 1,
         simulated_days: int = 365,
+        populate_records: bool = True,
     ) -> Tuple[bool, str, Dict[str, Any]]:
         """Atomic reservation and validation of planning policy in UnifiedPrivacyLedger."""
         if plan.status == "NO_FEASIBLE_POLICY":
@@ -576,10 +577,11 @@ class JointCalendarPlanner:
         )
 
         if passed:
-            for r in records:
-                ledger.records.append(r)
-                if r.days_accessed:
-                    ledger._max_day = max(ledger._max_day, max(r.days_accessed))
-            return True, f"Policy successfully bound: {len(records)} releases committed to ledger.", diag
+            with ledger._lock:
+                ledger.set_active_plan(plan, commitment=self.commitment)
+                if populate_records:
+                    for r in records:
+                        ledger._add_record(r)
+            return True, f"Policy successfully bound: {len(records) if populate_records else 0} releases committed to ledger.", diag
         else:
             return False, f"Policy rejected at ledger gate: {msg}", diag

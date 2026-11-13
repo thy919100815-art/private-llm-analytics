@@ -277,13 +277,12 @@ def run_rq2_utility_benchmark() -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFram
         d_cost = plan.daily_d
         x7, x30, x90 = plan.distinct_costs
 
-        # Compute Gaussian noise scales sigma
-        # d pays for requests (C_r=50) and failures (C_f=10): Delta^2 = 50^2 + 10^2 = 2600
-        # sigma_d = sqrt(Delta^2 / (2 * d))
-        sigma_d = math.sqrt(2600.0 / (2.0 * max(1e-9, d_cost)))
-        # Proportional sigma for requests (C_r=50) and failures (C_f=10)
-        sigma_r = sigma_d * (50.0 / math.sqrt(2600.0))
-        sigma_f = sigma_d * (10.0 / math.sqrt(2600.0))
+        # Compute Gaussian noise scales sigma under isotropic split d = rho_r + rho_f (eta = 25/26)
+        # Delta^2 = 50^2 + 10^2 = 2600
+        # sigma_r = C_r / sqrt(2*rho_r) = sqrt(2600 / (2*d))
+        # sigma_f = C_f / sqrt(2*rho_f) = sqrt(2600 / (2*d))
+        sigma_r = math.sqrt(2600.0 / (2.0 * max(1e-9, d_cost)))
+        sigma_f = math.sqrt(2600.0 / (2.0 * max(1e-9, d_cost)))
 
         # Distinct noise sigma_w = sqrt(Delta_sq / (2 * x_w))
         sigma_7 = math.sqrt(delta_sq_distinct / (2.0 * max(1e-9, x7)))

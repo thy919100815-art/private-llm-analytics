@@ -20,8 +20,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import math
+import threading
 from typing import Any, Callable, Dict, List, Optional, Sequence, Set, Tuple
 import numpy as np
+
+
+class PrivacyAdmissionError(RuntimeError):
+    """Raised when a candidate release violates the privacy envelope."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -123,7 +129,66 @@ class UnifiedPrivacyLedger:
         self.delta: float = float(delta)
         self.records: List[ReleaseRecord] = []
         self._day_to_records: Dict[int, List[int]] = {}  # day -> list of record indices
+        self._release_ids: Dict[str, ReleaseRecord] = {}  # release_id -> record
         self._max_day: int = 0
+        self._lock = threading.RLock()
+        self.active_plan: Optional[Any] = None
+        self.active_commitment: Optional[Any] = None
+
+    def set_active_plan(self, plan: Any, commitment: Optional[Any] = None) -> bool:
+        """Set the active planning reservation policy and privacy commitment."""
+        with self._lock:
+            self.active_plan = plan
+            self.active_commitment = commitment
+            return True
+
+    def get_release(self, release_id: str) -> Optional[ReleaseRecord]:
+        """Look up committed release record by release_id (thread-safe)."""
+        with self._lock:
+            return self._release_ids.get(release_id)
+
+    def check_admission(
+        self,
+        candidate_record: ReleaseRecord,
+        commitment_bound: Optional[Any] = None,
+    ) -> Tuple[bool, str]:
+        """Check if adding candidate_record maintains the privacy envelope (Fail-closed gate)."""
+        with self._lock:
+            bound = commitment_bound or self.active_commitment
+            if bound is None:
+                return True, "No commitment bound enforced"
+
+            # Check if this release_id is already committed (idempotent)
+            if candidate_record.release_id in self._release_ids:
+                return True, "Release already committed (idempotent)"
+
+            # Construct hypothetical record set
+            test_records = list(self.records) + [candidate_record]
+            max_d = max(
+                [self._max_day] + (list(candidate_record.days_accessed) if candidate_record.days_accessed else [1])
+            )
+
+            # Check horizons
+            T = min(max_d, 575)
+            starts = np.array([min(r.days_accessed) for r in test_records if r.days_accessed], dtype=np.int64)
+            ends = np.array([max(r.days_accessed) for r in test_records if r.days_accessed], dtype=np.int64)
+            costs = np.array([r.rho_cost for r in test_records if r.days_accessed], dtype=np.float64)
+
+            for h in range(1, T + 1):
+                max_s = max_d - h + 1
+                diff = np.zeros(max_s + 2, dtype=np.float64)
+                l = np.maximum(1, starts - h + 1)
+                r = np.minimum(max_s, ends)
+                valid = l <= r
+                np.add.at(diff, l[valid], costs[valid])
+                np.add.at(diff, r[valid] + 1, -costs[valid])
+                curr_rho = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
+
+                bound_val = bound.rho_bar(h) if hasattr(bound, "rho_bar") else (bound(h) if callable(bound) else bound[h])
+                if curr_rho > bound_val + 1e-9:
+                    return False, f"Breached privacy bound at h={h}: projected={curr_rho:.6f} > bound={bound_val:.6f}"
+
+            return True, "Admitted under privacy envelope"
 
     def record_gaussian_release(
         self,
@@ -132,26 +197,42 @@ class UnifiedPrivacyLedger:
         sensitivity: float,
         sigma: float,
         tag: str = "",
+        enforce_admission: bool = True,
     ) -> ReleaseRecord:
-        """Record an analytic Gaussian release: rho = Delta^2 / (2 * sigma^2)."""
-        if sigma <= 0:
-            raise ValueError(f"sigma must be > 0, got {sigma}")
-        if sensitivity < 0:
-            raise ValueError(f"sensitivity must be >= 0, got {sensitivity}")
+        """Record an analytic Gaussian release: rho = Delta^2 / (2 * sigma^2).
 
-        days_set = frozenset(int(d) for d in days_accessed)
-        rho_cost = float((sensitivity * sensitivity) / (2.0 * sigma * sigma))
-        record = ReleaseRecord(
-            release_id=release_id,
-            days_accessed=days_set,
-            mechanism_type="gaussian",
-            params={"sigma": float(sigma)},
-            sensitivity=float(sensitivity),
-            rho_cost=rho_cost,
-            tag=tag,
-        )
-        self._add_record(record)
-        return record
+        Enforces idempotency, thread-safety, and fail-closed privacy admission.
+        """
+        with self._lock:
+            # Idempotency: if already recorded, return existing without re-charging
+            if release_id in self._release_ids:
+                return self._release_ids[release_id]
+
+            if sigma <= 0:
+                raise ValueError(f"sigma must be > 0, got {sigma}")
+            if sensitivity < 0:
+                raise ValueError(f"sensitivity must be >= 0, got {sensitivity}")
+
+            days_set = frozenset(int(d) for d in days_accessed)
+            rho_cost = float((sensitivity * sensitivity) / (2.0 * sigma * sigma))
+            record = ReleaseRecord(
+                release_id=release_id,
+                days_accessed=days_set,
+                mechanism_type="gaussian",
+                params={"sigma": float(sigma)},
+                sensitivity=float(sensitivity),
+                rho_cost=rho_cost,
+                tag=tag,
+            )
+
+            # Pre-check privacy admission if active commitment is configured
+            if enforce_admission and self.active_commitment is not None:
+                admitted, reason = self.check_admission(record)
+                if not admitted:
+                    raise PrivacyAdmissionError(f"Privacy admission rejected release '{release_id}': {reason}")
+
+            self._add_record(record)
+            return record
 
     def record_laplace_release(
         self,
@@ -160,23 +241,33 @@ class UnifiedPrivacyLedger:
         sensitivity: float,
         epsilon: float,
         tag: str = "",
+        enforce_admission: bool = True,
     ) -> ReleaseRecord:
         """Record a pure Laplace release: rho = eps^2 / 2."""
-        if epsilon <= 0:
-            raise ValueError(f"epsilon must be > 0, got {epsilon}")
-        days_set = frozenset(int(d) for d in days_accessed)
-        rho_cost = epsilon_to_rho(epsilon)
-        record = ReleaseRecord(
-            release_id=release_id,
-            days_accessed=days_set,
-            mechanism_type="laplace",
-            params={"epsilon": float(epsilon)},
-            sensitivity=float(sensitivity),
-            rho_cost=rho_cost,
-            tag=tag,
-        )
-        self._add_record(record)
-        return record
+        with self._lock:
+            if release_id in self._release_ids:
+                return self._release_ids[release_id]
+
+            if epsilon <= 0:
+                raise ValueError(f"epsilon must be > 0, got {epsilon}")
+            days_set = frozenset(int(d) for d in days_accessed)
+            rho_cost = epsilon_to_rho(epsilon)
+            record = ReleaseRecord(
+                release_id=release_id,
+                days_accessed=days_set,
+                mechanism_type="laplace",
+                params={"epsilon": float(epsilon)},
+                sensitivity=float(sensitivity),
+                rho_cost=rho_cost,
+                tag=tag,
+            )
+            if enforce_admission and self.active_commitment is not None:
+                admitted, reason = self.check_admission(record)
+                if not admitted:
+                    raise PrivacyAdmissionError(f"Privacy admission rejected release '{release_id}': {reason}")
+
+            self._add_record(record)
+            return record
 
     def record_zcdp_release(
         self,
@@ -185,24 +276,54 @@ class UnifiedPrivacyLedger:
         sensitivity: float,
         rho_cost: float,
         tag: str = "",
+        enforce_admission: bool = True,
     ) -> ReleaseRecord:
         """Directly record a release with known zCDP cost rho."""
-        days_set = frozenset(int(d) for d in days_accessed)
-        record = ReleaseRecord(
-            release_id=release_id,
-            days_accessed=days_set,
-            mechanism_type="zcdp",
-            params={"rho": float(rho_cost)},
-            sensitivity=float(sensitivity),
-            rho_cost=float(rho_cost),
-            tag=tag,
-        )
-        self._add_record(record)
-        return record
+        with self._lock:
+            if release_id in self._release_ids:
+                return self._release_ids[release_id]
+
+            days_set = frozenset(int(d) for d in days_accessed)
+            record = ReleaseRecord(
+                release_id=release_id,
+                days_accessed=days_set,
+                mechanism_type="zcdp",
+                params={"rho": float(rho_cost)},
+                sensitivity=float(sensitivity),
+                rho_cost=float(rho_cost),
+                tag=tag,
+            )
+            if enforce_admission and self.active_commitment is not None:
+                admitted, reason = self.check_admission(record)
+                if not admitted:
+                    raise PrivacyAdmissionError(f"Privacy admission rejected release '{release_id}': {reason}")
+
+            self._add_record(record)
+            return record
+
+    def rollback_release(self, release_id: str) -> bool:
+        """Roll back a release if storage or execution fails (atomicity/recovery)."""
+        with self._lock:
+            if release_id not in self._release_ids:
+                return False
+            del self._release_ids[release_id]
+            self.records = [r for r in self.records if r.release_id != release_id]
+            # Synchronously rebuild indexes
+            self._day_to_records.clear()
+            self._max_day = 0
+            for idx, r in enumerate(self.records):
+                for d in r.days_accessed:
+                    if d not in self._day_to_records:
+                        self._day_to_records[d] = []
+                    self._day_to_records[d].append(idx)
+                    if d > self._max_day:
+                        self._max_day = d
+            return True
 
     def _add_record(self, record: ReleaseRecord) -> None:
         idx = len(self.records)
         self.records.append(record)
+        self._release_ids[record.release_id] = record
         for d in record.days_accessed:
             if d not in self._day_to_records:
                 self._day_to_records[d] = []

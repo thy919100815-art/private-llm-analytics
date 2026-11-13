@@ -148,6 +148,17 @@ WEEK1_V2_CURVE = PrivacyCommitmentCurve(
 )
 
 
+def iterate_family_releases(
+    family: CalendarFamily,
+    phi: int,
+    total_days: int,
+    start_day: int = 1,
+) -> List[int]:
+    """Iterate all release days t in [start_day, total_days] where t % S_f == phi % S_f."""
+    phi_norm = phi % family.step_days
+    return [t for t in range(start_day, total_days + 1) if t % family.step_days == phi_norm]
+
+
 def count_intersections_oracle(
     s: int,
     h: int,

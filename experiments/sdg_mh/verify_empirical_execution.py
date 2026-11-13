@@ -60,9 +60,8 @@ def run_empirical_verification(n_trials: int = 100, n_days: int = 90) -> pd.Data
         d_cost = plan.daily_d
         x7, x30, x90 = plan.distinct_costs
 
-        # Exact analytical noise scale
-        sigma_d = math.sqrt(2600.0 / (2.0 * max(1e-9, d_cost)))
-        sigma_r = sigma_d * (50.0 / math.sqrt(2600.0))
+        # Exact analytical noise scale under isotropic split d = rho_r + rho_f (eta = 25/26)
+        sigma_r = math.sqrt(2600.0 / (2.0 * max(1e-9, d_cost)))
         sigma_7 = math.sqrt(11.0 / (2.0 * max(1e-9, x7)))
         sigma_30 = math.sqrt(11.0 / (2.0 * max(1e-9, x30)))
         sigma_90 = math.sqrt(11.0 / (2.0 * max(1e-9, x90)))

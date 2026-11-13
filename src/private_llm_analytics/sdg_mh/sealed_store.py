@@ -84,6 +84,9 @@ class SealedStore:
     def total_sealed_days(self) -> int:
         return len(self._records)
 
+    def __len__(self) -> int:
+        return len(self._records)
+
     def get_storage_stats(self) -> Dict[str, Any]:
         """Compute current file size in bytes and annual storage projection."""
         bytes_on_disk = 0
