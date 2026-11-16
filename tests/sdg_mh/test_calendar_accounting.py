@@ -200,3 +200,67 @@ def test_curves_monotonicity_and_conversion():
         for h, target_eps in zip(curve.horizons, curve.epsilons):
             eval_eps = float(curve.epsilon_bar(h))
             assert abs(eval_eps - target_eps) < 1e-4
+
+
+def test_data_window_intersection_counterexample_vs_release_date_only():
+    """Verify n_f(s, h) bills by data-window intersection B_f cap I != empty, not release date in I.
+
+    Counterexample (Task 1):
+      W_f = 30, S_f = 7, phi_f = 0, s = 0, h = 1 (protected window I = [0, 0]).
+      Data window for release t is B_f(t) = [t - 29, t].
+      B_f(t) intersects I = [0, 0] iff t in [0, 29].
+      Releases t % 7 == 0 in [0, 29] are {0, 7, 14, 21, 28} -> count = 5.
+      Counting release date t in I = [0, 0] yields only {0} -> count = 1 (5x undercount!).
+    """
+    s, h, W_f, S_f, phi = 0, 1, 30, 7, 0
+    fast_cnt = count_intersections_fast(s, h, W_f, S_f, phi)
+    oracle_cnt = count_intersections_oracle(s, h, W_f, S_f, phi, day_min=-200, day_max=200)
+
+    # Naive erroneous formula counting only release dates t in [s, s + h - 1]
+    naive_release_date_only = sum(1 for t in range(s, s + h) if t % S_f == phi % S_f)
+
+    assert fast_cnt == 5
+    assert oracle_cnt == 5
+    assert naive_release_date_only == 1
+    assert fast_cnt > naive_release_date_only
+
+    # Also check 90-day family (W_f=90, S_f=30, phi=0) on single-day window I=[0, 0]:
+    # Intersecting release dates: {0, 30, 60} -> count = 3 vs release-date-only 1.
+    assert count_intersections_fast(0, 1, 90, 30, 0) == 3
+    assert count_intersections_oracle(0, 1, 90, 30, 0) == 3
+
+
+def test_commitment_curves_non_concavity_and_affine_tail_reduction():
+    """Verify commitment curves are NOT globally concave in zCDP rho_bar(h) and use affine tail for h >= 365."""
+    for curve in (ORIGINAL_PLANNER_CURVE, WEEK1_V2_CURVE):
+        slopes = curve.knot_rho_slopes()
+        assert len(slopes) == 4
+        # Strictly verify non-concavity: slope increases on tail segment [90, 365] vs [30, 90]
+        assert slopes[3][2] > slopes[2][2], (
+            f"{curve.name} unexpectedly concave at [90, 365]: {slopes[3][2]} <= {slopes[2][2]}"
+        )
+        assert curve.is_globally_concave_rho() is False
+        # Verify exact affine tail for h >= H_0 = 365
+        assert curve.is_affine_tail(H_0=365, P=JOINT_PERIOD) is True
+
+    # Week1_v2 specifically increases across both [30, 90] and [90, 365]
+    w_slopes = WEEK1_V2_CURVE.knot_rho_slopes()
+    assert w_slopes[2][2] > w_slopes[1][2]
+    assert w_slopes[3][2] > w_slopes[2][2]
+
+    # Verify infinite-horizon reduction succeeds at H_0 = 365 without concavity,
+    # and fails closed if H_0 < curve.horizons[-1] (outside affine tail).
+    b = 0.000302
+    sched = CalendarSchedule(
+        phases=(0, 4, 0),
+        costs=(0.0015, 0.0014, 0.0011),
+        daily_cost_d=0.8 * b,
+    )
+    cert_valid = sched.verify_periodicity_and_long_term_security(WEEK1_V2_CURVE, H_0=365)
+    assert cert_valid["affine_tail_start_valid"] is True
+    assert cert_valid["affine_tail_holds"] is True
+    assert cert_valid["is_infinite_horizon_secure"] is True
+
+    cert_invalid_h0 = sched.verify_periodicity_and_long_term_security(WEEK1_V2_CURVE, H_0=100)
+    assert cert_invalid_h0["affine_tail_start_valid"] is False
+    assert cert_invalid_h0["is_infinite_horizon_secure"] is False

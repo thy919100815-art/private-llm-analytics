@@ -27,6 +27,8 @@ import numpy as np
 
 from enum import Enum
 
+from private_llm_analytics.sdg_mh.calendar_accounting import PRIVACY_LEDGER_TOL
+
 
 class ReleaseStatus(str, Enum):
     """Lifecycle status of privacy release records in UnifiedPrivacyLedger."""
@@ -382,7 +384,7 @@ class UnifiedPrivacyLedger:
                         curr_rho = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
 
                         bound_val = bound.rho_bar(h) if hasattr(bound, "rho_bar") else (bound(h) if callable(bound) else bound[h])
-                        if curr_rho > bound_val + 1e-9:
+                        if curr_rho > bound_val + PRIVACY_LEDGER_TOL:
                             raise PrivacyAdmissionError(
                                 f"Group atomic privacy admission rejected: breached bound at h={h}: "
                                 f"projected={curr_rho:.8f} > bound={bound_val:.8f}"
@@ -476,7 +478,7 @@ class UnifiedPrivacyLedger:
                 curr_rho = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
 
                 bound_val = bound.rho_bar(h) if hasattr(bound, "rho_bar") else (bound(h) if callable(bound) else bound[h])
-                if curr_rho > bound_val + 1e-9:
+                if curr_rho > bound_val + PRIVACY_LEDGER_TOL:
                     return False, f"Breached privacy bound at h={h}: projected={curr_rho:.6f} > bound={bound_val:.6f}"
 
             return True, "Admitted under privacy envelope"
@@ -732,7 +734,7 @@ class UnifiedPrivacyLedger:
         for h, bound in max_profile_bound.items():
             proj_r = trial_ledger.compute_rho(h)
             projected[h] = proj_r
-            if proj_r > bound + 1e-9:
+            if proj_r > bound + PRIVACY_LEDGER_TOL:
                 return (
                     False,
                     f"Revisit gate rejected: at horizon h={h}, projected rho={proj_r:.6f} exceeds limit E_bar={bound:.6f}.",
@@ -805,7 +807,7 @@ class UnifiedPrivacyLedger:
                 bound_h = float(max_profile_bound_fn_or_array[h])
 
             proj_r = float(full_rhos[h])
-            if proj_r > bound_h + 1e-9:
+            if proj_r > bound_h + PRIVACY_LEDGER_TOL:
                 exceeded_horizons.append(h)
                 ratio = proj_r / bound_h if bound_h > 0 else float("inf")
                 if ratio > max_excess_ratio:

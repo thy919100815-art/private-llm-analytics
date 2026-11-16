@@ -53,6 +53,16 @@ DEFAULT_FAMILIES = (
 
 JOINT_PERIOD: int = 210  # lcm(7, 7, 30)
 
+# Unified numerical tolerance hierarchy across planning, certification, and ledger admission:
+# - Continuous SLSQP iterative solver tolerance before conservative shrinkage
+SOLVER_VIOLATION_TOL: float = 1e-8
+# - Strict zero-breach certification tolerance for publishable schedules (no negative slack)
+STRICT_CERTIFICATION_TOL: float = 0.0
+# - Relative conservative backoff applied when shrinking boundary/slightly-violated schedules
+CONSERVATIVE_BACKOFF_REL: float = 1e-11
+# - Unified floating-point summation tolerance in ledger admission & periodicity identity checks
+PRIVACY_LEDGER_TOL: float = 1e-12
+
 
 @dataclass(frozen=True)
 class PrivacyCommitmentCurve:
@@ -130,6 +140,34 @@ class PrivacyCommitmentCurve:
         pos = r_arr > 0
         out[pos] = r_arr[pos] + 2.0 * np.sqrt(r_arr[pos] * math.log(1.0 / self.delta))
         return out
+
+    def knot_rho_slopes(self) -> List[Tuple[int, int, float]]:
+        """Return exact zCDP rho_bar secant slopes between consecutive knot horizons."""
+        slopes: List[Tuple[int, int, float]] = []
+        for i in range(len(self.horizons) - 1):
+            h0, h1 = self.horizons[i], self.horizons[i + 1]
+            r0, r1 = self.rhos[i], self.rhos[i + 1]
+            slopes.append((int(h0), int(h1), float((r1 - r0) / float(h1 - h0))))
+        return slopes
+
+    def is_globally_concave_rho(self, tol: float = 1e-12) -> bool:
+        """Check whether adjacent zCDP rho_bar slopes are monotonically non-increasing across knots."""
+        slopes = [s for _, _, s in self.knot_rho_slopes()]
+        return all(slopes[i + 1] <= slopes[i] + tol for i in range(len(slopes) - 1))
+
+    def is_affine_tail(
+        self,
+        H_0: Optional[int] = None,
+        P: int = JOINT_PERIOD,
+        tol: float = PRIVACY_LEDGER_TOL,
+    ) -> bool:
+        """Verify exact affine tail property rho_bar(h) = a_tail + beta_tail * h for h >= H_0."""
+        h_start = self.horizons[-1] if H_0 is None else int(H_0)
+        if h_start < self.horizons[-1]:
+            return False
+        h_vals = np.arange(h_start, h_start + P + 1, dtype=np.float64)
+        diff = (self.rho_bar(h_vals + P) - self.rho_bar(h_vals)) - (float(P) * self.beta_tail)
+        return bool(np.max(np.abs(diff)) <= tol)
 
 
 # Canonical Historical Privacy Commitment Curves
@@ -346,6 +384,7 @@ class CalendarSchedule:
         commitment: PrivacyCommitmentCurve,
         max_h: int = 575,
         P: int = JOINT_PERIOD,
+        slack_tol: float = STRICT_CERTIFICATION_TOL,
     ) -> Dict[str, Any]:
         """Compute slack S(h) = rho_bar(h) - L_max(h) across all h in 1..max_h."""
         l_max, worst_s = self.evaluate_full_envelope(max_h=max_h, P=P)
@@ -364,7 +403,8 @@ class CalendarSchedule:
             "l_max": l_max,
             "slacks": slacks,
             "worst_s": worst_s,
-            "is_feasible": bool(min_slack >= -1e-12),
+            "is_feasible": bool(min_slack >= -slack_tol),
+            "slack_tol": float(slack_tol),
         }
 
     def verify_periodicity_and_long_term_security(
@@ -372,48 +412,63 @@ class CalendarSchedule:
         commitment: PrivacyCommitmentCurve,
         H_0: int = 365,
         P: int = JOINT_PERIOD,
+        slack_tol: float = STRICT_CERTIFICATION_TOL,
     ) -> Dict[str, Any]:
         """Rigorous mathematical proof verification of infinite-horizon privacy security.
 
-        Checks:
+        Uses exact affine tail property for h >= H_0 (requires H_0 >= commitment.horizons[-1],
+        no global concavity assumed):
         1. Exact periodicity identity: L_max(h + P) == L_max(h) + P * slope for all h in 1..H_0.
-        2. Tail asymptotic growth condition: slope <= beta_tail.
-        3. Finite reduction verification on [1, H_0 + P = 575]: min_{h <= 575} S(h) >= 0.
+        2. Exact affine tail property on commitment curve for h >= H_0.
+        3. Tail asymptotic growth condition: slope <= beta_tail.
+        4. Finite reduction verification on [1, H_0 + P = 575]: min_{h <= 575} S(h) >= -slack_tol.
         """
         slope = self.asymptotic_slope
         beta = commitment.beta_tail
 
-        # 1. Check slope condition
-        slope_safe = bool(slope <= beta + 1e-12)
+        # 1. Check affine tail validity (no global concavity assumed)
+        affine_tail_start_valid = bool(H_0 >= commitment.horizons[-1])
+        affine_tail_holds = commitment.is_affine_tail(H_0=H_0, P=P, tol=PRIVACY_LEDGER_TOL)
 
-        # 2. Check periodicity identity on h in 1..H_0
+        # 2. Check slope condition
+        slope_safe = bool(slope <= beta + slack_tol)
+
+        # 3. Check periodicity identity on h in 1..H_0
         l_max_575, _ = self.evaluate_full_envelope(max_h=H_0 + P, P=P)
         periodicity_errors = []
         for h in range(1, H_0 + 1):
             lhs = l_max_575[h + P]
             rhs = l_max_575[h] + P * slope
             err = abs(lhs - rhs)
-            if err > 1e-9:
+            if err > PRIVACY_LEDGER_TOL:
                 periodicity_errors.append((h, lhs, rhs, err))
 
         periodicity_holds = len(periodicity_errors) == 0
 
-        # 3. Check finite slack on [1, H_0 + P]
+        # 4. Check finite slack on [1, H_0 + P]
         h_vals = np.arange(1, H_0 + P + 1)
         rho_bars = commitment.rho_bar(h_vals)
         slacks = rho_bars - l_max_575[1:]
         min_idx = int(np.argmin(slacks))
         min_slack = float(slacks[min_idx])
         min_h = int(h_vals[min_idx])
-        finite_safe = bool(min_slack >= -1e-12)
+        finite_safe = bool(min_slack >= -slack_tol)
 
-        is_guaranteed = slope_safe and periodicity_holds and finite_safe
+        is_guaranteed = (
+            slope_safe
+            and periodicity_holds
+            and finite_safe
+            and affine_tail_start_valid
+            and affine_tail_holds
+        )
 
         return {
             "is_infinite_horizon_secure": is_guaranteed,
             "slope_safe": slope_safe,
             "periodicity_holds": periodicity_holds,
             "finite_safe": finite_safe,
+            "affine_tail_start_valid": affine_tail_start_valid,
+            "affine_tail_holds": affine_tail_holds,
             "asymptotic_slope": slope,
             "commitment_beta_tail": beta,
             "slope_headroom": float(beta - slope),
@@ -423,4 +478,5 @@ class CalendarSchedule:
             "H_0": H_0,
             "P": P,
             "check_horizon": H_0 + P,
+            "certification_tol": float(slack_tol),
         }

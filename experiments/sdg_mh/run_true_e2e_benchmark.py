@@ -144,7 +144,10 @@ def run_e2e_benchmark(
 
                 for grp_key, plan in plans.items():
                     print(f"      Executing Pipeline: Workload={wl_name}, Curve={curve_name}, Group={grp_key} (Status={plan.status})...")
-                    if plan.status in ("BREACHED", "INFEASIBLE", "NO_FEASIBLE_POLICY"):
+                    if (
+                        not plan.is_certified_publishable
+                        or plan.status in ("BREACHED", "INFEASIBLE", "NO_FEASIBLE_POLICY", "SOLVER_OPT_UNCERTIFIED", "CERTIFICATION_FAILED")
+                    ):
                         results_records.append({
                             "workload": wl_name,
                             "commitment_curve": curve_name,
