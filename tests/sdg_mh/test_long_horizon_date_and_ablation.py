@@ -92,3 +92,46 @@ def test_audit_v2_crn_disjoint_seeds_stratified_icc_and_baseline_envelope():
         rho_h = 0.5 * tb.get_worst_case_rho_term(h_chk) / beta_sq
         assert rho_h <= float(rem_env[h_chk - 1]) + 1e-12
 
+
+def test_v3_injective_128bit_seeds_no_known_uint32_collision_and_uniform_postproc():
+    """Verify (3042,2,410,1) vs (5042,4,218,2) do NOT collide, exhaustive 8-seed check has 0 collisions,
+    uniform post-processing enforces 0 <= Fail <= Req, and Holm-Bonferroni matches exact step-down bounds."""
+    import importlib.util
+    from pathlib import Path
+    import numpy as np
+
+    for fname, mname in (
+        ("run_long_horizon_420d_audit_v2.py", "audit_v2_chk"),
+        ("run_long_horizon_420d_audit_v3.py", "audit_v3_chk"),
+    ):
+        script_path = Path(__file__).parents[2] / "experiments" / "sdg_mh" / fname
+        spec = importlib.util.spec_from_file_location(mname, script_path)
+        mod = importlib.util.module_from_spec(spec)
+        assert spec.loader is not None
+        spec.loader.exec_module(mod)
+
+        # Known PR#6 uint32 collision pair MUST produce strictly distinct 128-bit seeds
+        s1 = mod.derive_crn_seed(3042, 2, 410, 1)
+        s2 = mod.derive_crn_seed(5042, 4, 218, 2)
+        assert s1 != s2
+
+        if hasattr(mod, "verify_all_experiment_seeds_collision_free"):
+            audit = mod.verify_all_experiment_seeds_collision_free(
+                [42, 1042, 2042, 3042, 4042, 5042, 6042, 7042], 5, 420
+            )
+            assert audit["collisions_detected"] == 0
+            assert audit["total_seeds_checked"] == audit["unique_seeds"]
+
+            # Uniform post-processing: Req_hat = max(0, Req), Fail_hat = min(Req_hat, max(0, Fail))
+            r_hat, f_hat = mod.postprocess_window_pair(
+                np.array([-5.0, 10.0, 20.0]),
+                np.array([3.0, 15.0, -4.0]),
+            )
+            assert np.allclose(r_hat, [0.0, 10.0, 20.0])
+            assert np.allclose(f_hat, [0.0, 10.0, 0.0])
+
+            # Holm-Bonferroni check
+            p_adj = mod.holm_bonferroni([0.001, 0.04, 0.02])
+            assert p_adj == [0.003, 0.04, 0.04]
+
+

@@ -96,3 +96,17 @@ $$q(\boldsymbol{\lambda}) = \sum_{j=1}^4 \left(\frac{c_j}{\hat{v}_j} + g_j(\bold
 3. **同一语义下的竞争基线对比（`Week1_v2`, $K=8$, 相同剩余加性包络与 `C_r=50, C_f=10`）**：
    - **可比加性工作负载**：在 420 天滚动 Requests/Failures 查询上，`SDG-MH` 的 1d / 7d Requests RMSE 为 **`2310.5 ± 29.7` / `10919.2 ± 324.2`**，显著优于严格对齐相同包络的 `Tree-2l (Honaker GLS)`（`4378.6 ± 61.7` / `12736.0 ± 199.4`）、`W-BD-30 (MH-Calibrated)`（`3565.6 ± 236.3` / `15477.0 ± 1310.2`）和 `Tree-U`（`27742.4` / `50365.7`）；在 90d Requests 上所有方法趋近共同的 `C_r=50` 裁剪偏置下界（`~129k`），而在低偏置指标 `Failures 30d` 上 `SDG-MH`（`7667.4 ± 510.3`）仍优于 `Tree-2l`（`9682.6 ± 777.3`）。
    - **非可比性声明**：`Tree` 与 `W-BD` 无法直接支撑带 $k=3$ 任务裁剪的跨期去重 Distinct 直方图，表中严格标为 `N/A (Non-Additive Union)`；`W-BD-30` 若仅按单点 $\bar\rho_{\text{add}}(30)$ 校准将在 $h=365$ 超标 `1.35x`。
+
+---
+
+## Appendix F: v3 最终一致性复核修正（128 位单射种子、统一后处理、同查询日期口径与 Holm-Bonferroni 检验，`long_horizon_420d_v3_final`）
+
+1. **修复 PR #6 `uint32` 碰撞并实证零碰撞（50,520 个实验种子）**：
+   - 将 `derive_crn_seed` 升级为 128 位单射位打包编码 `(ds << 96) | (mc << 64) | (day << 32) | stream_id`（`stream_id < 500000` 以容纳 `CalendarJob +500003` 任务偏移）；全量 50,520 个种子检测实现 **0 碰撞**。
+2. **统一全方法窗口级非负与一致性后处理（`Failures <= Requests`）**：
+   - `SDG-MH`、`Tree-2l`、`Tree-U` 与 `W-BD-30` 对每个滚动窗口统一先求和再执行单次 $\hat R = \max(0, \tilde R), \hat F = \min(\hat R, \max(0, \tilde F))$；消除了 PR #6 中 `W-BD-30` 日内正裁剪偏置累积（`Failures 30d` 由 `20410.14` 修正为 `14172.86`，`-30.56%`；`90d` `-53.94%`）及 `Tree-U` `Failures 1d` 越界（`-47.27%`）。
+3. **同查询请求日期集合下的发布日、最近可用结果与陈旧度分离（`B` vs `D`）**：
+   - 在完全相同的每日仪表盘查询集合下（$K=8$，`df=7`）：7d Distinct（$p_{\text{holm}} \le 0.0001$，Wilcoxon $p=0.0078$，`8/8` 种子）与 90d Distinct（$p_{\text{holm}} = 0.0000$，`8/8` 种子）在**发布日**与**同日查询**下均显著改善；30d 同日平均陈旧度相近（`2.99d` vs `3.00d`），但 `common_daily_30d_served_mape` 仍因噪声/工作周期波动保持统计不显著（$p_{\text{holm}} = 1.000$，Wilcoxon $p = 0.547$–`0.742`），而若业务锚定周日固定查询，非约束相位 $\phi_{30}=4$ 带来显式 `+3.0d` 陈旧度及 `+7.55` 滞后漂移 RMSE。
+4. **有限时域 vs 无限时域证书界线**：
+   - 竞争基线性能对比严格限定于共同 `[1, 420]` 时域、共同剩余可加 zCDP 包络及共同滚动可加查询；明确披露 `SDG-MH` 持有无限时域（$h \ge 1$）证书，而 `Tree (L=9)` 仅覆盖 $T \le 512$ 有限二叉树。
+   - 理论与实验三重分层边界：`DECIMAL100_DIRECTED_ROUNDING` 在有条件输入假设（`rho_bars` 为操作性 RHS 上界、$c_j \ge 0, l_j > 0$）下构成严格 100 位浮点舍入证书，不可替代符号无限闭式解（`is_math_global_optimal = False`）。
