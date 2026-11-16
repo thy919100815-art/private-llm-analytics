@@ -27,6 +27,8 @@ import numpy as np
 
 from enum import Enum
 
+from private_llm_analytics.sdg_mh.calendar_accounting import PRIVACY_LEDGER_TOL
+
 
 class ReleaseStatus(str, Enum):
     """Lifecycle status of privacy release records in UnifiedPrivacyLedger."""
@@ -178,12 +180,33 @@ class UnifiedPrivacyLedger:
         with self._lock:
             return self._release_ids.get(release_id)
 
+    @staticmethod
+    def conservative_epsilon_drift_bound(
+        min_rho: float,
+        delta: float = 1e-6,
+        rho_tol: float = PRIVACY_LEDGER_TOL,
+    ) -> float:
+        """Compute conservative upper bound on (epsilon, delta) drift from rho_tol.
+
+        Since eps(rho) = rho + 2 * sqrt(rho * ln(1/delta)) is concave for rho > 0,
+        by tangent linearization:
+          eps(rho + rho_tol) - eps(rho) <= (1 + sqrt(ln(1/delta) / rho)) * rho_tol.
+        For Default/Original commitments (min_rho >= 0.0141986, delta=1e-6, rho_tol=1e-12),
+        this drift is bounded by ~3.22e-11 in epsilon.
+        """
+        if min_rho <= 0.0 or rho_tol <= 0.0:
+            return 0.0
+        c = math.log(1.0 / delta)
+        deriv = 1.0 + math.sqrt(c / min_rho)
+        return float(deriv * rho_tol)
+
     def admit_and_commit_batch(
         self,
         candidate_records: Sequence[ReleaseRecord],
         commitment_bound: Optional[Any] = None,
         as_status: str = ReleaseStatus.COMMITTED.value,
         allow_unconfigured_policy: bool = False,
+        strict_zero_tol: bool = False,
     ) -> List[ReleaseRecord]:
         """Atomically validate privacy envelope and commit a batch of release records.
 
@@ -382,7 +405,8 @@ class UnifiedPrivacyLedger:
                         curr_rho = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
 
                         bound_val = bound.rho_bar(h) if hasattr(bound, "rho_bar") else (bound(h) if callable(bound) else bound[h])
-                        if curr_rho > bound_val + 1e-9:
+                        eff_tol = 0.0 if strict_zero_tol else PRIVACY_LEDGER_TOL
+                        if curr_rho > bound_val + eff_tol:
                             raise PrivacyAdmissionError(
                                 f"Group atomic privacy admission rejected: breached bound at h={h}: "
                                 f"projected={curr_rho:.8f} > bound={bound_val:.8f}"
@@ -476,7 +500,7 @@ class UnifiedPrivacyLedger:
                 curr_rho = float(np.max(np.cumsum(diff)[1 : max_s + 1]))
 
                 bound_val = bound.rho_bar(h) if hasattr(bound, "rho_bar") else (bound(h) if callable(bound) else bound[h])
-                if curr_rho > bound_val + 1e-9:
+                if curr_rho > bound_val + PRIVACY_LEDGER_TOL:
                     return False, f"Breached privacy bound at h={h}: projected={curr_rho:.6f} > bound={bound_val:.6f}"
 
             return True, "Admitted under privacy envelope"
@@ -732,7 +756,7 @@ class UnifiedPrivacyLedger:
         for h, bound in max_profile_bound.items():
             proj_r = trial_ledger.compute_rho(h)
             projected[h] = proj_r
-            if proj_r > bound + 1e-9:
+            if proj_r > bound + PRIVACY_LEDGER_TOL:
                 return (
                     False,
                     f"Revisit gate rejected: at horizon h={h}, projected rho={proj_r:.6f} exceeds limit E_bar={bound:.6f}.",
@@ -805,7 +829,7 @@ class UnifiedPrivacyLedger:
                 bound_h = float(max_profile_bound_fn_or_array[h])
 
             proj_r = float(full_rhos[h])
-            if proj_r > bound_h + 1e-9:
+            if proj_r > bound_h + PRIVACY_LEDGER_TOL:
                 exceeded_horizons.append(h)
                 ratio = proj_r / bound_h if bound_h > 0 else float("inf")
                 if ratio > max_excess_ratio:

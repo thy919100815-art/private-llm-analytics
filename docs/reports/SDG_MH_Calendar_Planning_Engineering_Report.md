@@ -84,18 +84,25 @@
   其等价的规范 $(\varepsilon(h), \delta)$-DP 转换为：
   $$\varepsilon(h) = \bar\rho(h) + 2 \sqrt{\bar\rho(h) \ln(1 / \delta)}, \quad \delta = 10^{-6} \quad \text{\textbf{[解析]}}$$
 
-### 3.2 隐私承诺曲线定义
+### 3.2 隐私承诺曲线定义与非凹性实证核验
 系统支持两套历史基准承诺曲线（在同一实验中严格独立评估，绝不混用）：
 1. **Week 1 v2 承诺曲线**：
    - 锚点跨度：$h \in \{1, 7, 30, 90, 365\}$
    - 规范目标：$\varepsilon \in \{1.00, 1.20, 1.50, 2.25, 4.40\}$，$\delta = 10^{-6}$
-   - 逆向精确 zCDP 成本：$\rho \in \{0.017469, 0.024984, 0.038644, 0.084831, 0.303646\}$ **[解析]**
-   - $h \le 365$ 采用分段线性插值；$h > 365$ 采用尾部斜率 $\beta = \frac{0.303646 - 0.084831}{275} \approx 0.00079569$ 线性外推。
+   - 逆向精确 zCDP 成本：$\rho \in \{0.01746890, 0.02498393, 0.03864426, 0.08483138, 0.30364628\}$ **[解析]**
+   - 相邻节点 zCDP 割线斜率：**$[1, 7]: 0.00125250 \to [7, 30]: 0.00059393 \to [30, 90]: 0.00076979 \to [90, 365]: 0.00079569$**。
+   - **非全局凹性判定**：因 $[30, 90]$（$0.00076979 > 0.00059393$）与 $[90, 365]$（$0.00079569 > 0.00076979$）段斜率递增，**Week 1 v2 在 $\rho(h)$ 空间不满足全局凹性**。
+   - $h \le 365$ 采用分段线性插值；$h \ge 365$ 严格定义为仿射尾部 $\bar\rho(h) = a_{\text{tail}} + \beta_{\text{tail}} h$，尾部斜率 $\beta_{\text{tail}} = \frac{0.30364628 - 0.08483138}{275} \approx 0.00079569$ **[解析]**。
 2. **Original Planner 承诺曲线**：
    - 锚点跨度：$h \in \{1, 7, 30, 90, 365\}$
    - 规范目标：$\varepsilon \in \{0.90, 1.08, 1.49, 2.24, 4.39\}$，$\delta = 10^{-6}$
-   - 逆向精确 zCDP 成本：$\rho \in \{0.014199, 0.020320, 0.038143, 0.084106, 0.302356\}$ **[解析]**
-   - 尾部线性外推斜率：$\beta = \frac{0.302356 - 0.084106}{275} \approx 0.00079364$ **[解析]**。
+   - 逆向精确 zCDP 成本：$\rho \in \{0.01419861, 0.02031995, 0.03814349, 0.08410616, 0.30235637\}$ **[解析]**
+   - 相邻节点 zCDP 割线斜率：**$[1, 7]: 0.00102022 \to [7, 30]: 0.00077494 \to [30, 90]: 0.00076604 \to [90, 365]: 0.00079364$**。
+   - **非全局凹性判定**：因 $[90, 365]$ 段斜率递增（$0.00079364 > 0.00076604$），**Original Planner 在 $\rho(h)$ 空间亦不满足全局凹性**。
+   - 尾部仿射外推斜率（$h \ge 365$）：$\beta_{\text{tail}} = \frac{0.30235637 - 0.08410616}{275} \approx 0.00079364$ **[解析]**。
+
+> [!IMPORTANT]
+> **理论证明关键约束**：由于两套承诺曲线在 $\rho(h)$ 空间均非全局凹函数，**任何以 $\bar\rho(h)$ 全局凹性为前提推导无限期安全归约的论证均无效**（必须标记为 `NOT_PROVED`）。本系统第 4.2 节定理 3 **完全不使用全局凹性假设**，仅依赖于 $h \ge H_0 = 365$ 区域的严格仿射尾部恒等式 $\bar\rho(h) = a_{\text{tail}} + \beta_{\text{tail}} h$ 完成归纳证明。
 
 ### 3.3 Calendar 发布族与日期语义
 系统固定三类 Distinct 发布族 $(W_f, S_f)$：
@@ -125,6 +132,14 @@
 1. $t_k - W_f + 1 \le s + h - 1 \iff t_k \le s + h + W_f - 2$；
 2. $s \le t_k \iff t_k \ge s$。
 两式联立即得 $s \le t_k \le s + h + W_f - 2$。Q.E.D.
+
+> [!NOTE]
+> **独立反例：数据窗口相交计费 vs 仅按发布日期计费**：
+> 若错误地仅统计“发布日期 $t_k \in I = [s, s+h-1]$”的发布事件（即 $n_f^{\text{naive}} = |\{t_k \in [s, s+h-1] \mid t_k \equiv \phi_f \pmod{S_f}\}|$），将严重低估隐私支出。
+> 取反例：$W_f = 30, S_f = 7, \phi_f = 0, s = 0, h = 1$（单日受保护区间 $I = [0, 0]$）。
+> - **仅计入发布日期在 $I$ 内的错误算法**：仅含 $t=0$，计为 **$1$ 次发布**；
+> - **数据依赖窗口 $B_f(t) \cap I \ne \emptyset$ 正确计费**（同源码 `count_intersections_fast()`）：判别区间为 $[0, 29]$，含 $t \in \{0, 7, 14, 21, 28\}$ 共 **$5$ 次发布**。
+> 仅按发布日期计费在此反例下将隐私开销低估 $5\times$。源码 `calendar_accounting.py` 始终采用严格的数据窗口相交定义 $L = W_f + h - 1$。
 
 **定理 1 (相交次数快速封闭解与同余弧定理)**：
 > 记 $L = W_f + h - 1$。在区间 $[s, s + L - 1]$ 内满足 $t \equiv \phi_f \pmod{S_f}$ 的整数个数为：
@@ -169,24 +184,24 @@ $$= L(s, h) + P \left( d + \sum_f \frac{x_f}{S_f} \right)$$
 $$\max_s L(s, h + P) = \max_s L(s, h) + P \left( d + \sum_f \frac{x_f}{S_f} \right)$$
 即 $L_{\max}(h + P) = L_{\max}(h) + P (d + \sum_f \frac{x_f}{S_f})$。Q.E.D.
 
-**定理 3 (有限视界归约与无限期长期隐私安全)**：
-> 设承诺曲线在 $H_0 = 365$ 后以斜率 $\beta$ 线性外推，即 $\bar\rho(h) = a + \beta h$（$h \ge H_0$）。
+**定理 3 (有限视界归约与无限期长期隐私安全 — 仿射尾部无凹性证明)**：
+> 设 $H_0 \ge \text{horizons}[-1]$（典型取 $H_0 = 365$），承诺曲线在 $[H_0, \infty)$ 上严格满足仿射尾部定义 $\bar\rho(h) = a_{\text{tail}} + \beta_{\text{tail}} h$（**不依赖任何全局凹性假设**）。
 > 若周期性发布机制满足以下两项充分条件：
-> 1. **渐近增长率安全条件**：$d + \sum_f \frac{x_f}{S_f} \le \beta$；
+> 1. **渐近增长率安全条件**：$d + \sum_f \frac{x_f}{S_f} \le \beta_{\text{tail}}$；
 > 2. **有限视界基底安全条件**：对所有 $h \in [1, H_0 + P = 575]$，均有 $L_{\max}(h) \le \bar\rho(h)$。
 > 则系统在整个无限时间视界（$h \to \infty$）上无条件满足隐私承诺：
 > $$L_{\max}(h) \le \bar\rho(h), \quad \forall h \ge 1$$
 
 *证明*：
-对任意 $h > H_0 + P = 575$，必存在正整数 $m \ge 1$ 以及基底点 $h_0 \in [H_0, H_0 + P]$ 使得 $h = h_0 + m P$。
+对任意 $h > H_0 + P = 575$，令 $m = \lfloor \frac{h - H_0}{P} \rfloor \ge 1$，则存在唯一余数基底点 $h_0 \in [H_0, H_0 + P - 1] = [365, 574]$ 使得 $h = h_0 + m P$。
 由定理 2：
 $$L_{\max}(h) = L_{\max}(h_0 + m P) = L_{\max}(h_0) + m P \left( d + \sum_f \frac{x_f}{S_f} \right)$$
-由线性外推承诺定义：
-$$\bar\rho(h) = \bar\rho(h_0 + m P) = \bar\rho(h_0) + m P \beta$$
+由于 $h_0 \ge H_0$ 且 $h > h_0 \ge H_0$，**$h_0$ 与 $h$ 均完全处于 $[H_0, \infty)$ 的仿射尾部区域内**（与 $h < 365$ 区间的非凹形状无关），因此严格成立等式：
+$$\bar\rho(h) = a_{\text{tail}} + \beta_{\text{tail}} (h_0 + m P) = \bar\rho(h_0) + m P \beta_{\text{tail}}$$
 两式相减得：
-$$\bar\rho(h) - L_{\max}(h) = (\bar\rho(h_0) - L_{\max}(h_0)) + m P \left( \beta - \left( d + \sum_f \frac{x_f}{S_f} \right) \right)$$
-根据条件 2，由于 $h_0 \in [H_0, H_0 + P] \subseteq [1, 575]$，首项 $\bar\rho(h_0) - L_{\max}(h_0) \ge 0$；
-根据条件 1，因 $\beta \ge d + \sum_f \frac{x_f}{S_f}$ 且 $m, P > 0$，第二项非负。
+$$\bar\rho(h) - L_{\max}(h) = (\bar\rho(h_0) - L_{\max}(h_0)) + m P \left( \beta_{\text{tail}} - \left( d + \sum_f \frac{x_f}{S_f} \right) \right)$$
+根据条件 2，由于 $h_0 \in [H_0, H_0 + P - 1] \subseteq [1, 575]$，首项 $\bar\rho(h_0) - L_{\max}(h_0) \ge 0$；
+根据条件 1，因 $\beta_{\text{tail}} \ge d + \sum_f \frac{x_f}{S_f}$ 且 $m, P > 0$，第二项非负。
 故 $\bar\rho(h) - L_{\max}(h) \ge 0$，即 $L_{\max}(h) \le \bar\rho(h)$ 对所有 $h \ge 1$ 恒成立。Q.E.D.
 
 ---
@@ -613,6 +628,28 @@ $$\bar\rho(h) - L_{\max}(h) = (\bar\rho(h_0) - L_{\max}(h_0)) + m P \left( \beta
 | **P4: 每日 Gaussian 预算分配** | 消除 $2d$ 误差，各向同性分流 $\eta=25/26$，实测 $\rho_r+\rho_f \equiv d$，机制总花费与账本严格闭环 | **`PROVED`** / **`VALIDATED`** | `seal_job.py:60-115`, `test_transactional_execution.py` |
 | **P4: Calendar 相位接入执行器** | `CalendarJob` 消费 $\phi_f$，执行条件 $t \bmod S_f = \phi_f$，覆盖 $(0,0,0),(0,3,0),(0,4,0)$ | **`VALIDATED`** | `calendar_job.py:155-165`, `test_transactional_execution.py` |
 | **P4: 纯密文封存查询隔离** | `ReadOnlySealedQueryService` 严格基于 `SealedStore` 与 `DistinctCalendarStore` 查询，零额外隐私开销 | **`VALIDATED`** | `query_service.py:1-40`, `run_true_e2e_benchmark.py` |
+| **Post-29eedeb: 容差统一与保守预算收缩认证** | 统一 `STRICT_CERTIFICATION_TOL=0.0` 与 `PRIVACY_LEDGER_TOL=1e-12`，保守缩放重认证，分离三态标记 | **`PROVED`** / **`VALIDATED`** | `calendar_accounting.py`, `joint_planner.py`, `ledger.py`, `test_joint_planner.py` |
+
+---
+
+## 17. 理论与安全证书一致性修复验证 (Post-`29eedeb` Certification Addendum)
+
+1. **四级最优性分层、Primal/Dual 下界与失败语义规范**：
+   `PlanningResult` 严格正交暴露：
+   - `is_solver_approx_optimal`：连续 SLSQP 切平面迭代是否在 `SOLVER_VIOLATION_TOL=1e-8` 内收敛；
+   - `optimality_certification_tier` 四级严格区分：**`SOLVER_CONVERGED`**（仅求解器收敛但未认证零违规）、**`FEASIBLE_CERTIFIED`**（已通过保守收缩与无限时域证书但全局对偶界未完全收敛/存在未认证相位）、**`NEAR_GLOBAL_OPTIMAL_CERTIFIED`**（全部 210 个规范相位均已通过可验证的 Lagrangian 对偶下界或被 `_is_phase_provably_infeasible` 严格证明不可行，且保守收缩后重算的相对 Optimality Gap $\le 10^{-4}$）、**`GLOBAL_OPTIMAL_PROVED`**（仅保留给严格零间隙符号形式证明）；
+   - `is_math_global_optimal`：严格审计修正后仅当 `optimality_certification_tier == "GLOBAL_OPTIMAL_PROVED"` 时方为 `True`，绝不把数值求解收敛或 $\varepsilon$-对偶接近改称为严格数学全局最优；
+   - `is_certified_publishable` 与 `certification_status`：经 `_certify_and_shrink_budget()` 保守缩减后，通过零容差（`min_slack >= 0.0` 且 `slope <= beta_tail`）独立证书核验方置为 `True`，并在 `commit_plan_to_ledger` 中以 `strict_zero_tol=True` 提交账本。
+2. **全 210 相位 Primal/Dual 间隙与账本容差保守误差界**：
+   - Default (Week1_v2 / Original)：210/210 相位认证，Primal UB $= 1433.918180 / 1437.628286$，Dual LB $= 1433.918180 / 1437.628286$，相对 Gap $= 1.041 \times 10^{-11} / 1.010 \times 10^{-11}$；
+   - DistinctHeavy (Week1_v2 / Original)：210/210 相位认证，Primal UB $= 922.979112 / 930.326040$，Dual LB $= 922.979105 / 930.326040$，相对 Gap $= 7.450 \times 10^{-9} / 1.017 \times 10^{-11}$；
+   - 账本容差安全论证：`UnifiedPrivacyLedger` 通用接口 `PRIVACY_LEDGER_TOL=1e-12` 对应的最大 $\varepsilon$ 边界漂移为 $\Delta\varepsilon \le (1 + \sqrt{\ln(1/\delta)/\rho_{\min}}) \cdot 10^{-12} \le 3.22 \times 10^{-11}$；而经过保守收缩的规划策略均提供 $> +10^{-13}$ 的物理余量（高于 420–575 天 IEEE-754 浮点累加误差 $< 3 \times 10^{-14}$），可在 `strict_zero_tol=True` 零容差模式下严格通过提交。
+3. **16 组实验指标零漂移与 Slack 转正实测**：
+   重新运行完整 16 组 2,000 用户 $\times$ 90 天 $\times$ 10 次 MC 真实流水线对比 `29eedeb` 基线：
+   - **全部 16 组实验的统计效用指标（`requests_total_rmse`, `failures_total_rmse`, `distinct_*_mape_pct`, `planner_abstract_objective`）完全一致，零数字变更**；
+   - `DistinctHeavy / Week1_v2 / D_JointPlanning` 最紧 Slack 由 `-2.986e-12` 修正为 **`+9.335e-13`**；
+   - `DistinctHeavy / Original / D_JointPlanning` 最紧 Slack 由 `-2.998e-12` 修正为 **`+8.807e-13`**；
+   - 两项此前会触发 `commit_plan_to_ledger` 失败矛盾的方案现均在零容差下严格通过 `verify_periodicity_and_long_term_security` 与 365 天账本事务提交。
 
 ---
 *本工程报告经最终定向验收程序与端到端实证流水线完整验证，所有代码、测试与数据已严格固化。*

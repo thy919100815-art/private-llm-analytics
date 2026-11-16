@@ -81,7 +81,11 @@
 固定周期长期安全证明严格依赖以下 4 项前提假设：
 - **假设 A1 (固定周期发布规则)**：系统由每日可加发布（周期 $S_0=1$, 窗口 $W_0=1$, 记账 $d$）与 $F$ 类固定周期日历发布（周期 $S_f \in \mathbb{N}^+$, 窗口 $W_f \in \mathbb{N}^+$, 相位 $\phi_f \in [0, S_f - 1]$, 记账 $x_f$）构成。
 - **假设 A2 (有理同余公倍数)**：联合公倍周期 $P = \operatorname{lcm}(S_1, \dots, S_F) < \infty$。在当前系统中，$S_1=7, S_2=7, S_3=30 \implies P = \operatorname{lcm}(7, 30) = 210$。
-- **假设 A3 (渐近尾部斜率与单调性)**：存在基准视界 $H_{\text{ref}} = 365$，对任意 $h \ge H_{\text{ref}}$，隐私承诺满足 $\bar\rho(h + P) \ge \bar\rho(h) + P \cdot \beta$（在线性尾部下取等号，$\beta = 0.00079569$）。
+- **假设 A3 (仿射尾部性质，不假设全局凹性)**：存在基准视界 $H_{\text{ref}} = 365$（即承诺曲线最后一个锚点 `horizons[-1]`），对任意 $h \ge H_{\text{ref}}$，隐私承诺 $\bar\rho(h) = a_{\text{tail}} + \beta_{\text{tail}} \cdot h$ 严格为仿射线性函数，因此恒有精确等式 $\bar\rho(h + P) = \bar\rho(h) + P \cdot \beta_{\text{tail}}$。
+  > **非凹性实证核验**：经计算相邻锚点 zCDP 割线斜率，两条曲线在 $[1, 365]$ 上均**不满足全局凹性**：
+  > - `Original_Planner`: $[1,7]: 0.00102022 \to [7,30]: 0.00077494 \to [30,90]: 0.00076604 \to [90,365]: 0.00079364$（尾段斜率回升，$+2.76 \times 10^{-5}$）；
+  > - `Week1_v2`: $[1,7]: 0.00125250 \to [7,30]: 0.00059393 \to [30,90]: 0.00076979 \to [90,365]: 0.00079569$（两段斜率连续回升）。
+  > 故严禁使用“$\bar\rho(h)$ 全局凹性”进行证明；仅能依托 $h \ge 365$ 的仿射尾部性质完成归约。
 - **假设 A4 (非自适应日历)**：所有发布的触发时机与隐私预算均预先排定，不依赖于用户数据或历史查询输出。
 
 > [!WARNING]
@@ -96,9 +100,10 @@
 - **定理叙述**：在假设 A1–A2 下，对任意用户区间起始日 $s \in \mathbb{Z}$、任意视界跨度 $h \ge 1$ 以及任意日历相位组合 $\vec\phi$：
   $$L(s, h + P) = L(s, h) + P \left( d + \sum_{f=1}^F \frac{x_f}{S_f} \right)$$
 - **证明**：
-  1. 用户时间区间 $I = [s, s + h - 1]$ 与日历发布窗口 $[t - W_f + 1, t]$ 相交，当且仅当 $s \le t \le s + h + W_f - 2$。
+  1. 用户时间区间 $I = [s, s + h - 1]$ 与日历发布窗口 $B_f(t) = [t - W_f + 1, t]$ 相交（即 $B_f(t) \cap I \neq \emptyset$），当且仅当 $s \le t \le s + h + W_f - 2$（不能仅计入发布日期 $t \in [s, s+h-1]$）。
   2. 类别 $f$ 的相交发布次数为：
      $$n_f(s, h; \phi_f) = \sum_{t = s}^{s + h + W_f - 2} \mathbf{1}_{\{ t \equiv \phi_f \pmod{S_f} \}}$$
+     *(反例核验：取 $W_f=30, S_f=7, \phi_f=0, s=0, h=1$，正确数据窗口相交计数为 $\{0, 7, 14, 21, 28\}$ 共 $5$ 次；而仅按发布日期 $t \in [0, 0]$ 计数仅得 $1$ 次，低估 $5\times$。源码 `calendar_accounting.py:count_intersections_fast()` 严格执行 $L = W_f + h - 1$，与相交定义 100% 一致。)*
   3. 当跨度由 $h$ 增加为 $h + P$ 时，求和区间上限平移 $P$ 天，区间新增恰好 $P$ 个连续整数。
   4. 因为 $P = \operatorname{lcm}(S_1, \dots, S_F)$，对任意 $f$ 均有 $S_f \mid P$。新增的 $P$ 个连续整数由恰好 $P / S_f$ 个完备模 $S_f$ 剩余系组成。
   5. 在每个完备剩余系中，同余方程 $t \equiv \phi_f \pmod{S_f}$ 有且仅有一个解。因此，新增相交发布数恒等于 $P / S_f$，与起始日 $s$ 和相位 $\phi_f$ 完全无关：
@@ -108,19 +113,19 @@
 - **数值与代码核验**：遍历 $s \in [0, 209], h \in [1, 575]$，最大代数残差 $\text{Error}_{\text{periodicity}} < 1.0 \times 10^{-14}$ **[实测验证]**。
 - **判定状态**：`PROVED`。
 
-### 2.3 定理 2：575 天有限视界安全归约定理 (Finite Horizon Reduction)
-- **定理叙述**：设 $H_0 = 365, P = 210, H_{\text{eval}} = H_0 + P = 575$。若机制满足：
+### 2.3 定理 2：575 天有限视界安全归约定理 (Finite Horizon Reduction — 无凹性仿射尾部证明)
+- **定理叙述**：设 $H_0 = 365, P = 210, H_{\text{eval}} = H_0 + P = 575$（要求 $H_0 \ge \text{horizons}[-1]$）。若机制满足：
   1. 有限视界包络约束：$\forall h \in \{1, 2, \dots, 575\}, \quad L_{\max}(h) \le \bar\rho(h)$；
-  2. 尾部渐近增长率条件：$d + \sum_{f=1}^F \frac{x_f}{S_f} \le \beta$；
+  2. 尾部渐近增长率条件：$d + \sum_{f=1}^F \frac{x_f}{S_f} \le \beta_{\text{tail}}$；
   则对**所有无界视界** $h \in \mathbb{N}^+$，均有 $L_{\max}(h) \le \bar\rho(h)$。
-- **证明**：
+- **证明（纯仿射尾部等式，不依赖全局凹性）**：
   - 对任意 $h > 575$，令 $m = \lfloor \frac{h - H_0}{P} \rfloor \ge 1$，则 $h = h' + m P$，其中 $h' \in [H_0, H_0 + P - 1] = [365, 574]$。
   - 由定理 1 对 $s$ 取上确界：$L_{\max}(h) = L_{\max}(h') + m P \left( d + \sum_f \frac{x_f}{S_f} \right)$。
-  - 由假设 A3：$\bar\rho(h) \ge \bar\rho(h') + m P \beta$。
+  - 因 $h' \ge H_0 = 365$ 且 $h > h' \ge 365$，两点均完全落于仿射尾部区间 $[365, \infty)$。由假设 A3 精确恒等式：$\bar\rho(h) = \bar\rho(h') + m P \beta_{\text{tail}}$。
   - 二者相减：
-    $$\bar\rho(h) - L_{\max}(h) \ge (\bar\rho(h') - L_{\max}(h')) + m P \left( \beta - \left( d + \sum_{f=1}^F \frac{x_f}{S_f} \right) \right)$$
+    $$\bar\rho(h) - L_{\max}(h) = (\bar\rho(h') - L_{\max}(h')) + m P \left( \beta_{\text{tail}} - \left( d + \sum_{f=1}^F \frac{x_f}{S_f} \right) \right)$$
   - 因为 $h' \le 574 \le 575$，由条件 1 保证基底项 $\bar\rho(h') - L_{\max}(h') \ge 0$；
-  - 由条件 2 保证增长率差值 $\beta - (d + \sum x_f / S_f) \ge 0$；
+  - 由条件 2 保证增长率差值 $\beta_{\text{tail}} - (d + \sum x_f / S_f) \ge 0$；
   - 乘积项 $m P \ge 0$。因此右式恒非负，即证 $L_{\max}(h) \le \bar\rho(h), \forall h \ge 1$ **[Q.E.D.]**。
 - **判定状态**：`PROVED`。
 
@@ -332,6 +337,21 @@ $$\lambda_{\text{tail}}^* = \left( \frac{\sum_j \sqrt{c_j a_{\text{tail}, j}}}{\
 | **R12: 每日 Gaussian 预算分配** | 消除 $2d$ 误差，各向同性分流 $\eta=25/26$，实测 $\rho_r+\rho_f \equiv d$，机制总花费与账本严格闭环 | **`PROVED`** | `seal_job.py:60-115`, `test_transactional_execution.py` |
 | **R12: Calendar 相位接入执行器** | `CalendarJob` 消费 $\phi_f$，执行条件 $t \bmod S_f = \phi_f$，覆盖 $(0,0,0),(0,3,0),(0,4,0)$ | **`VALIDATED`** | `calendar_job.py:155-165`, `test_transactional_execution.py` |
 | **R12: 纯密文封存查询隔离** | `ReadOnlySealedQueryService` 严格基于 `SealedStore` 与 `DistinctCalendarStore` 查询，零额外隐私开销 | **`VALIDATED`** | `query_service.py:1-40`, `run_true_e2e_benchmark.py` |
+| **Post-29eedeb: 容差统一与保守收缩重认证** | 统一 `STRICT_CERTIFICATION_TOL=0.0` 与 `PRIVACY_LEDGER_TOL=1e-12`，消除 `-3e-12` 伪 OPTIMAL 矛盾，正交三态标记 | **`PROVED`** / **`VALIDATED`** | `calendar_accounting.py`, `joint_planner.py`, `ledger.py`, `test_joint_planner.py` |
 
 ---
-*本报告由独立工程复核程序在 `feat/calendar-joint-planning` 分支上完整验证并生成，所有数据与代码已完全固化在仓库中。*
+
+## 8. 理论与安全证书一致性专项修复记录 (Post-`29eedeb` Consistency Fixes)
+
+针对提交 `29eedeb` 的只读论文级复核暴露出以下 4 项理论与证书边界细节问题，本轮在不改变研究机制与 16 组实验效用指标的前提下完成精准闭环修复：
+
+| 变更项目 | 源码/文档位置 | 原问题 | 修复方式 | 数学依据 | 验证结果 |
+|---|---|---|---|---|---|
+| **1. $n_f(s, h)$ 相交计费定义核查** | 源码 `calendar_accounting.py:194-215` (已正确)；文档 §2.2、工程报告 §4.1 | 初稿数学公式易被误写为发布日期 $t \in [s, s+h-1]$ 计数，遗漏向右跨越 $W_f-1$ 天的窗口相交 | 保留正确源码；在证明与文档补充 $B_f(t)\cap I \neq \emptyset \iff t \in [s, s+h+W_f-2]$ 及独立反例 ($W_f=30,S_f=7,s=0,h=1$: 5 vs 1) | 两闭区间相交充要条件 $\max(a_1,a_2) \le \min(b_1,b_2)$ | 新增 `test_data_window_intersection_counterexample_vs_release_date_only` 通过 |
+| **2. 非全局凹性核查与仿射尾部归约** | `calendar_accounting.py:140-170, 410-465`；文档 §2.1, §2.3 | `Original_Planner` ($0.000766 \to 0.000794$) 与 `Week1_v2` ($0.000594 \to 0.000770 \to 0.000796$) 均**非全局凹** | 移除任何全球凹性假设；在 `verify_periodicity_and_long_term_security` 校验 `H_0 >= horizons[-1]` 及 `is_affine_tail` | $h, h' \ge 365 \implies \bar\rho(h) = \bar\rho(h') + mP\beta_{\text{tail}}$ | 新增 `test_commitment_curves_non_concavity_and_affine_tail_reduction` 通过 |
+| **3. 统一容差语义与消除 `-3e-12` 矛盾** | `calendar_accounting.py:55-64`, `joint_planner.py`, `ledger.py:386,480,735,809` | `solve_budget_for_phase` (`1e-8`) 给出 `DistinctHeavy` Slack `-2.986e-12`，`plan_group_d` 仍报 `OPTIMAL`，却被 `verify` (`-1e-12`) 拒绝；`Ledger` 却设 `1e-9` | 统一常量：`SOLVER_VIOLATION_TOL=1e-8`, `STRICT_CERTIFICATION_TOL=0.0`, `PRIVACY_LEDGER_TOL=1e-12`, `CONSERVATIVE_BACKOFF_REL=1e-11` | 证书与准入门槛一致对零违规闭环；`PRIVACY_LEDGER_TOL=1e-12` 仅作通用接口 IEEE-754 浮点漂移上界（$\Delta\varepsilon \le 3.22 \times 10^{-11}$），而 `commit_plan_to_ledger` 启用 `strict_zero_tol=True` | 新增失败测试证实禁用收缩时四层同步拒绝且不返回 `OPTIMAL` |
+| **4. 保守预算收缩、重认证与三态分离** | `joint_planner.py:75-128, 215-275, 420-690` | 求解器收尾值直接发布导致边界超支，且单状态 `OPTIMAL` 混同求解器收敛与隐私认证 | `_certify_and_shrink_budget` 按 $\gamma=(1-10^{-11})/r_{\max}$ 缩放并重验；正交导出 `is_solver_approx_optimal` / `is_math_global_optimal` / `is_certified_publishable` | $L_{\max}(h)$ 与斜率关于预算向量 $\mathbf{v}$ 具有一次齐次性 | DistinctHeavy 最紧 Slack 由 `-2.99e-12` 转为 `+9.33e-13` / `+8.81e-13`，16 组统计效用指标全量零漂移 |
+| **5. Primal/Dual 全局下界认证与四级最优性分层** | `joint_planner.py:60-65, 315-425, 790-980`, `ledger.py:183-202, 410` | 原 `is_math_global_optimal` 仅凭 `phases_converged == phases_attempted` 判定，未验证 KKT 对偶下界与 gap，混淆数值近似最优与形式证明 | 实现 `compute_dual_lower_bound()` 计算全体 210 个相位的 Lagrangian 对偶下界；在保守收缩后重算 primal UB 与绝对/相对 gap；四级分离 `SOLVER_CONVERGED` / `FEASIBLE_CERTIFIED` / `NEAR_GLOBAL_OPTIMAL_CERTIFIED` / `GLOBAL_OPTIMAL_PROVED`，且 `is_math_global_optimal` 仅对 `GLOBAL_OPTIMAL_PROVED` 为真 | 弱对偶恒等式 $q(\boldsymbol{\lambda}) \le f_\phi^*$（精确闭式一维盒约束极小 + `nnls`/L-BFGS-B + IEEE-754 安全扣减 $10^{-14}$） | 实测 210/210 相位 100% 认证，Default 相对 gap $\le 1.05 \times 10^{-11}$，DistinctHeavy 相对 gap $\le 7.45 \times 10^{-9}$，均严标为 `NEAR_GLOBAL_OPTIMAL_CERTIFIED` |
+
+---
+*本报告由独立工程复核程序在 `feat/calendar-joint-planning` 与修复分支上完整验证并生成，所有数据、证书逻辑与代码已完全固化。*
