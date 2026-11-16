@@ -26,6 +26,7 @@ from private_llm_analytics.sdg_mh.joint_planner import (
     JointCalendarPlanner,
     PlannerConfig,
     PlanningResult,
+    certify_lagrangian_dual_bound_exact,
 )
 from private_llm_analytics.sdg_mh.ledger import (
     PrivacyAdmissionError,
@@ -358,3 +359,37 @@ def test_ledger_tolerance_conservative_drift_and_strict_zero_tol():
         [rec_exceed_5e13], commitment_bound=bound_h1, strict_zero_tol=False
     )
     assert len(committed) == 1
+
+
+def test_naive_float64_dual_deduction_fails_cancellation_counterexample():
+    """Counterexample proving float64 q*(1-1e-14) violates weak duality while Decimal directed rounding holds."""
+    A = np.array([[1.0, 1.0, 1.0, 1.0], [1.0, 1.0, 1.0, 1.0]], dtype=np.float64)
+    b = np.array([4.3, 4.3], dtype=np.float64)
+    c = np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float64)
+    l = np.array([1.075, 1.075, 1.075, 1.075], dtype=np.float64)
+    u = np.array([2.0, 2.0, 2.0, 2.0], dtype=np.float64)
+    lam = np.array([1e15 / 7.0, 1e14 / 3.0], dtype=np.float64)
+
+    # Naive IEEE-754 float64 evaluation with heuristic (1 - 1e-14)
+    g = A.T @ lam
+    naive_q = -float(np.dot(lam, b))
+    for j in range(4):
+        vj = float(np.clip(math.sqrt(c[j] / g[j]), l[j], u[j]))
+        naive_q += float(c[j] / vj + g[j] * vj)
+    naive_safe = naive_q * (1.0 - 1e-14)
+    primal_feasible_obj = float(np.sum(c / l))  # l is strictly feasible (4 * 1.075 == 4.3)
+
+    # Counterexample demonstrates naive (1 - 1e-14) overestimates primal optimum!
+    assert naive_safe > primal_feasible_obj + 0.1
+
+    # Directed-rounding 100-digit Decimal certificate rigorously respects weak duality
+    cert = certify_lagrangian_dual_bound_exact(A, b, c, l, u, lam, tail_row_index=None, prec=100)
+    assert cert["cert_method"] == "DECIMAL100_DIRECTED_ROUNDING"
+    assert cert["dual_lb"] <= primal_feasible_obj
+
+    # Verify compute_dual_lower_bound inside JointCalendarPlanner uses DECIMAL100_DIRECTED_ROUNDING
+    planner = JointCalendarPlanner(PlannerConfig(commitment=WEEK1_V2_CURVE))
+    res_b = planner.plan_group_b()
+    assert res_b.diagnostics.get("dual_cert_method") == "DECIMAL100_DIRECTED_ROUNDING"
+    assert res_b.dual_lower_bound <= res_b.primal_objective_certified
+
