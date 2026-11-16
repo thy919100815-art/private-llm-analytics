@@ -85,9 +85,17 @@ K_TASKS_PER_USER = 3
 
 
 def derive_crn_seed(data_seed: int, mc_trial: int, day: int, stream_id: int) -> int:
-    """Derive collision-free deterministic uint32 seed for Common Random Numbers pairing."""
-    ss = np.random.SeedSequence([int(data_seed), int(mc_trial), int(day), int(stream_id)])
-    return int(ss.generate_state(1, dtype=np.uint32)[0])
+    """Derive strictly injective 128-bit deterministic integer seed for Common Random Numbers pairing.
+
+    Replaces the earlier 32-bit truncated SeedSequence output (which exhibited birthday collisions
+    such as (3042, 2, 410, 1) and (5042, 4, 218, 2) -> 3129808095).
+    Each 32-bit field is bit-packed into a distinct 32-bit lane (stream_id < 500000 ensures the
+    +500003 task-histogram offset in CalendarJob remains strictly inside the lowest lane).
+    """
+    ds, mc, d, st = int(data_seed), int(mc_trial), int(day), int(stream_id)
+    if not (0 <= ds < (1 << 32) and 0 <= mc < (1 << 32) and 0 <= d < (1 << 32) and 0 <= st < 500000):
+        raise ValueError(f"Seed tuple out of injective 128-bit packing range: {(ds, mc, d, st)}")
+    return (ds << 96) | (mc << 64) | (d << 32) | st
 
 
 def make_valid_date_str(day: int, start_year: int = 2025) -> str:

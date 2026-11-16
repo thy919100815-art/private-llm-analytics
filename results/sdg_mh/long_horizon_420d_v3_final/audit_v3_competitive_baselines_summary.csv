@@ -1,0 +1,41 @@
+method,privacy_horizon_scope,calibration_scope,metric,K_seeds,M_mc_per_seed,mean,seed_level_sd,seed_level_ci95,within_mc_sd,between_pop_sd,icc
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_1d_rmse,8,5,2314.546,38.5715,32.2466,63.1982,26.248,0.1471
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_7d_rmse,8,5,11034.3123,312.5531,261.301,542.6945,196.9416,0.1164
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_30d_rmse,8,5,43866.7665,1491.9258,1247.2812,2402.7506,1034.9881,0.1565
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_90d_rmse,8,5,126664.7981,4909.2425,4104.2294,7363.301,3641.0192,0.1965
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_1d_rmse,8,5,1159.3726,34.5763,28.9065,56.8422,23.4374,0.1453
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_7d_rmse,8,5,3244.5137,210.8159,176.2465,429.8579,86.532,0.0389
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_30d_rmse,8,5,7468.4078,697.4862,583.113,1370.1322,333.2184,0.0558
+SDG-MH (D_JointPlanning),"Infinite h >= 1 (evaluated [1, 420])",Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_90d_rmse,8,5,14003.274,1186.4716,991.915,3083.5071,0.0,0.0
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_1d_rmse,8,5,4378.5594,76.7812,64.1907,156.1393,31.929,0.0401
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_7d_rmse,8,5,12716.7032,211.0571,176.4482,543.4222,0.0,0.0
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_30d_rmse,8,5,44587.252,1105.6716,924.3646,2393.3744,277.2393,0.0132
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_90d_rmse,8,5,126186.4723,3839.4784,3209.8843,7934.7019,1466.184,0.033
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_1d_rmse,8,5,2724.1195,61.1176,51.0956,114.9564,33.0509,0.0763
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_7d_rmse,8,5,5409.2774,159.031,132.9532,459.864,0.0,0.0
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_30d_rmse,8,5,9467.7891,596.7602,498.904,1303.5568,127.5567,0.0095
+Tree-2l (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_90d_rmse,8,5,16153.9823,1464.2003,1224.1021,3813.0922,0.0,0.0
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),requests_1d_rmse,8,5,4406.9608,77.4528,64.7522,157.3451,32.3643,0.0406
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),requests_7d_rmse,8,5,12753.3767,211.2218,176.5859,547.4358,0.0,0.0
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),requests_30d_rmse,8,5,44612.6138,1109.5902,927.6406,2412.2603,259.5966,0.0114
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),requests_90d_rmse,8,5,126197.5259,3855.6158,3223.3755,7997.7312,1439.803,0.0314
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),failures_1d_rmse,8,5,2742.9683,61.2285,51.1883,115.9489,32.5592,0.0731
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),failures_7d_rmse,8,5,5450.3454,160.2996,134.0138,463.6947,0.0,0.0
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),failures_30d_rmse,8,5,9530.3003,602.9962,504.1175,1316.2915,130.6897,0.0098
+Tree-2l (Daily-d Parity),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon h*d_SDG (tight_h=384),failures_90d_rmse,8,5,16253.4022,1475.7118,1233.726,3842.0191,0.0,0.0
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_1d_rmse,8,5,27907.0112,632.4138,528.7112,1022.2139,436.9931,0.1545
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_7d_rmse,8,5,49855.2631,719.2942,601.345,1951.8652,0.0,0.0
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_30d_rmse,8,5,72369.6952,1553.3373,1298.6225,4218.3786,0.0,0.0
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_90d_rmse,8,5,138543.2551,4696.3115,3926.2147,9646.6594,1855.7302,0.0357
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_1d_rmse,8,5,14142.5568,340.1091,284.3384,851.6419,0.0,0.0
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_7d_rmse,8,5,29784.8632,939.6021,785.527,1405.9951,698.2032,0.1978
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_30d_rmse,8,5,40923.8496,1720.7347,1438.5702,3948.8359,0.0,0.0
+Tree-U (MH-RemEnv),"Finite Dyadic T <= 512 (calibrated [1, 420])",Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_90d_rmse,8,5,45397.6815,3411.8455,2852.3742,8323.7616,0.0,0.0
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_1d_rmse,8,5,3649.8591,237.6024,198.6406,423.8194,143.2841,0.1026
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_7d_rmse,8,5,15780.2709,1548.3057,1294.416,3157.0121,635.5357,0.0389
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_30d_rmse,8,5,51601.9228,4988.3826,4170.3923,10081.0851,2135.019,0.0429
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_90d_rmse,8,5,133714.2443,5022.7937,4199.1606,19089.4519,0.0,0.0
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_1d_rmse,8,5,1278.3701,103.3449,86.3985,250.1213,0.0,0.0
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_7d_rmse,8,5,5877.1888,855.0317,714.8244,1992.9768,0.0,0.0
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_30d_rmse,8,5,14172.8646,3196.8573,2672.6396,6319.4343,1494.2714,0.053
+W-BD-30 (MH-Calibrated),"Rolling Adaptive Finite [1, 420] envelope","Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_90d_rmse,8,5,24464.6513,3779.4456,3159.6956,8124.1409,1041.0937,0.0162
