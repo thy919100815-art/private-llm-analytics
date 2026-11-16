@@ -27,7 +27,7 @@ import math
 import time
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 import numpy as np
-from scipy.optimize import minimize
+from scipy.optimize import minimize, nnls
 
 from private_llm_analytics.sdg_mh.calendar_accounting import (
     CONSERVATIVE_BACKOFF_REL,
@@ -54,6 +54,14 @@ from private_llm_analytics.sdg_mh.ledger import (
 DEFAULT_HISTORICAL_B: float = 0.000302
 DEFAULT_HISTORICAL_D: float = 0.8 * DEFAULT_HISTORICAL_B  # 0.0002416
 DEFAULT_HISTORICAL_X: float = 0.00153
+
+# Strict hierarchy of optimization & mathematical optimality tiers:
+OPT_TIER_NOT_OPTIMAL: str = "NOT_OPTIMAL"
+OPT_TIER_SOLVER_CONVERGED: str = "SOLVER_CONVERGED"
+OPT_TIER_FEASIBLE_CERTIFIED: str = "FEASIBLE_CERTIFIED"
+OPT_TIER_NEAR_GLOBAL_CERTIFIED: str = "NEAR_GLOBAL_OPTIMAL_CERTIFIED"
+OPT_TIER_GLOBAL_PROVED: str = "GLOBAL_OPTIMAL_PROVED"
+NEAR_GLOBAL_REL_GAP_TOL: float = 1e-4
 
 
 @dataclass(frozen=True)
@@ -113,6 +121,12 @@ class PlanningResult:
     optimality_scope: str = "NONE"
     solver_status: str = "NOT_RUN"
     certification_status: str = "UNVERIFIED"
+    optimality_certification_tier: str = OPT_TIER_NOT_OPTIMAL
+    primal_objective_certified: float = float("inf")
+    dual_lower_bound: float = float("-inf")
+    optimality_abs_gap: float = float("inf")
+    optimality_rel_gap: float = float("inf")
+    phase_certification_summary: Dict[str, Any] = field(default_factory=dict)
 
     @property
     def schedule(self) -> CalendarSchedule:
@@ -140,6 +154,12 @@ class PlanningResult:
             "optimality_scope": self.optimality_scope,
             "solver_status": self.solver_status,
             "certification_status": self.certification_status,
+            "optimality_certification_tier": self.optimality_certification_tier,
+            "primal_objective_certified": round(self.primal_objective_certified, 8) if math.isfinite(self.primal_objective_certified) else None,
+            "dual_lower_bound": round(self.dual_lower_bound, 8) if math.isfinite(self.dual_lower_bound) else None,
+            "optimality_abs_gap": self.optimality_abs_gap if math.isfinite(self.optimality_abs_gap) else None,
+            "optimality_rel_gap": self.optimality_rel_gap if math.isfinite(self.optimality_rel_gap) else None,
+            "phase_certification_summary": self.phase_certification_summary,
             "runtime_seconds": round(self.runtime_seconds, 4),
             "diagnostics": self.diagnostics,
         }
@@ -293,6 +313,125 @@ class JointCalendarPlanner:
         diag = {**shrink_diag, "certificate": cert}
         return is_certified, v_safe, diag
 
+    def _is_phase_provably_infeasible(self, phases: Tuple[int, int, int]) -> bool:
+        """Check whether box lower bound min_allocations already breaches privacy constraints.
+
+        Because L_max(h; phi, v) and asymptotic_slope(v) are monotone non-decreasing in v >= 0,
+        any violation at v = min_allocations implies the feasible region V_phi is strictly empty.
+        """
+        v_min = np.array(self.config.min_allocations, dtype=np.float64)
+        min_slack, _, slope, _ = self.evaluate_schedule_slack(
+            phases, v_min, slack_tol=STRICT_CERTIFICATION_TOL
+        )
+        return bool(min_slack < -PRIVACY_LEDGER_TOL or slope > self.commitment.beta_tail + PRIVACY_LEDGER_TOL)
+
+    def compute_dual_lower_bound(
+        self,
+        phases: Tuple[int, int, int],
+        v_ref: np.ndarray,
+    ) -> Dict[str, Any]:
+        """Compute verifiable Lagrangian dual lower bound q(lambda) <= f_phi* for fixed phase.
+
+        For any subset of valid linear inequalities A v <= b (tail + near-tight (h, s) rows)
+        and any dual weights lambda >= 0:
+          q(lambda) = sum_j min_{v_j in [l_j, u_j]} (c_j / v_j + (A^T lambda)_j v_j) - lambda^T b
+        is a mathematically sound lower bound on every primal-feasible solution in V_phi.
+        """
+        p7, p30, p90 = phases
+        c = self._effective_weights()
+        l_bounds = np.array(self.config.min_allocations, dtype=np.float64)
+        u_bounds = np.array(self.config.max_allocations, dtype=np.float64)
+        v_arr = np.asarray(v_ref, dtype=np.float64)
+
+        n7 = self.n7_tables[p7]
+        n30 = self.n30_tables[p30]
+        n90 = self.n90_tables[p90]
+
+        L_mat = (
+            self.h_vals[:, None] * v_arr[0]
+            + n7 * v_arr[1]
+            + n30 * v_arr[2]
+            + n90 * v_arr[3]
+        )
+        slacks_mat = self.rho_bars[:, None] - L_mat
+
+        rows = [np.array([1.0, 1.0 / 7.0, 1.0 / 7.0, 1.0 / 30.0], dtype=np.float64)]
+        rhs = [float(self.commitment.beta_tail)]
+
+        tight_h, tight_s = np.where(slacks_mat <= 1e-4)
+        if len(tight_h) > 40:
+            vals = slacks_mat[tight_h, tight_s]
+            order = np.argsort(vals)[:40]
+            tight_h = tight_h[order]
+            tight_s = tight_s[order]
+
+        seen = set()
+        for hi, si in zip(tight_h, tight_s):
+            row = (float(self.h_vals[hi]), float(n7[hi, si]), float(n30[hi, si]), float(n90[hi, si]))
+            b_val = float(self.rho_bars[hi])
+            key = (row, b_val)
+            if key not in seen:
+                seen.add(key)
+                rows.append(np.array(row, dtype=np.float64))
+                rhs.append(b_val)
+
+        A = np.array(rows, dtype=np.float64)
+        b = np.array(rhs, dtype=np.float64)
+
+        grad_neg = c / (v_arr * v_arr)
+        row_norms = np.linalg.norm(A, axis=1) + 1e-12
+        A_scaled = A / row_norms[:, None]
+        lam_scaled, _ = nnls(A_scaled.T, grad_neg)
+        lam0 = lam_scaled / row_norms
+
+        def eval_q_and_grad(lam: np.ndarray) -> Tuple[float, np.ndarray]:
+            lam_pos = np.maximum(lam, 0.0)
+            g = A.T @ lam_pos
+            q_val = -float(np.dot(lam_pos, b))
+            v_hat = np.empty(4, dtype=np.float64)
+            for j in range(4):
+                if g[j] > 0.0:
+                    vj = float(np.clip(math.sqrt(c[j] / g[j]), l_bounds[j], u_bounds[j]))
+                else:
+                    vj = float(u_bounds[j])
+                v_hat[j] = vj
+                q_val += float(c[j] / vj + g[j] * vj)
+            dq_dlam = A @ v_hat - b
+            return q_val, dq_dlam
+
+        q0, _ = eval_q_and_grad(lam0)
+        q_best = q0
+        ref_err = float(np.sum(c / v_arr))
+        rel_gap0 = max(0.0, ref_err - q0) / max(1.0, abs(q0))
+
+        # Refine with L-BFGS-B only if NNLS dual bound has non-trivial gap
+        if rel_gap0 > 1e-8:
+            def neg_obj(lam: np.ndarray) -> Tuple[float, np.ndarray]:
+                qv, gq = eval_q_and_grad(lam)
+                return -qv, -gq
+
+            res = minimize(
+                neg_obj,
+                lam0,
+                jac=True,
+                method="L-BFGS-B",
+                bounds=[(0.0, None)] * len(lam0),
+                options={"ftol": 1e-12, "gtol": 1e-10, "maxiter": 60},
+            )
+            q_ref, _ = eval_q_and_grad(np.maximum(res.x, 0.0))
+            if q_ref > q_best:
+                q_best = q_ref
+
+        # Deduct tiny IEEE-754 safety margin to prevent upward rounding overestimation
+        dual_lb_safe = float(q_best * (1.0 - 1e-14)) if q_best > 0 else float(q_best)
+        return {
+            "dual_lb": dual_lb_safe,
+            "raw_dual_lb": float(q_best),
+            "nnls_dual_lb": float(q0),
+            "num_active_rows": int(len(b)),
+            "dual_certified": True,
+        }
+
     def solve_budget_for_phase(
         self,
         phases: Tuple[int, int, int],
@@ -440,13 +579,14 @@ class JointCalendarPlanner:
                 slack_tol=STRICT_CERTIFICATION_TOL,
             )
             if cert_orig["is_infinite_horizon_secure"]:
+                err_orig = float(np.sum(c / v_orig))
                 return PlanningResult(
                     group="A_Baseline",
                     status="FEASIBLE",
                     phases=phases,
                     daily_d=float(v_orig[0]),
                     distinct_costs=(float(v_orig[1]), float(v_orig[2]), float(v_orig[3])),
-                    weighted_workload_error=float(np.sum(c / v_orig)),
+                    weighted_workload_error=err_orig,
                     min_slack=min_slack,
                     tightest_horizon_h=min_h,
                     asymptotic_slope=slope,
@@ -459,6 +599,8 @@ class JointCalendarPlanner:
                     optimality_scope="NONE",
                     solver_status="NOT_RUN",
                     certification_status="CERTIFIED_PUBLISHABLE",
+                    optimality_certification_tier=OPT_TIER_FEASIBLE_CERTIFIED,
+                    primal_objective_certified=err_orig,
                 )
 
         # Baseline violates commitment: construct calibrated baseline fallback by exact scaling + certification
@@ -476,6 +618,7 @@ class JointCalendarPlanner:
             phases, v_cal, slack_tol=STRICT_CERTIFICATION_TOL
         )
         eff_gamma = float(gamma_raw * cert_diag.get("shrinkage_gamma", 1.0))
+        err_cal = float(np.sum(c / v_cal)) if cert_ok else float("inf")
 
         return PlanningResult(
             group="A_Baseline",
@@ -483,7 +626,7 @@ class JointCalendarPlanner:
             phases=phases,
             daily_d=float(v_cal[0]),
             distinct_costs=(float(v_cal[1]), float(v_cal[2]), float(v_cal[3])),
-            weighted_workload_error=float(np.sum(c / v_cal)) if cert_ok else float("inf"),
+            weighted_workload_error=err_cal,
             min_slack=min_slack_cal,
             tightest_horizon_h=min_h_cal,
             asymptotic_slope=slope_cal,
@@ -502,6 +645,8 @@ class JointCalendarPlanner:
             optimality_scope="NONE",
             solver_status="NOT_RUN",
             certification_status="CERTIFIED_PUBLISHABLE" if cert_ok else "UNCERTIFIED_VIOLATION",
+            optimality_certification_tier=OPT_TIER_FEASIBLE_CERTIFIED if cert_ok else OPT_TIER_NOT_OPTIMAL,
+            primal_objective_certified=err_cal,
         )
 
     def plan_group_b(self) -> PlanningResult:
@@ -530,6 +675,7 @@ class JointCalendarPlanner:
                 optimality_scope="FIXED_PHASE_CONVEX",
                 solver_status=diag.get("status", "SOLVER_FAILED"),
                 certification_status="REJECTED_INFEASIBLE",
+                optimality_certification_tier=OPT_TIER_NOT_OPTIMAL,
             )
 
         cert_ok, v_cert, cert_diag = self._certify_and_shrink_budget(phases, v_opt)
@@ -538,6 +684,27 @@ class JointCalendarPlanner:
         )
         c = self._effective_weights()
         certified_err = float(np.sum(c / v_cert))
+        dual_diag = self.compute_dual_lower_bound(phases, v_opt)
+        dual_lb = float(dual_diag["dual_lb"])
+        abs_gap = max(0.0, certified_err - dual_lb)
+        rel_gap = abs_gap / max(dual_lb, 1e-12)
+
+        if not cert_ok:
+            tier = OPT_TIER_SOLVER_CONVERGED
+        elif dual_diag.get("dual_certified", False) and rel_gap <= NEAR_GLOBAL_REL_GAP_TOL:
+            tier = OPT_TIER_NEAR_GLOBAL_CERTIFIED
+        else:
+            tier = OPT_TIER_FEASIBLE_CERTIFIED
+
+        phase_summary = {
+            "total_phases": 1,
+            "certified_phases": 1 if cert_ok else 0,
+            "infeasible_proved_phases": 0,
+            "uncertified_phases": 0 if cert_ok else 1,
+            "all_phases_accounted_for": bool(cert_ok),
+            "fixed_phase": list(phases),
+            "note": "Optimized over fixed phase (0,0,0) only; not globally bounded over joint phase space.",
+        }
         runtime = time.time() - t0
 
         return PlanningResult(
@@ -552,13 +719,19 @@ class JointCalendarPlanner:
             asymptotic_slope=slope,
             is_infinite_horizon_secure=cert_ok,
             runtime_seconds=runtime,
-            diagnostics={**diag, **cert_diag},
+            diagnostics={**diag, **cert_diag, **dual_diag},
             is_solver_approx_optimal=True,
-            is_math_global_optimal=True,
+            is_math_global_optimal=bool(tier == OPT_TIER_GLOBAL_PROVED),
             is_certified_publishable=cert_ok,
             optimality_scope="FIXED_PHASE_CONVEX",
             solver_status="CONVERGED",
             certification_status="CERTIFIED_PUBLISHABLE" if cert_ok else "UNCERTIFIED_VIOLATION",
+            optimality_certification_tier=tier,
+            primal_objective_certified=certified_err if cert_ok else float("inf"),
+            dual_lower_bound=dual_lb,
+            optimality_abs_gap=abs_gap if cert_ok else float("inf"),
+            optimality_rel_gap=rel_gap if cert_ok else float("inf"),
+            phase_certification_summary=phase_summary,
         )
 
     def plan_group_c(self) -> PlanningResult:
@@ -623,15 +796,17 @@ class JointCalendarPlanner:
                 optimality_scope="DISCRETE_MAX_SLACK_FIXED_BUDGET",
                 solver_status="NOT_RUN",
                 certification_status="REJECTED_INFEASIBLE",
+                optimality_certification_tier=OPT_TIER_NOT_OPTIMAL,
             )
 
+        err_fixed = float(np.sum(c / v_orig))
         return PlanningResult(
             group="C_PhaseOnly",
             status="OPTIMAL",
             phases=best_phi,
             daily_d=float(v_orig[0]),
             distinct_costs=(float(v_orig[1]), float(v_orig[2]), float(v_orig[3])),
-            weighted_workload_error=float(np.sum(c / v_orig)),
+            weighted_workload_error=err_fixed,
             min_slack=best_min_slack,
             tightest_horizon_h=best_tightest_h,
             asymptotic_slope=best_slope,
@@ -639,15 +814,17 @@ class JointCalendarPlanner:
             runtime_seconds=runtime,
             diagnostics={"best_phase": best_phi, "certificate": cert},
             is_solver_approx_optimal=False,
-            is_math_global_optimal=True,
+            is_math_global_optimal=False,
             is_certified_publishable=True,
             optimality_scope="DISCRETE_MAX_SLACK_FIXED_BUDGET",
             solver_status="NOT_RUN",
             certification_status="CERTIFIED_PUBLISHABLE",
+            optimality_certification_tier=OPT_TIER_FEASIBLE_CERTIFIED,
+            primal_objective_certified=err_fixed,
         )
 
     def plan_group_d(self) -> PlanningResult:
-        """Group D: Joint Planning (Optimized phase and optimized budget)."""
+        """Group D: Joint Planning (Optimized phase and optimized budget with verifiable primal/dual bounds)."""
         t0 = time.time()
         c = self._effective_weights()
 
@@ -657,6 +834,10 @@ class JointCalendarPlanner:
 
         phases_attempted = 0
         phases_converged = 0
+        certified_phases = 0
+        infeasible_proved_phases = 0
+        uncertified_phases: List[Tuple[int, int, int]] = []
+        phase_dual_lbs: List[Tuple[Tuple[int, int, int], float]] = []
 
         best_phi: Optional[Tuple[int, int, int]] = None
         best_v: Optional[np.ndarray] = None
@@ -675,28 +856,40 @@ class JointCalendarPlanner:
                     phi = (p7, p30, p90)
                     ok, v_opt, err, diag = self.solve_budget_for_phase(phi)
                     if not ok or v_opt is None:
+                        if self._is_phase_provably_infeasible(phi):
+                            infeasible_proved_phases += 1
+                        else:
+                            uncertified_phases.append(phi)
                         continue
                     phases_converged += 1
+
+                    # Verifiable Lagrangian dual lower bound for this phase
+                    dual_info = self.compute_dual_lower_bound(phi, v_opt)
+                    phase_dual_lbs.append((phi, float(dual_info["dual_lb"])))
 
                     if self.config.apply_conservative_shrinkage:
                         v_shrunk, s_diag = self._shrink_budget_vector(phi, v_opt)
                         err_shrunk = float(np.sum(c / v_shrunk))
-                        if s_diag["bounds_satisfied_after_shrink"] and err_shrunk < best_err:
-                            best_err = err_shrunk
-                            best_v = v_shrunk
-                            best_phi = phi
-                            best_diag = {**diag, **s_diag}
-                        elif err < fallback_err:
-                            fallback_err = err
-                            fallback_v = v_opt
-                            fallback_phi = phi
-                            fallback_diag = {**diag, **s_diag}
+                        if s_diag["bounds_satisfied_after_shrink"]:
+                            certified_phases += 1
+                            if err_shrunk < best_err:
+                                best_err = err_shrunk
+                                best_v = v_shrunk
+                                best_phi = phi
+                                best_diag = {**diag, **s_diag, **dual_info}
+                        else:
+                            uncertified_phases.append(phi)
+                            if err < fallback_err:
+                                fallback_err = err
+                                fallback_v = v_opt
+                                fallback_phi = phi
+                                fallback_diag = {**diag, **s_diag, **dual_info}
                     else:
                         if err < best_err:
                             best_err = err
                             best_v = v_opt
                             best_phi = phi
-                            best_diag = diag
+                            best_diag = {**diag, **dual_info}
 
         runtime = time.time() - t0
         if best_v is None or best_phi is None:
@@ -722,12 +915,21 @@ class JointCalendarPlanner:
                     optimality_scope="JOINT_EXHAUSTIVE_MIXED_CONVEX",
                     solver_status="INFEASIBLE",
                     certification_status="REJECTED_INFEASIBLE",
+                    optimality_certification_tier=OPT_TIER_NOT_OPTIMAL,
+                    phase_certification_summary={
+                        "total_phases": phases_attempted,
+                        "certified_phases": certified_phases,
+                        "infeasible_proved_phases": infeasible_proved_phases,
+                        "uncertified_phases": len(uncertified_phases),
+                        "all_phases_accounted_for": len(uncertified_phases) == 0,
+                    },
                 )
 
         cert_ok, v_cert, cert_diag = self._certify_and_shrink_budget(best_phi, best_v)
         min_slack, min_h, slope, _ = self.evaluate_schedule_slack(
             best_phi, v_cert, slack_tol=STRICT_CERTIFICATION_TOL
         )
+        # Strictly recompute primal objective AFTER conservative budget shrinkage
         certified_err = float(np.sum(c / v_cert))
 
         unpinned = (
@@ -736,7 +938,41 @@ class JointCalendarPlanner:
             and self.config.fixed_phi_90 is None
         )
         optimality_scope = "JOINT_EXHAUSTIVE_MIXED_CONVEX" if unpinned else "CONSTRAINED_PHASE_CONVEX"
-        math_global_opt = bool(phases_converged == phases_attempted)
+
+        if not cert_ok:
+            uncertified_count = len(uncertified_phases) + (0 if best_phi in uncertified_phases else 1)
+        else:
+            uncertified_count = len(uncertified_phases)
+
+        all_phases_accounted = bool(uncertified_count == 0 and (certified_phases + infeasible_proved_phases) == phases_attempted)
+
+        if all_phases_accounted and phase_dual_lbs:
+            min_lb_phi, global_dual_lb = min(phase_dual_lbs, key=lambda x: x[1])
+            abs_gap = max(0.0, certified_err - global_dual_lb)
+            rel_gap = abs_gap / max(global_dual_lb, 1e-12)
+        else:
+            min_lb_phi = None
+            global_dual_lb = float("-inf")
+            abs_gap = float("inf")
+            rel_gap = float("inf")
+
+        if not cert_ok:
+            tier = OPT_TIER_SOLVER_CONVERGED
+        elif all_phases_accounted and math.isfinite(rel_gap) and rel_gap <= NEAR_GLOBAL_REL_GAP_TOL:
+            tier = OPT_TIER_NEAR_GLOBAL_CERTIFIED
+        else:
+            tier = OPT_TIER_FEASIBLE_CERTIFIED
+
+        phase_summary = {
+            "total_phases": phases_attempted,
+            "certified_phases": certified_phases,
+            "infeasible_proved_phases": infeasible_proved_phases,
+            "uncertified_phases": uncertified_count,
+            "uncertified_phase_list": [list(p) for p in uncertified_phases],
+            "all_phases_accounted_for": all_phases_accounted,
+            "min_dual_lb_phase": list(min_lb_phi) if min_lb_phi is not None else None,
+            "best_primal_ub_phase": list(best_phi),
+        }
 
         return PlanningResult(
             group="D_JointPlanning",
@@ -757,11 +993,17 @@ class JointCalendarPlanner:
                 "phases_converged": phases_converged,
             },
             is_solver_approx_optimal=True,
-            is_math_global_optimal=math_global_opt,
+            is_math_global_optimal=bool(tier == OPT_TIER_GLOBAL_PROVED),
             is_certified_publishable=cert_ok,
             optimality_scope=optimality_scope,
             solver_status="CONVERGED",
             certification_status="CERTIFIED_PUBLISHABLE" if cert_ok else "UNCERTIFIED_VIOLATION",
+            optimality_certification_tier=tier,
+            primal_objective_certified=certified_err if cert_ok else float("inf"),
+            dual_lower_bound=global_dual_lb,
+            optimality_abs_gap=abs_gap if cert_ok else float("inf"),
+            optimality_rel_gap=rel_gap if cert_ok else float("inf"),
+            phase_certification_summary=phase_summary,
         )
 
     def plan_all_groups(self) -> Dict[str, PlanningResult]:
@@ -863,6 +1105,7 @@ class JointCalendarPlanner:
                     commitment_bound=self.commitment,
                     as_status=ReleaseStatus.RESERVED.value,
                     allow_unconfigured_policy=False,
+                    strict_zero_tol=True,
                 )
             except PrivacyAdmissionError as e:
                 return False, f"Policy rejected at ledger gate: {e}", {"error": str(e), "cert": cert}

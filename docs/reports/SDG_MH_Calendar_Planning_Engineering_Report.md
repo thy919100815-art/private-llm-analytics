@@ -634,12 +634,17 @@ $$\bar\rho(h) - L_{\max}(h) = (\bar\rho(h_0) - L_{\max}(h_0)) + m P \left( \beta
 
 ## 17. 理论与安全证书一致性修复验证 (Post-`29eedeb` Certification Addendum)
 
-1. **三态正交标记与失败语义规范**：
+1. **四级最优性分层、Primal/Dual 下界与失败语义规范**：
    `PlanningResult` 严格正交暴露：
    - `is_solver_approx_optimal`：连续 SLSQP 切平面迭代是否在 `SOLVER_VIOLATION_TOL=1e-8` 内收敛；
-   - `is_math_global_optimal` 与 `optimality_scope`：是否在所声明作用域（如 210 类离散全空间穷举 + 严格凸规划 `JOINT_EXHAUSTIVE_MIXED_CONVEX` 或固定相位 `FIXED_PHASE_CONVEX`）内全部求解完毕；
-   - `is_certified_publishable` 与 `certification_status`：经 `_certify_and_shrink_budget()` 保守缩减（若原松弛 $< 10^{-13}$ 或存在违约，乘以 $\gamma = (1 - 10^{-11})/r_{\max}$）后，通过零容差（`min_slack >= 0.0` 且 `slope <= beta_tail`）独立证书核验方置为 `True`。若未认证，严禁置 `status="OPTIMAL"`（强制标记 `SOLVER_OPT_UNCERTIFIED` 并在 `commit_plan_to_ledger` 与 `UnifiedPrivacyLedger` 同步拒绝）。
-2. **16 组实验指标零漂移与 Slack 转正实测**：
+   - `optimality_certification_tier` 四级严格区分：**`SOLVER_CONVERGED`**（仅求解器收敛但未认证零违规）、**`FEASIBLE_CERTIFIED`**（已通过保守收缩与无限时域证书但全局对偶界未完全收敛/存在未认证相位）、**`NEAR_GLOBAL_OPTIMAL_CERTIFIED`**（全部 210 个规范相位均已通过可验证的 Lagrangian 对偶下界或被 `_is_phase_provably_infeasible` 严格证明不可行，且保守收缩后重算的相对 Optimality Gap $\le 10^{-4}$）、**`GLOBAL_OPTIMAL_PROVED`**（仅保留给严格零间隙符号形式证明）；
+   - `is_math_global_optimal`：严格审计修正后仅当 `optimality_certification_tier == "GLOBAL_OPTIMAL_PROVED"` 时方为 `True`，绝不把数值求解收敛或 $\varepsilon$-对偶接近改称为严格数学全局最优；
+   - `is_certified_publishable` 与 `certification_status`：经 `_certify_and_shrink_budget()` 保守缩减后，通过零容差（`min_slack >= 0.0` 且 `slope <= beta_tail`）独立证书核验方置为 `True`，并在 `commit_plan_to_ledger` 中以 `strict_zero_tol=True` 提交账本。
+2. **全 210 相位 Primal/Dual 间隙与账本容差保守误差界**：
+   - Default (Week1_v2 / Original)：210/210 相位认证，Primal UB $= 1433.918180 / 1437.628286$，Dual LB $= 1433.918180 / 1437.628286$，相对 Gap $= 1.041 \times 10^{-11} / 1.010 \times 10^{-11}$；
+   - DistinctHeavy (Week1_v2 / Original)：210/210 相位认证，Primal UB $= 922.979112 / 930.326040$，Dual LB $= 922.979105 / 930.326040$，相对 Gap $= 7.450 \times 10^{-9} / 1.017 \times 10^{-11}$；
+   - 账本容差安全论证：`UnifiedPrivacyLedger` 通用接口 `PRIVACY_LEDGER_TOL=1e-12` 对应的最大 $\varepsilon$ 边界漂移为 $\Delta\varepsilon \le (1 + \sqrt{\ln(1/\delta)/\rho_{\min}}) \cdot 10^{-12} \le 3.22 \times 10^{-11}$；而经过保守收缩的规划策略均提供 $> +10^{-13}$ 的物理余量（高于 420–575 天 IEEE-754 浮点累加误差 $< 3 \times 10^{-14}$），可在 `strict_zero_tol=True` 零容差模式下严格通过提交。
+3. **16 组实验指标零漂移与 Slack 转正实测**：
    重新运行完整 16 组 2,000 用户 $\times$ 90 天 $\times$ 10 次 MC 真实流水线对比 `29eedeb` 基线：
    - **全部 16 组实验的统计效用指标（`requests_total_rmse`, `failures_total_rmse`, `distinct_*_mape_pct`, `planner_abstract_objective`）完全一致，零数字变更**；
    - `DistinctHeavy / Week1_v2 / D_JointPlanning` 最紧 Slack 由 `-2.986e-12` 修正为 **`+9.335e-13`**；
