@@ -1,0 +1,563 @@
+\documentclass[10pt,twocolumn]{article}
+
+\usepackage[top=1.8cm, bottom=1.9cm, left=1.65cm, right=1.65cm, columnsep=0.65cm]{geometry}
+\usepackage{amsmath, amssymb, amsthm, mathtools}
+\usepackage{booktabs, multirow, tabularx}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{microtype}
+\usepackage[hidelinks, colorlinks=true, linkcolor=blue!60!black, citecolor=blue!60!black, urlcolor=blue!60!black]{hyperref}
+
+\setlength{\parskip}{0.15em}
+\setlist[itemize]{leftmargin=1.35em, itemsep=1pt, topsep=2pt}
+\setlist[enumerate]{leftmargin=1.45em, itemsep=1pt, topsep=2pt}
+
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}{Lemma}
+\newtheorem{proposition}{Proposition}
+\newtheorem{remark}{Remark}
+
+\title{\vspace{-0.8cm}\Large\bfseries
+No Epochs, No Expiry: Multi-Horizon User-Time Differential Privacy\\
+and Unified Calendar Planning for Perpetual Analytics}
+
+\author{
+\normalsize Anonymous PVLDB 2027 Submission
+}
+\date{\vspace{-0.6cm}}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Long-running enterprise telemetry platforms---such as internal Large Language Model (LLM) usage monitors---must publish both daily additive volume metrics (requests, failures) and multi-window non-additive distinct-user statistics (7-, 30-, and 90-day service prevalence and top-$k$ tasks) indefinitely. Existing continual differential privacy (DP) paradigms face structural trade-offs on such perpetual, mixed workloads: fixed calendar epochs suffer from budget exhaustion or boundary-reset spikes; decaying budget schedules ($1/t^2$) cause noise variance to diverge over time; and continual binary-tree or $w$-event mechanisms operate solely on additive streams while incurring severe short- or long-horizon penalties when constrained simultaneously across multiple time scales.
+
+We present \textbf{SDG-MH}, a longitudinal analytics architecture built around two technical contributions. First, we formalize \emph{Multi-Horizon User-Time Differential Privacy} under $(u, I)$-interval adjacency via a zero-Concentrated Differential Privacy (zCDP) commitment curve $\bar{\rho}(h)$ that enforces tight sub-linear bounds at short-to-annual horizons ($h \in \{1, 7, 30, 90, 365\}$) and a governed affine growth rate $\bar{\rho}(h) = a_{\text{tail}} + \beta_{\text{tail}} h$ for $h \ge 365$. We clarify that ``No Epochs, No Expiry'' denotes stationary utility without hard calendar cutoffs, rather than bounded constant lifetime privacy for perpetual daily participants, and characterize why independent daily Discrete Gaussian sealing achieves lower multi-scale error than binary trees and $w$-event baselines under affine tail constraints. Second, we develop a unified calendar accounting and joint phase--budget planning framework for periodic non-additive distinct histograms. We prove an exact data-window intersection formula $n_f(s, h; \phi_f)$ over $L = W_f + h - 1$ days (correcting a $5\times$ undercounting flaw in release-date-only accounting), a 210-day periodic shift identity, and a \emph{non-concave affine-tail reduction theorem} that reduces infinite-horizon verification ($\forall h \ge 1$) to a 575-day finite prefix check. Across 210 canonical phase classes, we pair sequential quadratic programming with a 100-digit directed-rounding Lagrangian dual certificate (\texttt{DECIMAL100\_DIRECTED\_ROUNDING}, relative duality gap $\le 7.45 \times 10^{-9}$) and zero-tolerance atomic ledger admission. Over 420-day cross-period experiments ($K=8$ independent populations $\times$ $5$ Common Random Numbers trials), SDG-MH maintains zero privacy violations, reduces 1d/7d additive request RMSE by $1.59\times$--$1.89\times$ and 30d failure RMSE by $1.27\times$--$1.90\times$ over multi-horizon calibrated \texttt{Tree-2l} and \texttt{W-BD-30}, and significantly lowers 7d and 90d distinct MAPE ($p_{\text{holm}} \le 10^{-4}$), while transparently characterizing regimes where phase shifting offers non-significant 30d gains ($p_{\text{holm}} = 1.000$) or Sunday staleness trade-offs.
+\end{abstract}
+
+% ============================================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================================
+
+Organizations deploying internal Large Language Model (LLM) gateways continuously track operational telemetry across thousands of employees to audit reliability, provider utilization, and task adoption. A production governance dashboard typically requires two distinct classes of recurring statistics over an open-ended operational lifetime:
+\begin{enumerate}
+    \item \textbf{Daily and Rolling Additive Counts}: Total daily interaction requests $R_t$ and failure counts $F_t$, queried both at single-day granularity ($w=1$) and over rolling $w \in \{7, 30, 90\}$-day windows;
+    \item \textbf{Periodic Window-Level Distinct Histograms}: The number of \emph{distinct users} accessing each of $m$ model providers/services and each user's top-$k$ distinct tasks over $W_f \in \{7, 30, 90\}$-day windows, refreshed every $S_f \in \{7, 7, 30\}$ days.
+\end{enumerate}
+
+Designing a differentially private~\cite{dwork2006calibrating,dwork2014algorithmic} system for this workload exposes a fundamental tension between \emph{unbounded temporal operation}, \emph{multi-horizon user protection}, and \emph{mixed additive/non-additive query semantics}. Classical continual observation mechanisms---including binary tree counters~\cite{dwork2010continual,chan2011private,honaker2015efficient} and Toeplitz or matrix factorizations~\cite{li2015matrix,denisov2022improved,fichtenberger2023constant,choquette2023banded}---are designed for linear prefix sums over a fixed terminal horizon $T$ (or fixed $k$-participation epochs~\cite{choquette2023multiepoch}). When a system runs indefinitely without a terminal date $T$, existing deployments typically resort to one of three compromises:
+\begin{itemize}
+    \item \textbf{Fixed Privacy Epochs (\texttt{Epoch90})}: The timeline is partitioned into fixed 90-day epochs with a hard cap $\rho_{\text{epoch}}$. If queries exhaust the cap early, service halts; if the budget resets across epoch boundaries, a user active on days $[89, 91]$ suffers $2\times$ the intended short-window privacy exposure.
+    \item \textbf{Infinite-Horizon Decay (\texttt{LifetimeDecay})}: Allocating a convergent series $\rho_t \propto 6 / (\pi^2 t^2)$ bounds infinite-horizon user loss by $\rho_{\max}$, but forces noise standard deviation $\sigma_t \propto t$ to grow linearly with calendar time, rendering statistics unusable in year two.
+    \item \textbf{Single-Horizon $w$-Event DP (\texttt{W-BD} / \texttt{W-BA})}~\cite{kellaris2014wevent}: Protects any sliding window of a \emph{single} length $w$ (e.g., $w=30$), recycling the entire budget $\rho_w$ every $w$ days. However, recycling $\rho_w$ every 30 days causes 365-day cumulative exposure to exceed $12 \rho_w$, violating long-horizon organizational privacy caps unless $\rho_w$ is shrunk severely.
+\end{itemize}
+
+Furthermore, binary trees, Toeplitz factorizations, and $w$-event mechanisms only aggregate \emph{additive} quantities. A user who invokes an LLM service on five days within a 30-day window contributes $5\times$ to an additive sum, but contributes at most $1$ to a 30-day \emph{distinct-user} prevalence histogram. Pan-private sketches~\cite{mir2011panprivate} and continual distinct counters~\cite{epasto2023frequency,ghazi2023distinct,jain2023turnstile} introduce multiplicative approximation bias or $\tilde{O}(\sqrt{T/W})$ additive error blowup when releasing every sliding window continually.
+
+\paragraph{Clarifying ``No Epochs, No Expiry, Perpetual Analytics''.}
+We emphasize a foundational theoretical boundary upfront. In SDG-MH, ``No Epochs, No Expiry'' means that the analytics engine operates indefinitely with \emph{time-invariant noise variance} and \emph{zero calendar reset boundaries}. It does \textbf{not} mean that a user who participates actively every single day for an infinite number of days incurs bounded constant total privacy loss ($\lim_{h \to \infty} \bar{\rho}(h) < \infty$). By classical continual-release lower bounds~\cite{dwork2010continual,chan2011private,kellaris2014wevent}, releasing fresh daily statistics with bounded variance $\sigma_t^2 \le \sigma_{\max}^2 < \infty$ requires cumulative privacy loss over an $h$-day active span to grow as $\Omega(h)$. Instead, SDG-MH bounds any user's zCDP loss over \emph{every contiguous time interval $I$ of length $h \in \mathbb{N}^+$} by a deterministic multi-horizon commitment curve $\bar{\rho}(h)$ that enforces strict sub-linearly stepped caps from 1 day to 1 year ($h \in \{1, 7, 30, 90, 365\}$) and a constant asymptotic daily rate $\beta_{\text{tail}}$ for $h \ge 365$.
+
+\paragraph{Contributions.}
+Following a strict separation between known primitives, new mathematical results, and systems engineering, this paper makes two focused contributions:
+\begin{enumerate}
+    \item \textbf{Multi-Horizon User-Time DP and Daily Gaussian Characterization (Section~\ref{sec:model}--\ref{sec:sealing})}: We formulate $(u, I)$-interval adjacency and multi-horizon zCDP commitment curves $\bar{\rho}(h)$. While daily independent Discrete Gaussian noise~\cite{canonne2020discrete,bun2016concentrated} and Cauchy--Schwarz isotropic budget splitting ($\eta_k = C_k^2 / \sum_j C_j^2$) are classical primitives, we prove and empirically demonstrate why direct daily sealing outperforms binary trees (\texttt{Tree-2l}, \texttt{Tree-U} with Honaker GLS~\cite{honaker2015efficient}) and multi-horizon calibrated \texttt{W-BD-30}~\cite{kellaris2014wevent} on rolling $w \in \{1, 7, 30\}$-day queries when all methods must respect the same multi-horizon curve $\bar{\rho}_{\text{add}}(h)$ across $h \in [1, 420]$.
+    \item \textbf{Exact Calendar Intersection Accounting, Non-Concave Infinite-Horizon Reduction, and Certified Joint Planning (Section~\ref{sec:calendar}--\ref{sec:planner})}: For periodic distinct-user releases over windows $W_f \in \{7, 30, 90\}$ with steps $S_f \in \{7, 7, 30\}$, we derive the exact data-dependency intersection count $n_f(s, h; \phi_f)$ over span $L = W_f + h - 1$ (Theorem~\ref{thm:intersection}) and prove a 210-day periodic shift identity (Theorem~\ref{thm:periodicity}). After proving that production commitment curves (\texttt{Original\_Planner} and \texttt{Week1\_v2}) are \emph{not} globally concave in zCDP space, we establish a concavity-free \textbf{575-day finite-to-infinite reduction theorem} relying solely on the $h \ge 365$ affine tail (Theorem~\ref{thm:reduction}). Finally, we reduce the 1,470 phase space to 210 canonical equivalence classes and couple convex budget optimization with a 100-digit directed-rounding Lagrangian dual lower bound (\texttt{DECIMAL100\_DIRECTED\_ROUNDING}, Theorem~\ref{thm:dual}) and fail-closed zero-tolerance ledger admission.
+\end{enumerate}
+
+% ============================================================================
+\section{Problem Formulation and Multi-Horizon User-Time DP}
+\label{sec:model}
+% ============================================================================
+
+\subsection{Telemetry Stream and Threat Model}
+Let $\mathcal{U}$ denote the universe of enterprise users and $t \in \mathbb{N}^+$ denote discrete calendar days ($t = 1, 2, \dots$). On day $t$, active users generate a stream dataset $D_t$ of interaction records $(u, \tau, s, a, \text{succ})$, where $u \in \mathcal{U}$, $\tau$ is a timestamp on day $t$, $s \in \mathcal{S}$ ($|\mathcal{S}| = m = 5$) is the model provider/service, $a \in \mathcal{A}$ ($|\mathcal{A}| = 20$) is the task category, and $\text{succ} \in \{0, 1\}$ indicates completion success. Let $D = \{D_t\}_{t=1}^\infty$ be the infinite longitudinal stream.
+
+\paragraph{Threat Model.}
+We consider an adversary with read access to all released aggregate statistics up to any day $T$, full knowledge of the release schedule, algorithm parameters, and background knowledge of all users except a target user $u^* \in \mathcal{U}$ during a contiguous time interval $I = [s, s + h - 1]$ of length $h = |I| \ge 1$ days. The trusted execution boundary encompasses the ingestion clippers, the bounded-retention rolling distinct state, the append-only stores, and the \texttt{UnifiedPrivacyLedger} within a single-node server process. Side-channel timing attacks and distributed multi-node consensus failures are outside our proven scope.
+
+\subsection{Multi-Horizon User-Time Adjacency}
+
+\begin{definition}[$(u, I)$-User-Time Adjacency]
+\label{def:adjacency}
+Let $I = [s, s + h - 1] \subset \mathbb{N}^+$ be any contiguous time interval of length $h \ge 1$. Two longitudinal streams $D = \{D_t\}_{t=1}^\infty$ and $D' = \{D'_t\}_{t=1}^\infty$ are $(u, I)$-adjacent, denoted $D \sim_{(u, I)} D'$, if there exists a single user $u \in \mathcal{U}$ such that:
+\begin{enumerate}
+    \item For all $t \notin I$, $D_t = D'_t$ identically;
+    \item For all $t \in I$, $D_t \setminus \{r \in D_t : \text{user}(r) = u\} = D'_t \setminus \{r \in D'_t : \text{user}(r) = u\}$.
+\end{enumerate}
+\end{definition}
+
+Definition~\ref{def:adjacency} generalizes single-day user-level DP ($h=1$) and fixed-$w$ event privacy~\cite{kellaris2014wevent} by allowing a user's entire multi-record activity across \emph{any} $h$ consecutive days to change arbitrarily, while requiring simultaneous protection across all $h \in \mathbb{N}^+$.
+
+\begin{definition}[Multi-Horizon zCDP Commitment Curve]
+\label{def:curve}
+A randomized streaming mechanism $\mathcal{M}$ satisfies $\bar{\rho}(\cdot)$-Multi-Horizon User-Time zero-Concentrated Differential Privacy (zCDP) if, for every horizon length $h \in \mathbb{N}^+$, every start day $s \in \mathbb{N}^+$, every user $u \in \mathcal{U}$, and every pair of $(u, [s, s+h-1])$-adjacent streams $D \sim_{(u, [s, s+h-1])} D'$, the transcript of all outputs released by $\mathcal{M}$ satisfies $\rho(s, h)$-zCDP~\cite{bun2016concentrated} with worst-case envelope:
+\begin{equation}
+\label{eq:mh_zcdp}
+L_{\max}(h) \triangleq \sup_{s \in \mathbb{N}^+} \rho(s, h) \le \bar{\rho}(h), \quad \forall h \in \mathbb{N}^+.
+\end{equation}
+At target failure probability $\delta \in (0, 1)$, the corresponding $(\varepsilon(h), \delta)$-DP guarantee at horizon $h$ is given by the standard zCDP tail conversion~\cite{bun2016concentrated}:
+\begin{equation}
+\label{eq:eps_rho}
+\varepsilon(h) = \bar{\rho}(h) + 2\sqrt{\bar{\rho}(h)\ln(1/\delta)}, \quad
+\bar{\rho}(h) = \Bigl(\sqrt{\varepsilon(h) + \ln(1/\delta)} - \sqrt{\ln(1/\delta)}\Bigr)^2.
+\end{equation}
+\end{definition}
+
+\begin{table}[t]
+\centering
+\caption{Canonical Multi-Horizon Commitment Curves ($\delta = 10^{-6}$) and Adjacent Secant Slopes $\Delta \bar{\rho} / \Delta h$, Proving Non-Concavity in zCDP Space.}
+\label{tab:curves}
+\scriptsize
+\setlength{\tabcolsep}{3.5pt}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Curve} & $h=1$ & $h=7$ & $h=30$ & $h=90$ & $h=365$ \\
+\midrule
+\texttt{Original} $\varepsilon(h)$ & $0.90$ & $1.10$ & $1.60$ & $2.50$ & $4.40$ \\
+\texttt{Original} $\bar{\rho}(h)$ & $0.014199$ & $0.020320$ & $0.038144$ & $0.084106$ & $0.302356$ \\
+Secant Slope $\frac{\Delta\bar{\rho}}{\Delta h}$ & --- & $0.001020$ & $0.000775$ & $0.000766$ & $\mathbf{0.000794}\uparrow$ \\
+\midrule
+\texttt{Week1\_v2} $\varepsilon(h)$ & $0.70$ & $1.05$ & $1.55$ & $2.51$ & $4.41$ \\
+\texttt{Week1\_v2} $\bar{\rho}(h)$ & $0.008943$ & $0.016458$ & $0.030119$ & $0.076306$ & $0.295121^*$ \\
+\multicolumn{6}{l}{\tiny $^*$In operational \texttt{WEEK1\_V2\_CURVE} node table: $\bar{\rho}(90)=0.084831, \bar{\rho}(365)=0.303646$,} \\
+Secant Slope $\frac{\Delta\bar{\rho}}{\Delta h}$ & --- & $0.001253$ & $0.000594$ & $\mathbf{0.000770}\uparrow$ & $\mathbf{0.000796}\uparrow$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Piecewise Linear Interpolation and Non-Concavity.}
+Both canonical commitment curves in our system---\texttt{Original\_Planner} and \texttt{Week1\_v2}---are defined by anchor nodes $(h_k, \bar{\rho}(h_k))$ for $h_k \in \{1, 7, 30, 90, 365\}$, piecewise linear interpolation for $1 \le h \le H_0 = 365$, and an affine tail for all $h \ge H_0 = 365$:
+\begin{equation}
+\label{eq:affine_tail}
+\bar{\rho}(h) = \bar{\rho}(H_0) + \beta_{\text{tail}} (h - H_0) = a_{\text{tail}} + \beta_{\text{tail}} h, \quad \forall h \ge H_0 = 365,
+\end{equation}
+where $\beta_{\text{tail}} = \frac{\bar{\rho}(365) - \bar{\rho}(90)}{365 - 90}$.
+
+\begin{proposition}[Non-Concavity of Canonical zCDP Curves]
+\label{prop:nonconcave}
+Neither \texttt{Original\_Planner} nor \texttt{Week1\_v2} is globally concave on $h \in [1, \infty)$. Specifically, as shown in Table~\ref{tab:curves}, the secant slope of \texttt{Original\_Planner} strictly increases from $[30, 90]$ ($0.00076604$) to $[90, 365]$ ($0.00079364$), and the secant slope of \texttt{Week1\_v2} strictly increases from $[7, 30]$ ($0.00059393$) to $[30, 90]$ ($0.00076979$) and again to $[90, 365]$ ($0.00079569$).
+\end{proposition}
+\begin{proof}
+Follows by direct rational evaluation of $\frac{\bar{\rho}(h_{k+1}) - \bar{\rho}(h_k)}{h_{k+1} - h_k}$ from the anchor values in \texttt{calendar\_accounting.py}. Because $\varepsilon \mapsto (\sqrt{\varepsilon + \ln(1/\delta)} - \sqrt{\ln(1/\delta)})^2$ is strictly convex, a concave schedule in $\varepsilon(h)$ can map to a non-concave schedule in $\bar{\rho}(h)$.
+\end{proof}
+
+Proposition~\ref{prop:nonconcave} has a crucial mathematical consequence: \emph{any proof of infinite-horizon security that assumes global concavity of $\bar{\rho}(h)$ is invalid for these curves}. In Section~\ref{sec:calendar}, we prove our 575-day reduction theorem using \emph{only} the affine tail property (\ref{eq:affine_tail}) for $h \ge 365$.
+
+\begin{remark}[Infinite-Horizon Linear Growth vs.\ Constant Lifetime Privacy]
+By Equation~(\ref{eq:affine_tail}), $\bar{\rho}(h) = \Theta(h)$ as $h \to \infty$ ($\beta_{\text{tail}} \approx 7.96 \times 10^{-4}\text{ day}^{-1}$). Thus, a user who participates actively every day for $k$ years accumulates $k \cdot \Delta\rho_{\text{year}}$ zCDP exposure. Multi-Horizon User-Time DP guarantees bounded privacy for \emph{every finite participation span $h$}, eliminating intra-year epoch resets while permitting stationary perpetual releases.
+\end{remark}
+
+% ============================================================================
+\section{Unified Privacy Ledger and Perpetual Daily Sealing}
+\label{sec:sealing}
+% ============================================================================
+
+\subsection{Atomic Batch Admission and Floating-Point Error Bound}
+All releases in SDG-MH are governed by \texttt{UnifiedPrivacyLedger}. A release record $r \in \mathcal{R}$ specifies a unique identifier $\text{id}(r)$, the finite set of accessed calendar days $B(r) \subset \mathbb{N}^+$, mechanism sensitivity $\Delta(r)$, noise parameter $\sigma(r)$, zCDP cost $\rho(r) = \frac{\Delta(r)^2}{2\sigma(r)^2}$, and lifecycle status $\text{status}(r) \in \{\texttt{RESERVED}, \texttt{COMMITTED}\}$.
+
+For any user-time interval $I = [s, s+h-1]$, a release $r$ is affected by user $u$'s data in $I$ if and only if $B(r) \cap I \ne \emptyset$. By zCDP composition~\cite{bun2016concentrated}, the cumulative privacy loss over $I$ across active records $\mathcal{R}_{\text{active}}$ (both \texttt{RESERVED} and \texttt{COMMITTED}) is:
+\begin{equation}
+\label{eq:ledger_rho}
+\rho_{\text{ledger}}(s, h) = \sum_{r \in \mathcal{R}_{\text{active}} : B(r) \cap [s, s+h-1] \ne \emptyset} \rho(r).
+\end{equation}
+
+\paragraph{Transactional Two-Phase Gate and Zero-Slack Commit.}
+To prevent non-atomic partial admissions or rollback of already-exposed noisy outputs, \texttt{SealJob} and \texttt{CalendarJob} execute a strict state machine:
+\begin{enumerate}
+    \item \textbf{Batch Reservation}: Before touching raw or rolling state data, the job submits the full candidate batch $B_{\text{cand}}$ to \texttt{admit\_and\_commit\_batch(..., as\_status=RESERVED)}. Under a thread-safe re-entrant lock, the ledger verifies $\max_{s} \rho_{\text{ledger}}(s, h) \le \bar{\rho}(h) + \tau_{\text{tol}}$ for all $h$ simultaneously before inserting any record.
+    \item \textbf{Noise Generation \& Append-Only Persistence}: Only after reservation succeeds does the job compute the clipped statistic, add Discrete Gaussian noise, and append the output to \texttt{SealedStore} or \texttt{DistinctCalendarStore}.
+    \item \textbf{Irrevocable Commit}: Once the output is written to the store, the reservation is promoted to \texttt{COMMITTED}, which can never be rolled back (\texttt{allow\_committed=False}).
+\end{enumerate}
+
+\begin{lemma}[Conservative IEEE-754 Ledger Drift Bound]
+\label{lem:drift}
+In general runtime admission, \texttt{UnifiedPrivacyLedger} permits a floating-point summation tolerance $\tau_{\text{tol}} = 10^{-12}$ in $\rho$. For any anchor $\bar{\rho}(h) \ge \bar{\rho}_{\min} = \bar{\rho}_{\text{Orig}}(1) = 0.0141986$ at $\delta = 10^{-6}$, a zCDP slack of $\tau_{\text{tol}} = 10^{-12}$ induces a worst-case $(\varepsilon, \delta)$ drift of at most:
+\begin{equation}
+\Delta\varepsilon \le \left(1 + \sqrt{\frac{\ln(1/\delta)}{\bar{\rho}_{\min}}}\right) \tau_{\text{tol}} \le 3.22 \times 10^{-11}.
+\end{equation}
+Furthermore, when committing certified planner schedules via \texttt{commit\_plan\_to\_ledger()}, SDG-MH enforces \texttt{strict\_zero\_tol=True} ($\tau_{\text{tol}} = 0.0$), ensuring zero numerical tolerance overshoot.
+\end{lemma}
+\begin{proof}
+By concavity of $\rho \mapsto \rho + 2\sqrt{\rho\ln(1/\delta)}$ on $\rho > 0$, the derivative $\frac{d\varepsilon}{d\rho} = 1 + \sqrt{\ln(1/\delta)/\rho}$ is strictly decreasing in $\rho$. Evaluating at $\rho = 0.0141986$ and $\delta = 10^{-6}$ yields $32.203 \times 10^{-12} \approx 3.22 \times 10^{-11}$.
+\end{proof}
+
+\subsection{Daily Additive Sealing and Isotropic Allocation}
+For each day $t$, \texttt{SealJob} clips each user $u$'s daily requests $r_{u,t}$ and failures $f_{u,t}$ to public thresholds $(C_r, C_f) = (50, 10)$:
+\begin{equation}
+\tilde{R}_t = \sum_{u \in \mathcal{U}} \min(r_{u,t}, C_r), \qquad \tilde{F}_t = \sum_{u \in \mathcal{U}} \min(f_{u,t}, C_f).
+\end{equation}
+Given a daily zCDP budget $d > 0$, SDG-MH splits $d = \rho_r + \rho_f$ via $\rho_r = \eta d$ and $\rho_f = (1-\eta)d$ with $\eta \in (0, 1)$, and Perturbs $(\tilde{R}_t, \tilde{F}_t)$ with independent Discrete Gaussian noise~\cite{canonne2020discrete}:
+\begin{equation}
+y_{R,t} = \tilde{R}_t + \mathcal{N}_{\mathbb{Z}}(0, \sigma_r^2), \quad y_{F,t} = \tilde{F}_t + \mathcal{N}_{\mathbb{Z}}(0, \sigma_f^2),
+\end{equation}
+where $\sigma_r = \frac{C_r}{\sqrt{2\eta d}}$ and $\sigma_f = \frac{C_f}{\sqrt{2(1-\eta)d}}$. Choosing the classical Cauchy--Schwarz isotropic ratio $\eta^* = \frac{C_r^2}{C_r^2 + C_f^2} = \frac{2500}{2600} \approx 0.961538$ equalizes the noise scales $\sigma_r = \sigma_f = \sqrt{\frac{C_r^2 + C_f^2}{2d}}$ and minimizes total daily additive variance. For any rolling query window $[t-w+1, t]$, \texttt{ReadOnlySealedQueryService} sums the raw sealed integers and applies a single window-level consistency post-processing step:
+\begin{equation}
+\label{eq:postproc}
+\hat{R}_{[t-w+1, t]} = \max\!\Bigl(0, \sum_{\tau=t-w+1}^t y_{R,\tau}\Bigr), \quad
+\hat{F}_{[t-w+1, t]} = \min\!\Bigl(\hat{R}_{[t-w+1, t]},\, \max\!\Bigl(0, \sum_{\tau=t-w+1}^t y_{F,\tau}\Bigr)\Bigr).
+\end{equation}
+
+\paragraph{Why Daily Sealing Outperforms Binary Trees Under Linear Multi-Horizon Tails.}
+In classical single-horizon continual counting over $[1, T]$ under event-level DP~\cite{dwork2010continual,chan2011private}, a binary tree of height $L = \lceil \log_2 T \rceil$ achieves prefix variance $O(\log^3 T / \varepsilon^2)$ versus $O(T / \varepsilon^2)$ for independent daily noise. However, under Multi-Horizon User-Time DP with an affine tail $\bar{\rho}_{\text{add}}(h) \approx h \cdot d$, a user active for $h$ consecutive days affects all tree nodes intersecting $[s, s+h-1]$. Even for level-scaled trees (\texttt{Tree-2l} with node variance $\propto 2^\ell$), the Fisher information matrix $\mathbf{M}$ imposes a $2\times$ leaf-to-root privacy overhead at $h \to T$, forcing single-day ($w=1$) and weekly ($w=7$) query standard deviations to be $1.89\times$ and $1.15\times$ larger than direct daily sealing (Section~\ref{sec:exp}).
+
+% ============================================================================
+\section{Periodic Distinct Histograms and Calendar Accounting}
+\label{sec:calendar}
+% ============================================================================
+
+\subsection{Window-Level $k$-Task Contribution Capping}
+Consider a periodic calendar family $f \in \{7\text{d}, 30\text{d}, 90\text{d}\}$ with window length $W_f \in \{7, 30, 90\}$, release period $S_f \in \{7, 7, 30\}$, and phase offset $\phi_f \in \{0, \dots, S_f - 1\}$. Family $f$ executes a release on every calendar day $t_k \ge 1$ satisfying $t_k \equiv \phi_f \pmod{S_f}$, aggregating data over the window $B_f(t_k) = [\max(1, t_k - W_f + 1), t_k]$.
+
+Within window $B_f(t_k)$, \texttt{RollingDistinctState} computes the exact union of distinct services accessed by each user $u$ (a binary indicator vector $\mathbf{e}^{(S)}_{u} \in \{0, 1\}^m$, where $m = 5$) and selects at most $k = 3$ distinct tasks per user ($\mathbf{e}^{(A)}_{u} \in \{0, 1\}^{|\mathcal{A}|}$ with $\|\mathbf{e}^{(A)}_u\|_1 \le k$, ranked deterministically by user in-window task frequency and lexicographic tie-breaking). Adding or removing a single user $u$'s activity across the entire window $B_f(t_k)$ changes at most $m$ service counts by $\pm 1$, or under replacement of $u$'s task profile, changes at most $2k$ task counts by $\pm 1$ and $m$ service counts by $\pm 1$. Thus, the joint $\ell_2^2$ sensitivity of the $(m + |\mathcal{A}|)$-dimensional distinct histogram is bounded by:
+\begin{equation}
+\label{eq:distinct_sens}
+\Delta_{\text{distinct}}^2 = m + 2k = 5 + 2(3) = 11.
+\end{equation}
+Perturbing each coordinate independently with $\mathcal{N}_{\mathbb{Z}}(0, \sigma_f^2)$ incurs exact per-release zCDP cost $x_f = \frac{\Delta_{\text{distinct}}^2}{2\sigma_f^2} = \frac{11}{2\sigma_f^2}$.
+
+\subsection{Exact Data-Window Intersection Counting}
+A subtle pitfall in periodic privacy accounting is counting only releases whose \emph{publication timestamp} $t_k$ falls inside the user's protected interval $I = [s, s+h-1]$. Because a release at $t_k$ reads historical data over $B_f(t_k) = [t_k - W_f + 1, t_k]$, user data at day $s \in I$ continues to affect future releases up to day $s + h + W_f - 2$.
+
+\begin{theorem}[Closed-Form Data-Window Intersection Count]
+\label{thm:intersection}
+Let family $f$ have window length $W_f \in \mathbb{N}^+$, step $S_f \in \mathbb{N}^+$, and phase $\phi_f \in \{0, \dots, S_f - 1\}$, releasing at all $t \in \mathbb{Z}$ with $t \equiv \phi_f \pmod{S_f}$. For any user interval $I = [s, s + h - 1]$ of length $h \in \mathbb{N}^+$, a release at $t$ has $B_f(t) \cap I \ne \emptyset$ if and only if $t \in [s, s + L - 1]$, where $L = W_f + h - 1$. The exact number of intersecting releases is:
+\begin{equation}
+\label{eq:intersection}
+n_f(s, h; \phi_f) = \begin{cases}
+1 + \left\lfloor \dfrac{W_f + h - 2 - \Delta_f(s)}{S_f} \right\rfloor, & \text{if } \Delta_f(s) \le W_f + h - 2, \\[8pt]
+0, & \text{otherwise},
+\end{cases}
+\end{equation}
+where $\Delta_f(s) = (\phi_f - s) \bmod S_f \in \{0, \dots, S_f - 1\}$.
+\end{theorem}
+\begin{proof}
+Two closed integer intervals $[t - W_f + 1, t]$ and $[s, s + h - 1]$ intersect if and only if $\max(t - W_f + 1, s) \le \min(t, s + h - 1)$, which is equivalent to $t - W_f + 1 \le s + h - 1$ and $s \le t$, i.e., $s \le t \le s + W_f + h - 2 = s + L - 1$. The first integer $t \ge s$ satisfying $t \equiv \phi_f \pmod{S_f}$ is $t_0 = s + \Delta_f(s)$. Subsequent releases occur at $t_j = t_0 + j S_f$. Requiring $t_j \le s + L - 1$ yields $j S_f \le L - 1 - \Delta_f(s)$, which has $\lfloor (L - 1 - \Delta_f(s)) / S_f \rfloor + 1$ non-negative integer solutions $j \ge 0$ when $\Delta_f(s) \le L - 1$, and $0$ otherwise.
+\end{proof}
+
+\paragraph{Counterexample Against Release-Date-Only Accounting.}
+For the 30-day weekly distinct family ($W_f = 30, S_f = 7, \phi_f = 0$) and a single-day user interval $I = [0, 0]$ ($s = 0, h = 1$), naive release-date accounting ($t \in [0, 0]$) counts only $t = 0$ ($1$ release). Theorem~\ref{thm:intersection} gives $L = 30 + 1 - 1 = 30$ and $\Delta_f(0) = 0$, counting $t \in \{0, 7, 14, 21, 28\}$ ($5$ releases)---proving that release-date-only accounting understates single-day zCDP exposure by $5\times$.
+
+\subsection{210-Day Periodicity and Non-Concave 575-Day Reduction}
+Let a static calendar schedule $\mathcal{S} = (\boldsymbol{\phi}, \mathbf{v})$ consist of phases $\boldsymbol{\phi} = (\phi_7, \phi_{30}, \phi_{90}) \in \mathbb{Z}_7 \times \mathbb{Z}_7 \times \mathbb{Z}_{30}$ and budget vector $\mathbf{v} = (d, x_7, x_{30}, x_{90}) \in \mathbb{R}_{>0}^4$. For any start day $s$ and horizon $h \ge 1$, total zCDP exposure is:
+\begin{equation}
+L(s, h; \boldsymbol{\phi}, \mathbf{v}) = h \cdot d + \sum_{f \in \{7, 30, 90\}} n_f(s, h; \phi_f) x_f,
+\end{equation}
+and the worst-case horizon envelope is $L_{\max}(h; \boldsymbol{\phi}, \mathbf{v}) = \max_{s \in \mathbb{Z}} L(s, h; \boldsymbol{\phi}, \mathbf{v})$. Let $P = \operatorname{lcm}(S_7, S_{30}, S_{90}) = \operatorname{lcm}(7, 7, 30) = 210$ be the joint calendar period, and define the asymptotic daily rate:
+\begin{equation}
+\operatorname{slope}(\mathbf{v}) \triangleq d + \frac{x_7}{7} + \frac{x_{30}}{7} + \frac{x_{90}}{30}.
+\end{equation}
+
+\begin{assumption}[Static Periodic Calendar Scope]
+\label{assump:static}
+(A1) The window lengths $(W_f)$, steps $(S_f)$, phases $(\phi_f)$, and per-release budgets $\mathbf{v} = (d, x_7, x_{30}, x_{90})$ are fixed prior to deployment and do not adapt to private stream values; (A2) No out-of-schedule ad-hoc distinct releases are executed; (A3) The commitment curve $\bar{\rho}(h)$ satisfies the affine tail identity $\bar{\rho}(h) = a_{\text{tail}} + \beta_{\text{tail}} h$ for all $h \ge H_0 = 365$.
+\end{assumption}
+
+\begin{theorem}[210-Day Periodic Shift Identity]
+\label{thm:periodicity}
+Under Assumption~\ref{assump:static}, for every $s \in \mathbb{Z}$ and $h \in \mathbb{N}^+$:
+\begin{enumerate}
+    \item $L(s + P, h; \boldsymbol{\phi}, \mathbf{v}) = L(s, h; \boldsymbol{\phi}, \mathbf{v})$, so $L_{\max}(h; \boldsymbol{\phi}, \mathbf{v}) = \max_{s \in \{0, \dots, P-1\}} L(s, h; \boldsymbol{\phi}, \mathbf{v})$;
+    \item $L(s, h + P; \boldsymbol{\phi}, \mathbf{v}) = L(s, h; \boldsymbol{\phi}, \mathbf{v}) + P \cdot \operatorname{slope}(\mathbf{v})$, and consequently:
+    \begin{equation}
+    \label{eq:shift_210}
+    L_{\max}(h + P; \boldsymbol{\phi}, \mathbf{v}) = L_{\max}(h; \boldsymbol{\phi}, \mathbf{v}) + P \cdot \operatorname{slope}(\mathbf{v}).
+    \end{equation}
+\end{enumerate}
+\end{theorem}
+\begin{proof}
+Since $S_f \mid P$ for each $f \in \{7, 30, 90\}$, we have $(\phi_f - (s + P)) \bmod S_f = (\phi_f - s) \bmod S_f = \Delta_f(s)$, proving (1). For (2), replacing $h$ with $h + P$ in Equation~(\ref{eq:intersection}) adds $P / S_f \in \mathbb{N}^+$ inside the floor argument: since $\Delta_f(s) \le S_f - 1 \le W_f + h - 2$ for all $h \ge 1$ and $W_f \ge S_f$, $n_f(s, h + P; \phi_f) = n_f(s, h; \phi_f) + P / S_f$ holds for every $s$. Multiplying by $x_f$, summing over $f$, and adding $(h+P)d = hd + Pd$ yields $L(s, h+P) = L(s, h) + P \cdot \operatorname{slope}(\mathbf{v})$. Taking $\max_{s \in \{0, \dots, P-1\}}$ gives (\ref{eq:shift_210}).
+\end{proof}
+
+\begin{theorem}[Non-Concave Affine-Tail 575-Day Infinite-Horizon Reduction]
+\label{thm:reduction}
+Let Assumption~\ref{assump:static} hold with affine tail start $H_0 = 365$ and joint period $P = 210$ ($H_0 + P - 1 = 574$). A static periodic schedule $\mathcal{S} = (\boldsymbol{\phi}, \mathbf{v})$ satisfies the infinite-horizon Multi-Horizon commitment $L_{\max}(h; \boldsymbol{\phi}, \mathbf{v}) \le \bar{\rho}(h)$ for \textbf{all} $h \in \mathbb{N}^+$ if and only if:
+\begin{equation}
+\label{eq:cert_575}
+\text{(i) } \min_{1 \le h \le 575} \bigl(\bar{\rho}(h) - L_{\max}(h; \boldsymbol{\phi}, \mathbf{v})\bigr) \ge 0, \qquad
+\text{(ii) } \operatorname{slope}(\mathbf{v}) \le \beta_{\text{tail}}.
+\end{equation}
+Furthermore, for a system starting at calendar day $t = 1$ (no releases at $t \le 0$), the active release set at any $s \ge 1$ is a subset of the bilateral periodic schedule $\mathbb{Z}$, so $L_{\text{startup}}(s, h) \le L_{\max}(h; \boldsymbol{\phi}, \mathbf{v}) \le \bar{\rho}(h)$ holds for all $s, h \ge 1$.
+\end{theorem}
+\begin{proof}
+($\Rightarrow$) Necessity of (i) is immediate by restricting $h \in \mathbb{N}^+$ to $\{1, \dots, 575\}$. If $\operatorname{slope}(\mathbf{v}) > \beta_{\text{tail}}$, then by Theorem~\ref{thm:periodicity}, $\bar{\rho}(H_0 + kP) - L_{\max}(H_0 + kP) = \bar{\rho}(H_0) - L_{\max}(H_0) - kP(\operatorname{slope}(\mathbf{v}) - \beta_{\text{tail}}) \to -\infty$ as $k \to \infty$, violating security.
+
+($\Leftarrow$) Suppose (i) and (ii) hold. For $h \in \{1, \dots, 575\}$, $L_{\max}(h) \le \bar{\rho}(h)$ holds by (i). For any $h > 575$, write $h - H_0 = k P + r$ via Euclidean division with $k = \lfloor (h - H_0) / P \rfloor \ge 1$ and $r \in \{0, \dots, P - 1\}$. Define $h' = H_0 + r \in [365, 574] \subset [1, 575]$. Because \emph{both} $h' \ge H_0$ and $h = h' + kP \ge H_0$ lie inside the affine tail $[H_0, \infty)$, Equation~(\ref{eq:affine_tail}) gives the exact equality:
+\[
+\bar{\rho}(h) = \bar{\rho}(h') + k P \beta_{\text{tail}},
+\]
+without invoking concavity on $[1, H_0]$. By $k$ applications of Theorem~\ref{thm:periodicity}(2), $L_{\max}(h) = L_{\max}(h') + k P \operatorname{slope}(\mathbf{v})$. Subtracting the two equations yields:
+\[
+\bar{\rho}(h) - L_{\max}(h) = \bigl(\bar{\rho}(h') - L_{\max}(h')\bigr) + k P \bigl(\beta_{\text{tail}} - \operatorname{slope}(\mathbf{v})\bigr) \ge 0 + 0 = 0.
+\]
+Finally, since $x_f \ge 0$, omitting releases at $t \le 0$ only removes non-negative terms from $L(s, h)$, proving startup monotonicity.
+\end{proof}
+
+% ============================================================================
+\section{Joint Phase--Budget Planning and Optimality Certificates}
+\label{sec:planner}
+% ============================================================================
+
+\subsection{Canonical Phase Reduction and Convex Subproblem}
+Given workload weights $\mathbf{w} = (w_{\text{add}}, w_7, w_{30}, w_{90})$ with $\sum_j w_j = 1$ and sensitivity coefficients $c_j = 10^4 w_j a_j > 0$, \texttt{JointCalendarPlanner} minimizes the weighted variance proxy:
+\begin{align}
+\min_{\boldsymbol{\phi},\, \mathbf{v} = (d, x_7, x_{30}, x_{90})} \quad & f(\mathbf{v}) = \frac{c_0}{d} + \frac{c_1}{x_7} + \frac{c_2}{x_{30}} + \frac{c_3}{x_{90}} \label{eq:obj} \\
+\text{s.t.} \quad & h \cdot d + \sum_{f \in \{7, 30, 90\}} n_f(s, h; \phi_f) x_f \le \bar{\rho}(h), \quad \forall h \in [1, 575],\; s \in [0, 209], \nonumber \\
+& d + \frac{x_7}{7} + \frac{x_{30}}{7} + \frac{x_{90}}{30} \le \beta_{\text{tail}}, \qquad \mathbf{l} \le \mathbf{v} \le \mathbf{u}. \nonumber
+\end{align}
+
+\paragraph{Canonical Phase Equivalence Classes.}
+The raw phase space $(\phi_7, \phi_{30}, \phi_{90}) \in \mathbb{Z}_7 \times \mathbb{Z}_7 \times \mathbb{Z}_{30}$ has $7 \times 7 \times 30 = 1,470$ tuples. Because $L_{\max}(h; \boldsymbol{\phi}, \mathbf{v})$ maximizes over all $s \in \mathbb{Z}_P$, shifting all phases by a common integer $\delta$ merely permutes $s \mapsto (s - \delta) \bmod P$. Since $\gcd(7, 30) = 1$, by the Chinese Remainder Theorem there exists for any $(\phi_7, \phi_{30}, \phi_{90})$ a shift $\delta$ such that $(\phi_7 - \delta) \equiv 0 \pmod 7$, reducing the search space to $1 \times 7 \times 30 = 210$ canonical phase classes with $\phi_7 = 0$.
+
+For each fixed phase $\boldsymbol{\phi}$, Problem~(\ref{eq:obj}) has a strictly convex separable objective $f(\mathbf{v})$ over a finite intersection of linear inequalities $\mathbf{A}_\phi \mathbf{v} \le \mathbf{b}$ and box bounds $[\mathbf{l}, \mathbf{u}]$. We solve each fixed-phase subproblem via an iterative cutting-plane SLSQP solver, followed by a conservative multiplicative shrinkage $\mathbf{v}_{\text{cert}} = \gamma \mathbf{v}_{\text{raw}}$ ($\gamma = (1 - 10^{-11}) / \max(1, r_{\max})$) that guarantees strict zero-tolerance satisfaction of Theorem~\ref{thm:reduction} ($\min_{h \le 575} \text{slack}(h) \ge 0.0$) before recomputing $f(\mathbf{v}_{\text{cert}})$.
+
+\subsection{Directed-Rounding Lagrangian Dual Certificate}
+Because SLSQP is a finite-precision numerical solver and conservative shrinkage slightly perturbs $\mathbf{v}_{\text{raw}}$, one cannot claim mathematical global optimality solely from solver termination flags. To certify a rigorous lower bound on the true minimum $f_\phi^*$ for each phase $\boldsymbol{\phi}$, we construct a verifiable dual certificate.
+
+\begin{theorem}[Box-Constrained Lagrangian Dual Lower Bound]
+\label{thm:dual}
+Let $\mathbf{A}\mathbf{v} \le \mathbf{b}$ be any subset of valid linear constraints for phase $\boldsymbol{\phi}$ with $\mathbf{A} \ge \mathbf{0}$, and let $\boldsymbol{\lambda} \in \mathbb{R}_{\ge 0}^m$ be any non-negative dual multiplier vector. Define $\mathbf{g}(\boldsymbol{\lambda}) = \mathbf{A}^T \boldsymbol{\lambda} \ge \mathbf{0}$. Then for every primal-feasible $\mathbf{v} \in \mathcal{V}_\phi \subset [\mathbf{l}, \mathbf{u}]$ (with $\mathbf{l} > \mathbf{0}, \mathbf{c} > \mathbf{0}$):
+\begin{equation}
+\label{eq:dual_q}
+f(\mathbf{v}) \ge q(\boldsymbol{\lambda}) \triangleq \sum_{j=0}^3 \min_{v_j \in [l_j, u_j]} \left(\frac{c_j}{v_j} + g_j(\boldsymbol{\lambda}) v_j\right) - \boldsymbol{\lambda}^T \mathbf{b},
+\end{equation}
+where the 1D convex minimum is achieved at $\hat{v}_j = \operatorname{clip}\!\bigl(\sqrt{c_j / g_j(\boldsymbol{\lambda})},\, l_j, u_j\bigr)$ (or $\hat{v}_j = u_j$ if $g_j(\boldsymbol{\lambda}) = 0$), and satisfies $\min_{v_j \in [l_j, u_j]} (c_j/v_j + g_j v_j) \ge 2\sqrt{c_j g_j(\boldsymbol{\lambda})}$ whenever $\sqrt{c_j/g_j(\boldsymbol{\lambda})} \in [l_j, u_j]$.
+\end{theorem}
+\begin{proof}
+For any primal-feasible $\mathbf{v} \in \mathcal{V}_\phi$, $\mathbf{A}\mathbf{v} - \mathbf{b} \le \mathbf{0}$ and $\boldsymbol{\lambda} \ge \mathbf{0}$ imply $\boldsymbol{\lambda}^T (\mathbf{A}\mathbf{v} - \mathbf{b}) \le 0$. Adding this non-positive term to $f(\mathbf{v})$ and regrouping by coordinate $j$ yields $f(\mathbf{v}) \ge f(\mathbf{v}) + \boldsymbol{\lambda}^T(\mathbf{A}\mathbf{v} - \mathbf{b}) = \sum_{j=0}^3 (c_j / v_j + g_j(\boldsymbol{\lambda}) v_j) - \boldsymbol{\lambda}^T \mathbf{b} \ge q(\boldsymbol{\lambda})$. By AM--GM, $c_j/v_j + g_j v_j \ge 2\sqrt{c_j g_j}$ for all $v_j > 0$.
+\end{proof}
+
+\paragraph{Eliminating IEEE-754 Cancellation via 100-Digit Directed Rounding.}
+In standard IEEE-754 \texttt{float64}, evaluating Equation~(\ref{eq:dual_q}) and multiplying by a heuristic factor $(1 - 10^{-14})$ is \emph{not} a sound certificate: when $\|\boldsymbol{\lambda}\|_1$ is large, subtractive cancellation between $\sum_j (c_j/\hat{v}_j + g_j \hat{v}_j)$ and $\boldsymbol{\lambda}^T \mathbf{b}$ scales as $O(\epsilon_{\text{mach}} \|\boldsymbol{\lambda}\|_1 \|\mathbf{b}\|_\infty)$, which can exceed $f^*$ (our unit test \texttt{test\_naive\_float64\_dual\_deduction\_fails\_cancellation\_counterexample} constructs an explicit instance where \texttt{float64} $(1 - 10^{-14})$ overestimates $f^* = 3.7209$ by $+0.2166$).
+
+Our function \texttt{certify\_lagrangian\_dual\_bound\_exact()} evaluates Equation~(\ref{eq:dual_q}) in Python's \texttt{decimal} arithmetic at $\text{prec} = 100$ digits using strict directed rounding:
+\begin{itemize}
+    \item Under \texttt{ROUND\_FLOOR}, it lower-bounds the rational tail coefficients ($1/7, 1/30$), computes $\underline{g}_j \le \sum_i \lambda_i a_{ij}$, and lower-bounds each coordinate minimum via exact boundary comparison of $[\underline{v}_j^*, \overline{v}_j^*]$ or $\lfloor 2\sqrt{c_j \underline{g}_j} \rfloor_{\text{FLOOR}}$;
+    \item Under \texttt{ROUND\_CEILING}, it upper-bounds $\overline{D} \ge \sum_i \lambda_i b_i$;
+    \item It subtracts $\underline{q} = \lfloor \sum_j \underline{\phi}_j - \overline{D} \rfloor_{\text{FLOOR}}$ and applies \texttt{math.nextafter(..., -inf)} to guarantee $\operatorname{Decimal}(\text{dual\_lb}) \le \underline{q}$.
+\end{itemize}
+
+\paragraph{Four-Tier Certification Hierarchy.}
+To maintain strict epistemological honesty between numerical optimization and symbolic proofs, SDG-MH classifies every planner output into four disjoint tiers:
+\begin{enumerate}
+    \item \texttt{SOLVER\_CONVERGED}: SLSQP terminated within solver tolerance ($10^{-8}$), but zero-tolerance 575-day verification failed (blocked from ledger commit);
+    \item \texttt{FEASIBLE\_CERTIFIED}: Passed strict zero-tolerance 575-day verification, but not all 210 phases have a closed dual lower bound (e.g., fixed-budget Group A or Group C);
+    \item \texttt{NEAR\_GLOBAL\_OPTIMAL\_CERTIFIED}: Passed zero-tolerance verification, all 210 canonical phases are accounted for (either dual-certified via \texttt{DECIMAL100\_DIRECTED\_ROUNDING} or proved infeasible at box lower bound $\mathbf{l}$), and the post-shrinkage relative optimality gap satisfies $\frac{f(\mathbf{v}_{\text{cert}}) - \min_\phi LB_\phi}{\min_\phi LB_\phi} \le 10^{-4}$;
+    \item \texttt{GLOBAL\_OPTIMAL\_PROVED}: Reserved exclusively for zero-gap symbolic closed-form proofs (\texttt{is\_math\_global\_optimal} is strictly \texttt{False} for all numerical SLSQP solutions).
+\end{enumerate}
+
+% ============================================================================
+\section{Experimental Evaluation}
+\label{sec:exp}
+% ============================================================================
+
+\subsection{Experimental Setup and Statistical Methodology}
+We evaluate the complete end-to-end SDG-MH pipeline (\texttt{SyntheticTelemetryGenerator} $\to$ \texttt{RollingDistinctState} $\to$ \texttt{JointCalendarPlanner} $\to$ \texttt{UnifiedPrivacyLedger} $\to$ \texttt{SealJob} \& \texttt{CalendarJob} $\to$ \texttt{ReadOnlySealedQueryService}) over a 420-day cross-period horizon ($2P = 420$ days, valid ISO-8601 calendar dates \texttt{2025-01-01} to \texttt{2026-02-24}) with $N_0 = 2,000$ initial enterprise users, annual workforce turnover, weekday/weekend modulation ($0.25\times$ weekend activity), and heavy-tailed LogNormal daily request volumes.
+
+\paragraph{Stratified Seed-Level Inference and 128-Bit Collision-Free CRN.}
+Earlier multi-trial benchmarks that pool $K$ data seeds $\times$ $M$ Monte Carlo (MC) noise draws as $K \cdot M$ independent samples commit pseudo-replication: deterministic quantities such as clipping bias have intraclass correlation $\text{ICC} = 1.000$ within each data seed, causing naive pooling ($df = KM - 1$) to underestimate true population uncertainty by $2.76\times$. In our final v3 benchmark (\texttt{run\_long\_horizon\_420d\_audit\_v3.py}), we run $K = 8$ independent longitudinal dataset seeds ($\{42, 1042, \dots, 7042\}$) $\times$ $M = 5$ MC trials ($40$ runs per configuration) and treat the \textbf{per-seed mean $\bar{Y}_k = \frac{1}{M}\sum_{m=1}^M Y_{k,m}$ as the independent statistical unit ($df = K - 1 = 7$)}.
+
+To eliminate 32-bit birthday collisions (which we observed in 32-bit truncated \texttt{SeedSequence} outputs on tuples \texttt{(3042,2,410,1)} and \texttt{(5042,4,218,2)}), we derive all per-day mechanism seeds via an injective 128-bit bit-packing $(ds \ll 96) \mid (mc \ll 64) \mid (\text{day} \ll 32) \mid \text{stream\_id}$. Exhaustive runtime verification across all $50,520$ primary and task-offset seeds confirms $50,520$ unique values and $0$ collisions. Across paired comparisons (\texttt{B\_BudgetOnly} vs.\ \texttt{D\_JointPlanning}), both schedules share identical \texttt{(data\_seed, mc\_trial, day, stream\_id)} Common Random Numbers (CRN), achieving empirical Discrete Gaussian noise correlation $r \approx 0.915$--$0.985$. We report two-sided paired $t$-confidence intervals ($df=7$), exact Wilcoxon signed-rank $p$-values, and Holm--Bonferroni step-down adjusted $p$-values ($p_{\text{holm}}$).
+
+\subsection{Optimization Cost, Dual Gaps, and 420-Day Ledger Safety}
+
+\begin{table}[t]
+\centering
+\caption{Planner Optimization Cost, Certified Primal Upper Bounds $f(\mathbf{v}_{\text{cert}})$, \texttt{DECIMAL100} Dual Lower Bounds, and Noise Scales ($\delta = 10^{-6}$, $C_r=50, C_f=10$).}
+\label{tab:planner_bounds}
+\scriptsize
+\setlength{\tabcolsep}{2.6pt}
+\begin{tabular}{lllrrrrrr}
+\toprule
+\textbf{Workload} & \textbf{Curve} & \textbf{Group} & \textbf{Phases} & \textbf{Time} & \textbf{Primal $f^*$} & \textbf{Dual LB (Gap)} & $\sigma_{\text{add}}$ & $(\sigma_7, \sigma_{30}, \sigma_{90})$ \\
+\midrule
+Default & Week1\_v2 & A\_Base & $(0,0,0)$ & $0.024$s & $2047.79$ & $-\infty$ (\texttt{FEAS}) & $2319.7$ & $(60.0, 60.0, 60.0)$ \\
+Default & Week1\_v2 & D\_Joint & $(0,0,0)$ & $1.540$s & $1433.92$ & $1433.92$ ($2.0\text{e-}11$) & $1661.1$ & $(74.7, 74.7, 65.3)$ \\
+DistHeavy & Week1\_v2 & B\_Budg & $(0,0,0)$ & $0.026$s & $932.63$ & $932.63$ ($1.0\text{e-}11$) & $2024.7$ & $(59.0, 61.8, 69.0)$ \\
+DistHeavy & Week1\_v2 & D\_Joint & $(0,4,0)$ & $1.576$s & $922.98$ & $922.98$ ($7.5\text{e-}09$) & $2037.7$ & $(58.4, 61.4, 66.8)$ \\
+DistHeavy & Original & B\_Budg & $(0,0,0)$ & $0.028$s & $940.89$ & $940.89$ ($1.0\text{e-}11$) & $2013.6$ & $(59.1, 62.4, 70.9)$ \\
+DistHeavy & Original & D\_Joint & $(0,4,0)$ & $1.661$s & $930.33$ & $930.33$ ($1.0\text{e-}11$) & $2031.0$ & $(58.5, 61.9, 68.4)$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Table~\ref{tab:planner_bounds} summarizes the planner's optimization performance. Solving all 210 canonical phases and certifying 100-digit directed-rounding dual bounds in Group D requires $1.54\text{--}1.66$ seconds. All optimized plans achieve \texttt{NEAR\_GLOBAL\_OPTIMAL\_CERTIFIED} status with relative primal--dual gaps between $1.00 \times 10^{-11}$ and $7.45 \times 10^{-9}$. Under \texttt{Default} weights $(0.40, 0.25, 0.25, 0.10)$, the asymptotic tail slope $\beta_{\text{tail}}$ is the active bottleneck, so phase shifting provides zero additional slack ($D \equiv B$ at $\boldsymbol{\phi} = (0,0,0)$), whereas budget optimization reduces $f^*$ by $29.98\%$ over Group A. Under \texttt{DistinctHeavy} weights $(0.10, 0.40, 0.40, 0.10)$, short-horizon window intersections become active, and shifting $\phi_{30}$ from $0$ (Sunday) to $4$ (Thursday) staggers the 30-day release away from the 7-day and 90-day releases, reducing $f^*$ by $1.04\%$ (\texttt{Week1\_v2}) and $1.12\%$ (\texttt{Original}).
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig1_420d_cross_period_ledger_trajectory.png}
+\caption{420-day cross-period privacy ledger trajectory $\max_s \rho_{\text{ledger}}(s, h)$ vs.\ 575-day theoretical envelope $L_{\max}(h)$ and commitment $\bar{\rho}(h)$, with strictly positive headroom across checkpoints $t \in \{210, 365, 420\}$.}
+\label{fig:ledger_traj}
+\end{figure}
+
+Figure~\ref{fig:ledger_traj} verifies Theorem~\ref{thm:reduction} across two full 210-day periods ($t \in \{210, 365, 420\}$). At every checkpoint and horizon $h \in \{90, 210, 365, 420\}$, observed ledger consumption satisfies $\rho_{\text{ledger}}(h) \le L_{\max}^{(575)}(h) \le \bar{\rho}(h)$ with zero violations and positive zCDP headroom ($+0.00123$ to $+0.01696$).
+
+\subsection{Same-Query-Date Evaluation: Release Accuracy vs.\ Staleness}
+
+\begin{table*}[t]
+\centering
+\caption{Same-Query-Date Paired Comparison ($K=8$ Independent Seeds $\times$ $5$ CRN Trials, $df=7$): Separating Own Release-Day Accuracy (\texttt{rel\_*}), Common Daily Dashboard Queries (\texttt{common\_daily\_*}), and Fixed Sunday Report Queries (\texttt{common\_sunday\_*}). Negative Diff Favors Treatment.}
+\label{tab:paired_v3}
+\scriptsize
+\setlength{\tabcolsep}{4.2pt}
+\begin{tabular}{lllrrrrrrl}
+\toprule
+\textbf{Workload / Curve} & \textbf{Contrast} & \textbf{Metric / Query Regime} & \textbf{Base Mean} & \textbf{Trt Mean} & \textbf{Paired Diff ($\pm$CI95)} & \textbf{Raw $p_t$} & \textbf{Holm $p_{\text{holm}}$} & \textbf{Wilcoxon $p$} & \textbf{Seeds $<0$} \\
+\midrule
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{requests\_1d\_total\_rmse} & $2577.91$ & $2587.75$ & $\mathbf{+9.85}$ ($\pm 0.80$) & $0.0000$ & $0.0000$ & $0.0078$ & $0/8$ (Trade-off) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{failures\_1d\_total\_rmse} & $1389.53$ & $1397.76$ & $\mathbf{+8.24}$ ($\pm 0.25$) & $0.0000$ & $0.0000$ & $0.0078$ & $0/8$ (Trade-off) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{rel\_7d\_mape\_pct} (Lag $0$d) & $2.8137\%$ & $2.7866\%$ & $\mathbf{-0.0271\%}$ ($\pm 0.0049\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{common\_daily\_7d\_served\_mape} & $2.9309\%$ & $2.9039\%$ & $\mathbf{-0.0270\%}$ ($\pm 0.0042\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{rel\_30d\_mape\_pct} (Own release) & $2.4907\%$ & $2.4666\%$ & $-0.0241\%$ ($\pm 0.0835\%$) & $0.5166$ & $1.0000$ & $0.6406$ & $5/8$ (Non-sig.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{common\_daily\_30d\_served\_mape} & $2.4919\%$ & $2.4748\%$ & $-0.0171\%$ ($\pm 0.0800\%$) & $0.6293$ & $1.0000$ & $0.7422$ & $5/8$ (Non-sig.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{common\_daily\_30d\_drift\_rmse} & $6.2368$ & $4.9317$ & $\mathbf{-1.3051}$ ($\pm 0.1750$) & $0.0000$ & diag & $0.0078$ & $8/8$ (Lower drift) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{common\_sunday\_30d\_served\_mape} & $2.4907\%$ & $2.4902\%$ & $-0.0005\%$ ($\pm 0.0826\%$) & $0.9886$ & $1.0000$ & $0.8438$ & $3/8$ ($+3$d lag) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{common\_sunday\_30d\_drift\_rmse} & $0.0000$ & $7.5459$ & $\mathbf{+7.5459}$ ($\pm 0.3936$) & $0.0000$ & diag & $0.0078$ & $0/8$ ($+3$d lag) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{rel\_90d\_mape\_pct} (Lag $0$d) & $2.6957\%$ & $2.6096\%$ & $\mathbf{-0.0861\%}$ ($\pm 0.0119\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{common\_daily\_90d\_served\_mape} & $2.6961\%$ & $2.6070\%$ & $\mathbf{-0.0891\%}$ ($\pm 0.0092\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+\midrule
+DistHeavy / Original & D $-$ B & \texttt{requests\_1d\_total\_rmse} & $2569.64$ & $2582.88$ & $\mathbf{+13.23}$ ($\pm 0.90$) & $0.0000$ & $0.0000$ & $0.0078$ & $0/8$ (Trade-off) \\
+DistHeavy / Original & D $-$ B & \texttt{failures\_1d\_total\_rmse} & $1382.56$ & $1393.84$ & $\mathbf{+11.28}$ ($\pm 0.37$) & $0.0000$ & $0.0000$ & $0.0078$ & $0/8$ (Trade-off) \\
+DistHeavy / Original & D $-$ B & \texttt{rel\_7d\_mape\_pct} (Lag $0$d) & $2.8185\%$ & $2.7936\%$ & $\mathbf{-0.0248\%}$ ($\pm 0.0050\%$) & $0.0000$ & $0.0001$ & $0.0078$ & $8/8$ (Sig.) \\
+DistHeavy / Original & D $-$ B & \texttt{common\_daily\_7d\_served\_mape} & $2.9354\%$ & $2.9090\%$ & $\mathbf{-0.0265\%}$ ($\pm 0.0045\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+DistHeavy / Original & D $-$ B & \texttt{common\_daily\_30d\_served\_mape} & $2.5202\%$ & $2.4971\%$ & $-0.0231\%$ ($\pm 0.0710\%$) & $0.4671$ & $1.0000$ & $0.5469$ & $5/8$ (Non-sig.) \\
+DistHeavy / Original & D $-$ B & \texttt{common\_sunday\_30d\_served\_mape} & $2.5194\%$ & $2.5121\%$ & $-0.0073\%$ ($\pm 0.0739\%$) & $0.8223$ & $1.0000$ & $0.8438$ & $4/8$ ($+3$d lag) \\
+DistHeavy / Original & D $-$ B & \texttt{rel\_90d\_mape\_pct} (Lag $0$d) & $2.7815\%$ & $2.6771\%$ & $\mathbf{-0.1044\%}$ ($\pm 0.0187\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+DistHeavy / Original & D $-$ B & \texttt{common\_daily\_90d\_served\_mape} & $2.7796\%$ & $2.6759\%$ & $\mathbf{-0.1037\%}$ ($\pm 0.0179\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ (Sig.) \\
+\midrule
+Default / Week1\_v2 & D $-$ A & \texttt{requests\_1d\_total\_rmse} & $2802.06$ & $2314.55$ & $\mathbf{-487.51}$ ($\pm 12.76$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ ($-17.40\%$) \\
+Default / Week1\_v2 & D $-$ A & \texttt{failures\_1d\_total\_rmse} & $1572.99$ & $1159.37$ & $\mathbf{-413.62}$ ($\pm 12.81$) & $0.0000$ & $0.0000$ & $0.0078$ & $8/8$ ($-26.29\%$) \\
+Default / Week1\_v2 & D $-$ A & \texttt{common\_daily\_7d\_served\_mape} & $2.9726\%$ & $3.6571\%$ & $\mathbf{+0.6845\%}$ ($\pm 0.0196\%$) & $0.0000$ & $0.0000$ & $0.0078$ & $0/8$ (Weight shift) \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+Because Group B ($\phi_{30}=0$, Sunday) and Group D ($\phi_{30}=4$, Thursday) release 30-day histograms on different weekdays, comparing them only on their respective release days confounds mechanism noise with weekday vs.\ weekend ground-truth volume ($1965.9$ vs.\ $1972.1$ active users). Table~\ref{tab:paired_v3} and Figure~\ref{fig:same_date} evaluate all schedules across three distinct regimes:
+\begin{enumerate}
+    \item \textbf{7d and 90d Distinct (Consistent Significant Gains)}: Because $\phi_7 = 0$ and $\phi_{90} = 0$ in both B and D, release dates coincide. Group D reduces 90d MAPE by $-0.0861\%$ (\texttt{Week1\_v2}, $-3.19\%$ relative) and $-0.1044\%$ (\texttt{Original}, $-3.75\%$ relative), and 7d MAPE by $-0.0271\%$ and $-0.0248\%$, winning on $8/8$ seeds with Holm-adjusted $p_{\text{holm}} \le 0.0001$ and exact Wilcoxon $p = 0.0078$.
+    \item \textbf{30d Distinct on Common Daily Queries (Non-Significant Overall)}: Across all $386$ shared daily dashboard query dates $d \in [35, 420]$ (where both B and D have mean staleness $\approx 3.0\text{ days}$), Group D reduces pure staleness drift RMSE from $6.24$ to $4.93$ ($-1.31$, $8/8$ seeds), but total served 30d MAPE improves by only $-0.0171\% \pm 0.0800\%$ ($p_{\text{holm}} = 1.000$) on \texttt{Week1\_v2} and $-0.0231\% \pm 0.0710\%$ ($p_{\text{holm}} = 1.000$) on \texttt{Original}. Because $\sigma_{30}$ differs by only $-0.62\%$ to $-0.84\%$, day-of-week sample variance across shifted release dates dominates the noise reduction.
+    \item \textbf{Fixed Sunday Queries and Daily Additive Trade-off}: If an analyst queries 30d prevalence exclusively on Sundays ($d \bmod 7 = 0$), Group B serves fresh releases ($0.0\text{d}$ lag), whereas Group D serves Thursday's release ($3.0\text{d}$ lag, $+7.55$ drift RMSE), canceling its $\sigma_{30}$ advantage ($-0.0005\%$, $p_{\text{holm}} = 1.000$). When Sunday freshness is required, \texttt{PlannerConfig(fixed\_phi\_30=0)} pins the phase to Sunday (recovering Group B). In addition, under \texttt{DistinctHeavy}, Group D trades a $+0.38\%$ to $+0.51\%$ increase in daily additive request RMSE ($+9.85$ to $+13.23$, $0/8$ seeds) to fund the distinct budget expansion.
+\end{enumerate}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig1_v3_same_query_date_d_vs_b.png}
+\caption{Paired MAPE difference ($D - B$, $K=8$ seeds, $95\%$ CI) across 7d, 30d common daily queries, 30d fixed Sunday queries, and 90d distinct prevalence.}
+\label{fig:same_date}
+\end{figure}
+
+\subsection{Clipping Threshold $C_r$ Sensitivity Ablation}
+Figure~\ref{fig:cr_ablation} evaluates per-user request clipping thresholds $C_r \in \{30, 50, 100, 200\}$ under fixed \texttt{Week1\_v2} daily budget $d = 0.0004711$ and isotropic scaling $\eta = C_r^2 / (C_r^2 + 10^2)$. In accordance with bias--variance theory~\cite{amin2019bounding}, aggressive clipping ($C_r = 30$, clipping $13.59\%$ of user-days) incurs severe negative bias ($-2866.45 \pm 2.58$), yielding total RMSE $3337.54 \pm 9.92$. Relaxing $C_r$ to $100$ or $200$ reduces bias to $-417.07$ and $-81.99$, but inflates $\sigma_r$ to $3273.98$ and $6523.60$, raising total RMSE to $3175.34$ and $6195.86$. $C_r = 50$ ($5.37\%$ clipped user-days, $\sigma_r = 1661.12$, bias $-1439.56$) achieves the empirical U-curve minimum total RMSE of $\mathbf{2346.22 \pm 23.90}$.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\columnwidth]{figures/fig2_cr_clipping_pareto_ablation.png}
+\caption{Per-user daily request clipping threshold $C_r \in \{30, 50, 100, 200\}$ bias--variance Pareto ablation over 420 days.}
+\label{fig:cr_ablation}
+\end{figure}
+
+\subsection{Fair Comparison Against Continual DP Baselines}
+
+\begin{table*}[t]
+\centering
+\caption{Uniformly Post-Processed Competitive Additive Baselines Over the Shared $[1, 420]$ Horizon (\texttt{Week1\_v2} Remaining Additive Envelope $\bar{\rho}_{\text{add}}(h)$, $C_r=50, C_f=10$, $K=8$ Seeds, $df=7$). All Methods Use Identical Window Post-Processing $\hat{R}=\max(0,\tilde{R}),\, \hat{F}=\min(\hat{R},\max(0,\tilde{F}))$.}
+\label{tab:baselines_v3}
+\scriptsize
+\setlength{\tabcolsep}{4.0pt}
+\begin{tabular}{llrrrrrrrc}
+\toprule
+\textbf{Method} & \textbf{Certified Horizon Scope} & \textbf{Req 1d RMSE} & \textbf{Req 7d RMSE} & \textbf{Req 30d RMSE} & \textbf{Req 90d RMSE} & \textbf{Fail 1d RMSE} & \textbf{Fail 30d RMSE} & \textbf{Fail 90d RMSE} & \textbf{Distinct (7/30/90d)} \\
+\midrule
+\textbf{SDG-MH (D\_Joint)} & \textbf{Infinite $h \ge 1$} (eval $[1,420]$) & $\mathbf{2314.5\pm 32.2}$ & $\mathbf{11034.3\pm 261.3}$ & $\mathbf{43866.8\pm 1247.3}$ & $126664.8\pm 4104.2$ & $\mathbf{1159.4\pm 28.9}$ & $\mathbf{7468.4\pm 583.1}$ & $\mathbf{14003.3\pm 991.9}$ & \textbf{Supported (Native)} \\
+\textbf{Tree-2l (MH-RemEnv)} & Finite Dyadic $T \le 512$ & $4378.6\pm 64.2$ & $12716.7\pm 176.4$ & $44587.3\pm 924.4$ & $\mathbf{126186.5\pm 3209.9}$ & $2724.1\pm 51.1$ & $9467.8\pm 498.9$ & $16154.0\pm 1224.1$ & N/A (Non-Additive) \\
+\textbf{Tree-2l (Daily-$d$)} & Finite Dyadic $T \le 512$ & $4407.0\pm 64.8$ & $12753.4\pm 176.6$ & $44612.6\pm 927.6$ & $126197.5\pm 3223.4$ & $2743.0\pm 51.2$ & $9530.3\pm 504.1$ & $16253.4\pm 1233.7$ & N/A (Non-Additive) \\
+\textbf{Tree-U (MH-RemEnv)} & Finite Dyadic $T \le 512$ & $27907.0\pm 528.7$ & $49855.3\pm 601.3$ & $72369.7\pm 1298.6$ & $138543.3\pm 3926.2$ & $14142.6\pm 284.3$ & $40923.8\pm 1438.6$ & $45397.7\pm 2852.4$ & N/A (Non-Additive) \\
+\textbf{W-BD-30 (MH-Calib)} & Rolling Finite $[1,420]$ & $3649.9\pm 198.6$ & $15780.3\pm 1294.4$ & $51601.9\pm 4170.4$ & $133714.2\pm 4199.2$ & $1278.4\pm 86.4$ & $14172.9\pm 2672.6$ & $24464.7\pm 3159.7$ & N/A (Non-Additive) \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/fig2_v3_uniform_postproc_baselines.png}
+\caption{Competitive additive baseline comparison under identical post-processing, clipping, and $[1,420]$ multi-horizon privacy envelope.}
+\label{fig:baselines}
+\end{figure}
+
+Table~\ref{tab:baselines_v3} and Figure~\ref{fig:baselines} compare SDG-MH against \texttt{Tree-2l}, \texttt{Tree-U} (with exact Honaker GLS estimation~\cite{honaker2015efficient}), and \texttt{W-BD-30}~\cite{kellaris2014wevent}. To ensure strict fairness, all methods are evaluated exclusively on the shared $[1, 420]$ horizon, calibrated to the exact remaining additive zCDP envelope $\bar{\rho}_{\text{add}}(h) = \bar{\rho}(h) - L_{\max,\text{distinct}}(h)$ for all $h \in [1, 420]$, use identical user clipping $(C_r=50, C_f=10)$ and isotropic split $\eta$, and apply the exact same window-level post-processing (\ref{eq:postproc}).
+\begin{itemize}
+    \item \textbf{Short- and Medium-Window Superiority}: On 1d and 7d Requests, SDG-MH ($2314.5$ and $11034.3$) reduces RMSE by $1.89\times$ and $1.15\times$ over \texttt{Tree-2l} ($4378.6$ and $12716.7$), by $1.58\times$ and $1.43\times$ over \texttt{W-BD-30} ($3649.9$ and $15780.3$), and by $12.06\times$ and $4.52\times$ over \texttt{Tree-U}. On Failures (where clipping bias is only $-0.83/\text{day}$), SDG-MH outperforms all baselines across \emph{all} horizons $w \in \{1, 7, 30, 90\}$ (e.g., $7468.4$ vs.\ $9467.8$ for \texttt{Tree-2l} and $14172.9$ for \texttt{W-BD-30} at $w=30$).
+    \item \textbf{90d Requests Clipping-Bias Convergence}: At $w = 90$ on Requests, cumulative clipping bias ($90 \times (-1437.7) \approx -129,393$) dwarfs mechanism variance. Consequently, \texttt{Tree-2l (MH-RemEnv)} ($126186.5 \pm 3209.9$) exhibits a $0.38\%$ lower sample mean than SDG-MH ($126664.8 \pm 4104.2$), with overlapping confidence intervals.
+    \item \textbf{Scope and Non-Comparability Boundaries}: Naive \texttt{W-BD-30} calibrated only at $h=30$ violates the 365-day commitment by $1.35\times$ (requiring shrinkage to $\rho_w = 0.012359$ at tightest horizon $h=32$). Moreover, binary trees and $w$-event mechanisms cannot compute non-additive user-deduplicated distinct histograms (\texttt{N/A}), whereas SDG-MH serves both workloads under a single infinite-horizon ($h \ge 1$) certificate.
+\end{itemize}
+
+% ============================================================================
+\section{Related Work}
+\label{sec:related}
+% ============================================================================
+
+\paragraph{Continual Observation, Binary Trees, and Matrix Mechanisms.}
+Dwork et al.~\cite{dwork2010continual} and Chan et al.~\cite{chan2011private} introduced the binary mechanism for continual prefix sums over horizon $T$, achieving $O(\varepsilon^{-1}\log^{1.5} T)$ error. Honaker~\cite{honaker2015efficient} showed that Generalized Least Squares (GLS) post-processing substantially reduces tree variance. Li et al.~\cite{li2015matrix} generalized linear query strategies via the Matrix Mechanism. Recent advances optimize lower-triangular and Toeplitz factorizations for adaptive streaming DP-SGD: Denisov et al.~\cite{denisov2022improved} formulated fixed-point optimal linear operators; Fichtenberger et al.~\cite{fichtenberger2023constant} derived sharp Toeplitz constants; Choquette-Choo et al.~\cite{choquette2023multiepoch,choquette2023banded} developed multi-epoch and amplified banded matrix factorizations; and Henzinger and Upadhyay~\cite{henzinger2024group} and McMahan and Pillutla~\cite{mcmahan2025blt} introduced group-algebra and Buffered Linear Toeplitz (BLT) mechanisms with bounded memory. All of these mechanisms optimize \emph{additive} prefix sums under a single terminal participation bound, whereas SDG-MH addresses simultaneous multi-horizon user-time constraints $\bar{\rho}(h)$ coupled with periodic non-additive distinct histograms.
+
+\paragraph{Sliding-Window, $w$-Event, and Growing-Database DP.}
+Bolot et al.~\cite{bolot2013decayed} studied decayed predicate sums under event-level DP. Kellaris et al.~\cite{kellaris2014wevent} proposed $w$-event DP (\texttt{W-BD} and \texttt{W-BA}) to protect sliding windows of a single length $w$ over infinite streams. Cummings et al.~\cite{cummings2018growing} analyzed growing databases where population expansion $n_t \to \infty$ amortizes sensitivity. In contrast, SDG-MH bounds privacy across \emph{all} window lengths $h \in \mathbb{N}^+$ simultaneously without requiring population growth.
+
+\paragraph{Streaming Distinct Counting and User Contribution Bounding.}
+Mir et al.~\cite{mir2011panprivate} introduced pan-private sketches for $F_0$ distinct estimation with multiplicative error. Epasto et al.~\cite{epasto2023frequency}, Ghazi et al.~\cite{ghazi2023distinct}, and Jain et al.~\cite{jain2023turnstile} analyzed continual distinct and frequency-moment estimation in sliding-window and turnstile streams under event-level DP, showing polynomial error growth when releasing at every step. SDG-MH avoids continual-release blowup on non-additive distinct counts by releasing exact $k$-capped window histograms~\cite{amin2019bounding} on a phase-optimized periodic calendar accounted via Theorem~\ref{thm:intersection}.
+
+% ============================================================================
+\section{Limitations, Threat Model Boundaries, and Conclusion}
+\label{sec:conclusion}
+% ============================================================================
+
+\paragraph{Explicit Limitations.}
+(1) \emph{Static Calendar Scope}: Theorems~\ref{thm:periodicity}--\ref{thm:reduction} hold for static periodic calendars (Assumption~\ref{assump:static}); data-adaptive out-of-schedule queries are not covered by the 575-day reduction and must be gated dynamically by \texttt{UnifiedPrivacyLedger}.
+(2) \emph{Workload-Dependent Phase Gains}: When the asymptotic tail slope $\beta_{\text{tail}}$ dominates (\texttt{Default} weights), phase shifting yields $0\%$ gain ($D \equiv B$); under \texttt{DistinctHeavy}, 7d and 90d MAPE improve significantly ($p_{\text{holm}} \le 10^{-4}$), but 30d served MAPE is statistically non-significant ($p_{\text{holm}} = 1.000$) and incurs a $+3.0\text{d}$ lag if reports are queried strictly on Sundays.
+(3) \emph{Heavy-Tailed Clipping Bias}: Under LogNormal request traffic at $C_r = 50$, 90-day additive error is dominated by clipping bias rather than Gaussian noise.
+(4) \emph{Numerical vs.\ Symbolic Optimality}: \texttt{DECIMAL100\_DIRECTED\_ROUNDING} certifies a tight numerical dual bound ($\text{rel\_gap} \le 7.45 \times 10^{-9}$) conditional on the operational \texttt{float64} curve \texttt{rho\_bars}, which we classify as \texttt{NEAR\_GLOBAL\_OPTIMAL\_CERTIFIED} rather than a closed-form symbolic proof.
+
+\paragraph{Conclusion.}
+SDG-MH unifies Multi-Horizon User-Time DP, daily Discrete Gaussian sealing, exact window-intersection calendar accounting, concavity-free 575-day infinite-horizon verification, and 100-digit dual-certified joint planning into a practical perpetual analytics engine.
+
+\bibliographystyle{abbrv}
+\bibliography{references}
+
+% ============================================================================
+\appendix
+\section*{Appendix: Traceability Matrix and Verification Summary}
+% ============================================================================
+
+\begin{table*}[t]
+\centering
+\caption{End-to-End Artifact Traceability Mapping Between Manuscript Claims, Source Code, Unit Tests, and Frozen Experimental CSVs.}
+\label{tab:traceability}
+\scriptsize
+\setlength{\tabcolsep}{5.0pt}
+\begin{tabular}{p{3.6cm}p{5.8cm}p{7.2cm}}
+\toprule
+\textbf{Paper Element} & \textbf{Source Implementation / Test} & \textbf{Frozen CSV / Report Artifact} \\
+\midrule
+Def.~\ref{def:curve}, Prop.~\ref{prop:nonconcave} (Non-concave curves) & \texttt{sdg\_mh/calendar\_accounting.py}: \texttt{PrivacyCommitmentCurve} & \texttt{PVLDB\_2027\_THEORY\_APPENDIX\_AND\_LIMITATIONS.md} App.~B \\
+\midrule
+Lemma~\ref{lem:drift} ($\Delta\varepsilon \le 3.22\text{e-}11$, zero-tol gate) & \texttt{sdg\_mh/ledger.py}: \texttt{conservative\_epsilon\_drift\_bound}, \texttt{admit\_and\_commit\_batch} & \texttt{tests/sdg\_mh/test\_joint\_planner.py} \\
+\midrule
+Thm.~\ref{thm:intersection} ($L=W_f+h-1$, $5\times$ counterexample) & \texttt{sdg\_mh/calendar\_accounting.py}: \texttt{count\_intersections\_fast} & \texttt{tests/sdg\_mh/test\_calendar\_accounting.py} \\
+\midrule
+Thm.~\ref{thm:periodicity}--\ref{thm:reduction} (210d shift, 575d affine reduction) & \texttt{sdg\_mh/calendar\_accounting.py}: \texttt{verify\_periodicity\_and\_long\_term\_security} & \texttt{long\_horizon\_420d/long\_horizon\_420d\_cross\_period\_ledger.csv} \\
+\midrule
+Thm.~\ref{thm:dual} (\texttt{DECIMAL100} directed-rounding dual LB) & \texttt{sdg\_mh/joint\_planner.py}: \texttt{certify\_lagrangian\_dual\_bound\_exact} & \texttt{long\_horizon\_420d\_v3\_final/solver\_runtime\_and\_dual\_bounds.csv} \\
+\midrule
+Table~\ref{tab:paired_v3} \& Fig.~\ref{fig:same_date} (Same-date $B$ vs.\ $D$, Holm/Wilcoxon) & \texttt{experiments/sdg\_mh/run\_long\_horizon\_420d\_audit\_v3.py} & \texttt{long\_horizon\_420d\_v3\_final/audit\_v3\_paired\_with\_holm\_wilcoxon.csv} \\
+\midrule
+Fig.~\ref{fig:cr_ablation} ($C_r \in \{30,50,100,200\}$ ablation) & \texttt{experiments/sdg\_mh/run\_long\_horizon\_420d\_and\_ablation.py} & \texttt{long\_horizon\_420d/cr\_clipping\_ablation\_420d.csv} \\
+\midrule
+Table~\ref{tab:baselines_v3} \& Fig.~\ref{fig:baselines} (Uniform post-proc baselines) & \texttt{sdg\_mh/baselines.py}, \texttt{run\_long\_horizon\_420d\_audit\_v3.py} & \texttt{long\_horizon\_420d\_v3\_final/audit\_v3\_competitive\_baselines\_summary.csv} \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\end{document}
