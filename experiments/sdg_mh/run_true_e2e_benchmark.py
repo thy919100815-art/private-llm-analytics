@@ -13,6 +13,7 @@ Executes actual end-to-end telemetry processing pipeline:
 
 from __future__ import annotations
 
+import datetime
 import math
 from pathlib import Path
 import sys
@@ -283,7 +284,7 @@ def run_e2e_benchmark(
 
                             seal_job.seal_day(
                                 day_index=day,
-                                date_str=f"2025-01-{day:02d}",
+                                date_str=(datetime.date(2025, 1, 1) + datetime.timedelta(days=day - 1)).isoformat(),
                                 df_day=daily_dfs[day],
                                 seed=seed_day_seal,
                             )

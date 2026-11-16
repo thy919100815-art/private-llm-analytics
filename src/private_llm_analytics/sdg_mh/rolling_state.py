@@ -67,22 +67,28 @@ class RollingDistinctState:
         day_dict: Dict[str, Tuple[int, Dict[int, int]]] = {}
 
         if not df_day.empty:
-            # Group by user to extract services bitmask and task counts
-            grouped = df_day.groupby(COL_USER_ID)
-            for uid, ugroup in grouped:
-                # Service bitmask
-                s_mask = 0
-                for prov in ugroup[COL_PROVIDER].unique():
-                    if prov in service_to_idx:
-                        s_mask |= (1 << service_to_idx[prov])
+            for uid, prov, task in zip(
+                df_day[COL_USER_ID].tolist(),
+                df_day[COL_PROVIDER].tolist(),
+                df_day[COL_TASK].tolist(),
+            ):
+                u_key = str(uid)
+                entry = day_dict.get(u_key)
+                if entry is None:
+                    s_mask = 0
+                    t_counts: Dict[int, int] = {}
+                else:
+                    s_mask, t_counts = entry
 
-                # Task interaction counts
-                t_counts: Dict[int, int] = {}
-                for t, cnt in ugroup[COL_TASK].value_counts().items():
-                    if t in task_to_idx:
-                        t_counts[task_to_idx[t]] = int(cnt)
+                p_idx = service_to_idx.get(prov)
+                if p_idx is not None:
+                    s_mask |= (1 << p_idx)
 
-                day_dict[str(uid)] = (s_mask, t_counts)
+                t_idx = task_to_idx.get(task)
+                if t_idx is not None:
+                    t_counts[t_idx] = t_counts.get(t_idx, 0) + 1
+
+                day_dict[u_key] = (s_mask, t_counts)
 
         self._day_states[day_index] = day_dict
 
