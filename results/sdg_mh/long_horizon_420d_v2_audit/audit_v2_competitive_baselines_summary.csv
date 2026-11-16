@@ -1,0 +1,51 @@
+method,calibration_scope,metric,K_seeds,M_mc_per_seed,N_total_runs,mean,seed_level_sd,seed_level_ci95,within_mc_sd,between_pop_sd,icc,naive_pooled_ci95_invalid
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_1d_rmse,8,5,40,2310.5192,35.5321,29.7056,65.0613,20.3946,0.0895,21.7057
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_7d_rmse,8,5,40,10919.2311,387.8325,324.2361,484.9488,321.526,0.3054,183.1489
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_30d_rmse,8,5,40,43235.6912,1776.6508,1485.3172,2156.0179,1492.2484,0.3239,824.5306
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_90d_rmse,8,5,40,125238.0798,4977.8682,4161.602,7029.3008,3859.6577,0.2317,2534.0236
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_1d_rmse,8,5,40,1176.5563,24.1628,20.2006,51.6635,7.0725,0.0184,16.6611
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_7d_rmse,8,5,40,3366.7437,185.6277,155.1887,333.6253,110.4377,0.0988,111.8218
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_30d_rmse,8,5,40,7667.4337,610.364,510.277,1356.6082,66.8358,0.0024,434.3366
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),failures_90d_rmse,8,5,40,14345.8575,1994.1284,1667.133,4172.019,703.8462,0.0277,1351.2095
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_1d_mape_pct,8,5,40,17.9394,0.3289,0.275,0.7181,0.0709,0.0096,0.2307
+SDG-MH (D_JointPlanning),Exact Multi-Horizon rem_add_envelope (All h in 1..420),requests_30d_mape_pct,8,5,40,10.4416,0.3174,0.2654,0.5748,0.1862,0.095,0.1923
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_1d_rmse,8,5,40,4378.6432,73.8604,61.7489,127.2436,47.087,0.1204,43.1226
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_7d_rmse,8,5,40,12735.9602,238.5604,199.4415,563.474,0.0,0.0,178.5216
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_30d_rmse,8,5,40,45308.8004,737.3308,616.424,2569.1539,0.0,0.0,777.075
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_90d_rmse,8,5,40,129162.8578,2762.2785,2309.3226,8155.9568,0.0,0.0,2506.5827
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_1d_rmse,8,5,40,3009.7649,61.8586,51.7151,129.4602,21.7831,0.0275,41.9261
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_7d_rmse,8,5,40,5507.1043,188.4927,157.5838,449.7237,0.0,0.0,142.2497
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_30d_rmse,8,5,40,9682.614,929.7482,777.289,1458.1859,662.6994,0.1712,507.7351
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),failures_90d_rmse,8,5,40,16704.4695,2126.302,1777.6329,4277.0112,928.76,0.045,1396.4974
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_1d_mape_pct,8,5,40,35.8171,0.732,0.612,1.4853,0.3077,0.0412,0.4841
+Tree-2l (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=394),requests_30d_mape_pct,8,5,40,10.7932,0.1678,0.1403,0.6518,0.0,0.0,0.1956
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),requests_1d_rmse,8,5,40,4406.8903,74.3505,62.1586,128.2146,47.3307,0.1199,43.4401
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),requests_7d_rmse,8,5,40,12771.7839,239.8917,200.5545,567.0863,0.0,0.0,179.6418
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),requests_30d_rmse,8,5,40,45338.4869,740.31,618.9147,2588.044,0.0,0.0,782.5762
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),requests_90d_rmse,8,5,40,129195.6402,2781.0407,2325.0082,8219.0835,0.0,0.0,2525.7189
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),failures_1d_rmse,8,5,40,3033.4682,62.3489,52.125,130.4864,21.9555,0.0275,42.2584
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),failures_7d_rmse,8,5,40,5548.9939,190.0805,158.9113,453.4522,0.0,0.0,143.4321
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),failures_30d_rmse,8,5,40,9748.6698,938.136,784.3013,1472.3598,668.2293,0.1708,512.5612
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),failures_90d_rmse,8,5,40,16817.4118,2144.9516,1793.2244,4315.8833,935.6536,0.0449,1409.0952
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),requests_1d_mape_pct,8,5,40,36.0415,0.7363,0.6156,1.4954,0.3081,0.0407,0.4873
+Tree-2l (Daily-d Parity),Exact Multi-Horizon h*d_SDG (tight_h=384),requests_30d_mape_pct,8,5,40,10.7947,0.1691,0.1414,0.657,0.0,0.0,0.1971
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_1d_rmse,8,5,40,27742.3875,534.9971,447.2688,1342.675,0.0,0.0,421.3886
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_7d_rmse,8,5,40,50365.7427,1110.7135,928.5797,2362.8995,342.0903,0.0205,762.7662
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_30d_rmse,8,5,40,72781.3407,2212.9031,1850.0333,3292.5623,1651.8919,0.2011,1165.895
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_90d_rmse,8,5,40,143671.1807,6531.2388,5460.2522,10411.4781,4580.0988,0.1621,3607.3242
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_1d_rmse,8,5,40,26822.798,642.2374,536.9239,1368.4754,194.7406,0.0198,441.6187
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_7d_rmse,8,5,40,36535.1855,984.9399,823.4304,2260.1469,0.0,0.0,719.5497
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_30d_rmse,8,5,40,42092.5059,1338.2536,1118.808,3827.0313,0.0,0.0,1180.4879
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),failures_90d_rmse,8,5,40,46870.9935,3498.2588,2924.6175,7660.1259,708.7375,0.0085,2459.2195
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_1d_mape_pct,8,5,40,206.29,8.7922,7.3504,12.0848,6.9349,0.2477,4.3991
+Tree-U (MH-RemEnv),Exact Multi-Horizon rem_add_envelope (tight_h=420),requests_30d_mape_pct,8,5,40,14.7147,0.4398,0.3677,0.6999,0.3089,0.1631,0.2426
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_1d_rmse,8,5,40,3565.5838,282.7057,236.3479,462.0742,192.9249,0.1484,158.9181
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_7d_rmse,8,5,40,15476.9615,1567.2009,1310.2127,2826.9011,926.1991,0.0969,946.634
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_30d_rmse,8,5,40,49154.3142,3057.1386,2555.8318,7593.7079,0.0,0.0,2386.9017
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_90d_rmse,8,5,40,125582.1578,6156.814,5147.2253,19111.8066,0.0,0.0,5842.3912
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_1d_rmse,8,5,40,1315.4446,84.0483,70.2661,222.5342,0.0,0.0,69.3141
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_7d_rmse,8,5,40,6445.6847,570.779,477.1832,1381.256,0.0,0.0,435.9127
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_30d_rmse,8,5,40,20410.1354,1426.8013,1192.8357,4556.0362,0.0,0.0,1388.8514
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",failures_90d_rmse,8,5,40,53110.6355,2670.9575,2232.9763,10678.346,0.0,0.0,3197.5634
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_1d_mape_pct,8,5,40,26.1448,1.0716,0.8959,2.3626,0.1788,0.0057,0.7575
+W-BD-30 (MH-Calibrated),"Shrunk to all-h Multi-Horizon envelope (tight_h=32, rho_w=0.012359)",requests_30d_mape_pct,8,5,40,10.7812,0.574,0.4799,1.3838,0.0,0.0,0.437

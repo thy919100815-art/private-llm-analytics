@@ -58,7 +58,7 @@ $$n_f(s, h; \phi_f) = \left| \{ t \in [s, s + L - 1] \mid t \equiv \phi_f \pmod{
 ### C.2 可验证 Lagrangian 对偶下界定理
 对固定相位 $\vec\phi$，考虑有效线性约束子集 $A \mathbf{v} \le \mathbf{b}$（包含尾部增长率约束与近紧 $(h, s)$ 包络约束）及任何非负乘子 $\boldsymbol{\lambda} \ge \mathbf{0}$。令 $\mathbf{g}(\boldsymbol{\lambda}) = A^T \boldsymbol{\lambda}$，对偶函数关于盒约束 $\mathbf{v} \in [\mathbf{l}, \mathbf{u}]$ 具有精确闭式解：
 $$q(\boldsymbol{\lambda}) = \sum_{j=1}^4 \left(\frac{c_j}{\hat{v}_j} + g_j(\boldsymbol{\lambda})\hat{v}_j\right) - \boldsymbol{\lambda}^T \mathbf{b}, \quad \hat{v}_j = \begin{cases} \operatorname{clip}(\sqrt{c_j / g_j}, l_j, u_j), & g_j > 0 \\ u_j, & g_j \le 0 \end{cases}.$$
-由弱对偶定理与 $10^{-14}$ 浮点向下安全扣减，$LB_\phi = (1 - 10^{-14}) q(\boldsymbol{\lambda}) \le f_\phi^*$ 无条件成立。
+- **v2 证书修正说明**：PR #4 初版曾采用 `float64` 下 `q_best * (1.0 - 1e-14)` 作为浮点扣减，但反例测试（`test_naive_float64_dual_deduction_fails_cancellation_counterexample`）表明在大对偶乘子（$\boldsymbol{\lambda} \sim 10^{14}$–$10^{15}$）引起的相消截断下，朴素 `1e-14` 比例扣减可高估真对偶值 $+0.2166$ 并突破弱对偶上界。现已替换为 `certify_lagrangian_dual_bound_exact()`：**100 位高精度 `Decimal` 有向舍入（`ROUND_FLOOR` / `ROUND_CEILING`）+ 精确有理下界（`1/7, 1/30`）+ `math.nextafter(..., -inf)`** 向下安全转换（`DECIMAL100_DIRECTED_ROUNDING`），无条件消除有界精度内的上偏舍入越界。
 
 ### C.3 账本 `1e-12` 容差保守数值误差论证
 - 通用接口 `UnifiedPrivacyLedger` 的浮点求和容差 `PRIVACY_LEDGER_TOL = 1e-12` 对应在最小锚点（`Original_Planner`, $\bar\rho(1)=0.0141986, \delta=10^{-6}$）下的最坏 $(\varepsilon, \delta)$ 边界漂移严格上界为：
@@ -82,3 +82,17 @@ $$q(\boldsymbol{\lambda}) = \sum_{j=1}^4 \left(\frac{c_j}{\hat{v}_j} + g_j(\bold
    - **静态日历限定**：210 天周期恒等式与 575 天归纳归约严格限于固定周期静态日历（假设 A1–A4）；数据自适应触发查询流（Adaptive Online Revisit）标记为 `NOT_PROVED`，必须依赖运行时 `UnifiedPrivacyLedger` 逐次拦截。
    - **合成工作负载重尾偏差**：企业合成遥测采用 $\text{LogNormal}$ 日请求量分布，$C_r=50$ 处存在 `-1439.56` 负偏置；真实长尾分布下最优 $C_r^*$ 需基于公开先验或平滑敏感度校准。
    - **单进程崩溃语义边界**：`UnifiedPrivacyLedger` 与 `SealedStore` 在单进程线程安全加锁与局部写入截断下验证通过；跨节点分布式崩溃恢复标记为 `NOT_VALIDATED`。
+
+---
+
+## Appendix E: v2 论文级统计复核、CRN 配对实证与时间序列竞争基线对比 (`long_horizon_420d_v2_audit`)
+
+1. **修正 PR #5 分层伪重复与种子滑动重叠问题（$K=8 \times M=5 = 40$ 次运行，独立单元 $df=7$）**：
+   - 修复 PR #5 中 `trial_seed + day` 导致的相邻 MC 抽样共享 `419/420` 日常种子与 `59/60` 周窗种子、以及 `B` / `D` 未采用 Common Random Numbers (CRN) 配对的统计缺陷；改用碰撞无关的 `SeedSequence([data_seed, mc_trial, day, stream_id])`，严格以**数据种子为独立统计单元**计算分层 95% CI（$df=7$）及方差分解（ICC）。
+   - 例如 `requests_clipping_bias` 的类内相关系数 $\text{ICC}=1.000$，证明 PR #5 朴素池化 CI（$\pm 6.67$）低估了真实跨数据种子不确定性（$\pm 18.40$）达 $2.76\times$。
+2. **`Original / DistinctHeavy` 此前反转现象的根因与配对重测结论**：
+   - 修复种子滑动重叠并采用 $K=8$ CRN 配对后，`Original / DistinctHeavy` 下 `D_JointPlanning` 相对 `B_BudgetOnly` 在 **7d Distinct（`-1.14%`, $p=0.0001$, `8/8` 种子）与 90d Distinct（`-3.99%`, $p<10^{-4}$, `8/8` 种子）** 上稳定更优；此前 PR #5 中的反转主要由 Seed 42 重叠噪声异常值（`59/60` 种子重叠）与非配对方差造成。
+   - **诚实披露的负向权衡与非显著项**：(a) 因 `DistinctHeavy` 目标函数权重 `(0.10, 0.40, 0.40, 0.10)` 主动压缩每日预算 `d`，`D_JointPlanning` 的每日加性 Requests RMSE 上升 `+0.38%`（`Week1_v2`）至 `+0.53%`（`Original`，`0/8` 种子更优）；(b) 在 **30d Distinct** 上，由于 `D` 将相位 $\phi_{30}$ 从 `0`（周日）移至 `4`（周四），受周期内工作日比例提高影响（真实均值由 `1965.9` 增至 `1972.1`，`+0.32%`），不同日期窗口抽样误差使 `30d MAPE` 差值仅 `-0.023%` ~ `-0.025%`（$p=0.26$–$0.33$，**`K=8` 下未达统计显著**）。
+3. **同一语义下的竞争基线对比（`Week1_v2`, $K=8$, 相同剩余加性包络与 `C_r=50, C_f=10`）**：
+   - **可比加性工作负载**：在 420 天滚动 Requests/Failures 查询上，`SDG-MH` 的 1d / 7d Requests RMSE 为 **`2310.5 ± 29.7` / `10919.2 ± 324.2`**，显著优于严格对齐相同包络的 `Tree-2l (Honaker GLS)`（`4378.6 ± 61.7` / `12736.0 ± 199.4`）、`W-BD-30 (MH-Calibrated)`（`3565.6 ± 236.3` / `15477.0 ± 1310.2`）和 `Tree-U`（`27742.4` / `50365.7`）；在 90d Requests 上所有方法趋近共同的 `C_r=50` 裁剪偏置下界（`~129k`），而在低偏置指标 `Failures 30d` 上 `SDG-MH`（`7667.4 ± 510.3`）仍优于 `Tree-2l`（`9682.6 ± 777.3`）。
+   - **非可比性声明**：`Tree` 与 `W-BD` 无法直接支撑带 $k=3$ 任务裁剪的跨期去重 Distinct 直方图，表中严格标为 `N/A (Non-Additive Union)`；`W-BD-30` 若仅按单点 $\bar\rho_{\text{add}}(30)$ 校准将在 $h=365$ 超标 `1.35x`。
