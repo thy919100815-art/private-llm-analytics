@@ -313,15 +313,19 @@ $$\lambda_{\text{tail}}^* = \left( \frac{\sum_j \sqrt{c_j a_{\text{tail}, j}}}{\
 | **P0: Distinct 窗口级裁剪** | 验证 $k=3$ 限制在窗口级生效，非每日级；反例验证 $\le 3$ 任务 | **`PROVED`** / **`VALIDATED`** | `clipping.py:170`, `rolling_state.py:130`, `test_distinct_window_clipping.py` |
 | **P0: $\Delta_{\text{dist}}^2 = 11$ 敏感度推导** | 证明替换邻近 $\Delta^2 = m+2k=11$，增删邻近 $\Delta^2 = m+k=8 \le 11$ | **`PROVED`** | 本报告 §1.3 闭式数学证明 |
 | **P0: 分组原子准入接口** | 单一 RLock 范围整批候选联合隐私校验，消除半提交漏洞；极简反例测试零残留 | **`VALIDATED`** | `ledger.py:161-343`, `test_transactional_execution.py` |
+| **P0: 费用不可撤销与异常安全** | 普通异常处理严禁撤销 COMMITTED 费用；区分输出可见性；SealedStore 磁盘防损坏与故障注入 12 项测试全过 | **`VALIDATED`** | `sealed_store.py:61-90`, `seal_job.py:230-260`, `test_fault_injection_and_immutability.py` |
 | **P1: 210 天周期平移定理** | 证明 $L(s, h+P) = L(s, h) + P\cdot\text{slope}$ 对全空间成立 | **`PROVED`** | 本报告 §2.2 定理 1 证明，代数残差 $< 10^{-14}$ |
 | **P1: 575 天长期安全归约** | 证明有限视界检查可严格归约至无界视界长期安全 | **`PROVED`** | 本报告 §2.3 定理 2 证明，数学归纳闭环 |
 | **P1: 启动边界单调性引理** | 证明真实截断 $n^{\text{startup}} \le n^{\text{periodic}}$ 恒成立 | **`PROVED`** | 本报告 §2.4 引理 3 证明，112,500 状态测试零违规 |
-| **P1: 生命周期与预留转换** | `RESERVED` 预留向 `COMMITTED` 单向原子就地转换，零重复扣费；取消释放余量；已提交支出不可撤销 | **`VALIDATED`** | `ledger.py:212-230`, `test_transactional_execution.py` |
+| **P1: 全入口默认 Fail-Closed** | `record_gaussian/laplace/zcdp_release` 与批量准入默认 Fail-Closed，未配置承诺拒绝提交，生产检查不可关闭 | **`VALIDATED`** | `ledger.py:180-585`, `test_fault_injection_and_immutability.py` |
+| **P1: 生命周期与预留转换** | `RESERVED` 预留向 `COMMITTED` 单向原子就地转换，零重复扣费；取消释放余量；已提交支出不可撤销 | **`VALIDATED`** | `ledger.py:212-280`, `test_transactional_execution.py` |
 | **P1: 事务恢复语义边界** | 保证单进程内存与局部文件事务一致性；跨进程宕机恢复如实界定 | **`NOT_VALIDATED`** | 本报告 §1.4 明确边界声明，杜绝虚假承诺 |
 | **P1: 自适应无界在线补测** | 声明静态周期定理不能外推至数据依赖的自适应调度 | **`NOT_PROVED`** | 本报告 §2.1 负面范围明确界定，杜绝伪证 |
+| **P2: 预留转换与严格参数校验** | 同一 ID 严格比对日期/机制/敏感度/方差/费用/Tag；批次重复拒绝；已取消记录须经完整准入 | **`VALIDATED`** | `ledger.py:185-265`, `test_fault_injection_and_immutability.py` |
 | **P2: 统计口径严格分离** | 严格区分解析 $\sigma$、纯机制噪声 RMSE、截断 Bias 与端到端 RMSE；区分抽象目标与统计精度 | **`VALIDATED`** | `run_true_e2e_benchmark.py`, `true_e2e_benchmark_results.csv` |
 | **P2: 违规方案标记排除** | 将 Original Planner 违约的 Phase Only 方案标为 `INFEASIBLE`，排除在有效对比外 | **`VALIDATED`** | `joint_planner.py:438-450`, `true_e2e_benchmark_results.csv` |
 | **P2: 90d Distinct 样本说明** | 明确标注 90 天周期内 90d 窗口为单次纵向样本（$N=1$） | **`VALIDATED`** | `true_e2e_benchmark_results.csv` |
+| **P3: 权威 CSV 数据与报告一致性** | 脚本直接从 CSV 生成报告表格，杜绝手填差异；16 组配置指标逐项精准同步 | **`VALIDATED`** | `scripts/generate_benchmark_tables.py`, `true_e2e_benchmark_results.csv` |
 | **P3: 论文贡献表述重构** | 默认看板增益修正为 0.0%，Distinct 敏感型增益修正为 0.4%–1.7% | **`PROVED`** / **`VALIDATED`** | 本报告 §4.1，16 组全量实测与凸分析 |
 | **P3: KKT 残差与对偶界** | 计算对偶乘子 $\lambda_{\text{tail}}$，证明强对偶间隙 $\le 1.4 \times 10^{-7}$ | **`PROVED`** | 本报告 §3.2，KKT 平稳性相对残差 $1.8 \times 10^{-7}$ |
 | **P4: Git 历史大文件治理** | 剥离历史超标 blob，保持旧研究分支完好，成功推至 origin | **`VALIDATED`** | `git push -u origin feat/calendar-joint-planning` 退出码 0 |

@@ -26,7 +26,7 @@ def test_lifetime_decay_monotonicity_and_handcrafted_match():
     """Verify LifetimeDecay monotonicity and exact agreement with handcrafted ledger."""
     rho_max = 0.12
     C = 50.0
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
 
     # Handcrafted 10-day LifetimeDecay release
     for t in range(1, 11):
@@ -48,7 +48,7 @@ def test_lifetime_decay_monotonicity_and_handcrafted_match():
 
 def test_epoch90_monotonicity_and_boundary_crossing():
     """Verify Epoch90 monotonicity and boundary-crossing doubling (Item 12)."""
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     rho_epoch = 0.20
     C = 50.0
     sigma_q = C / math.sqrt(2.0 * (rho_epoch / 5.0))
@@ -62,7 +62,7 @@ def test_epoch90_monotonicity_and_boundary_crossing():
         ledger.record_gaussian_release(f"ep2_q{q}", list(range(91, 181)), sensitivity=C, sigma=sigma_q)
 
     # A ledger with only Epoch 1 (isolated epoch): max rho for h=45 is strictly rho_epoch
-    ledger_ep1 = UnifiedPrivacyLedger(delta=1e-6)
+    ledger_ep1 = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     for q in range(5):
         ledger_ep1.record_gaussian_release(f"ep1_q{q}", list(range(1, 91)), sensitivity=C, sigma=sigma_q)
     assert abs(ledger_ep1.compute_rho(45) - rho_epoch) < 1e-12
@@ -88,8 +88,8 @@ def test_wbd_vs_wba_distinct_profiles():
     daily_wbd_rho = rho_w / w
     sigma_wbd = C / math.sqrt(2.0 * daily_wbd_rho)
 
-    ledger_wbd = UnifiedPrivacyLedger(delta=1e-6)
-    ledger_wba = UnifiedPrivacyLedger(delta=1e-6)
+    ledger_wbd = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
+    ledger_wba = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
 
     # W-BD: sliding window releases every day
     for t in range(1, 21):

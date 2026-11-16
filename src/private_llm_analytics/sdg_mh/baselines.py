@@ -60,7 +60,7 @@ class Epoch90Baseline(BaseDPBaseline):
         self.rho_per_query = float(rho_per_query)
         self.C = float(C)
 
-        self.ledger = UnifiedPrivacyLedger(delta=self.delta)
+        self.ledger = UnifiedPrivacyLedger(delta=self.delta, allow_unconfigured_policy=True)
         # Tracks spend in current active epoch
         self.current_epoch_spend: float = 0.0
         self.current_epoch_index: int = 1
@@ -174,7 +174,7 @@ class LifetimeDecayBaseline(BaseDPBaseline):
         self.rho_max = float(rho_max)
         self.C = float(C)
         self.delta = float(delta)
-        self.ledger = UnifiedPrivacyLedger(delta=self.delta)
+        self.ledger = UnifiedPrivacyLedger(delta=self.delta, allow_unconfigured_policy=True)
 
     def get_daily_variance(self, t: int) -> float:
         """sigma_t^2 = C^2 * pi^2 * t^2 / (12 * rho_max)."""
@@ -259,7 +259,7 @@ class WEventBaseline(BaseDPBaseline):
         self.target_rho_w = float(target_rho_w)
         self.C = float(C)
         self.delta = float(delta)
-        self.ledger = UnifiedPrivacyLedger(delta=self.delta)
+        self.ledger = UnifiedPrivacyLedger(delta=self.delta, allow_unconfigured_policy=True)
 
         # In Kellaris et al., half of total window budget is for dissimilarity testing M_{i,1}
         # and half is for publication M_{i,2}
@@ -415,7 +415,7 @@ class TreeBaseline(BaseDPBaseline):
         self.L = int(L)
         self.C = float(C)
         self.delta = float(delta)
-        self.ledger = UnifiedPrivacyLedger(delta=self.delta)
+        self.ledger = UnifiedPrivacyLedger(delta=self.delta, allow_unconfigured_policy=True)
 
         # Build tree measurement matrix A
         block_sizes = [2**l for l in range(self.L + 1)]

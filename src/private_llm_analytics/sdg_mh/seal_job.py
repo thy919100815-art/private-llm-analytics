@@ -170,68 +170,104 @@ class SealJob:
                 )
             )
 
-        # 2. Group Atomic Admission and Commit in Unified Ledger (Fail-closed)
+        # 2. Reserve in Unified Ledger (Fail-closed)
+        try:
+            self.ledger.admit_and_commit_batch(
+                candidate_records=cands,
+                as_status=ReleaseStatus.RESERVED.value,
+                allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
+            )
+        except PrivacyAdmissionError as e:
+            raise PrivacyAdmissionError(f"SealJob rejected day {day_index}: {e}") from e
+
+        # 3. User daily contribution clipping & noise generation
+        try:
+            c_req, c_fail, c_prov, diags = clip_daily_additive(
+                df_day=df_day,
+                C_r=self.C_r,
+                C_f=self.C_f,
+                providers_list=self.providers_list,
+                C_p=self.C_p,
+            )
+
+            # 4. Add Discrete Gaussian noise
+            noise_r = sample_discrete_gaussian(sigma=self.sigma_r, rng=rng, seed=seed)
+            noise_f = sample_discrete_gaussian(
+                sigma=self.sigma_f,
+                rng=rng,
+                seed=None if seed is None else seed + 1000003,
+            )
+
+            y_r = int(round(c_req)) + int(noise_r)
+            y_f = int(round(c_fail)) + int(noise_f)
+
+            y_prov_list = None
+            if c_prov is not None and self.sigma_p is not None:
+                noise_p = sample_discrete_gaussian(
+                    sigma=self.sigma_p,
+                    size=len(c_prov),
+                    rng=rng,
+                    seed=None if seed is None else seed + 2000003,
+                )
+                y_prov_list = (c_prov + noise_p).tolist()
+
+            # 5. Create immutable record
+            now_iso = datetime.now(timezone.utc).isoformat()
+            record = DailySealedRecord(
+                day_index=day_index,
+                date_str=date_str,
+                y_requests=y_r,
+                y_failures=y_f,
+                y_providers=y_prov_list,
+                sigma_r=self.sigma_r,
+                sigma_f=self.sigma_f,
+                sigma_p=self.sigma_p,
+                C_r=self.C_r,
+                C_f=self.C_f,
+                sealed_at=now_iso,
+            )
+        except Exception:
+            # Output not generated or local only, safely cancel reservation
+            for cand in cands:
+                self.ledger.cancel_reservation(cand.release_id)
+            raise
+
+        # 6. Append to SealedStore (Fail-safe: check visibility before cancelling)
+        try:
+            self.sealed_store.append(record)
+        except ValueError as e:
+            if "already sealed" in str(e):
+                # Concurrent race: another thread sealed this day concurrently
+                existing = self.sealed_store.get_day(day_index)
+                if existing is not None:
+                    return existing
+            raise
+        except Exception:
+            # Check if record is accessible in store
+            is_stored = (self.sealed_store.get_day(day_index) is not None)
+            if not is_stored:
+                # Output was not stored, not exposed anywhere: safely cancel reservation
+                for cand in cands:
+                    self.ledger.cancel_reservation(cand.release_id)
+            else:
+                # Output is or may be exposed; conservatively commit the privacy spend!
+                self.ledger.admit_and_commit_batch(
+                    candidate_records=cands,
+                    as_status=ReleaseStatus.COMMITTED.value,
+                    allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
+                )
+            raise
+
+        # 7. Transition reservation to COMMITTED in Unified Ledger
         try:
             self.ledger.admit_and_commit_batch(
                 candidate_records=cands,
                 as_status=ReleaseStatus.COMMITTED.value,
                 allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
             )
-        except PrivacyAdmissionError as e:
-            raise PrivacyAdmissionError(f"SealJob rejected day {day_index}: {e}") from e
-
-        # 3. User daily contribution clipping
-        c_req, c_fail, c_prov, diags = clip_daily_additive(
-            df_day=df_day,
-            C_r=self.C_r,
-            C_f=self.C_f,
-            providers_list=self.providers_list,
-            C_p=self.C_p,
-        )
-
-        # 4. Add Discrete Gaussian noise
-        noise_r = sample_discrete_gaussian(sigma=self.sigma_r, rng=rng, seed=seed)
-        noise_f = sample_discrete_gaussian(
-            sigma=self.sigma_f,
-            rng=rng,
-            seed=None if seed is None else seed + 1000003,
-        )
-
-        y_r = int(round(c_req)) + int(noise_r)
-        y_f = int(round(c_fail)) + int(noise_f)
-
-        y_prov_list = None
-        if c_prov is not None and self.sigma_p is not None:
-            noise_p = sample_discrete_gaussian(
-                sigma=self.sigma_p,
-                size=len(c_prov),
-                rng=rng,
-                seed=None if seed is None else seed + 2000003,
-            )
-            y_prov_list = (c_prov + noise_p).tolist()
-
-        # 5. Create immutable record
-        now_iso = datetime.now(timezone.utc).isoformat()
-        record = DailySealedRecord(
-            day_index=day_index,
-            date_str=date_str,
-            y_requests=y_r,
-            y_failures=y_f,
-            y_providers=y_prov_list,
-            sigma_r=self.sigma_r,
-            sigma_f=self.sigma_f,
-            sigma_p=self.sigma_p,
-            C_r=self.C_r,
-            C_f=self.C_f,
-            sealed_at=now_iso,
-        )
-
-        # 6. Append to SealedStore (with atomic rollback on store failure)
-        try:
-            self.sealed_store.append(record)
         except Exception:
-            for cand in cands:
-                self.ledger.rollback_release(cand.release_id, allow_committed=True)
+            # Output is ALREADY stored in sealed_store!
+            # Privacy spend is retained conservatively
             raise
 
         elapsed_ms = (time.perf_counter() - t0) * 1000.0

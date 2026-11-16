@@ -308,7 +308,7 @@ class BrokenSealedStore(SealedStore):
 
 
 def test_atomic_rollback_on_storage_failure():
-    """Verify that if store persistence fails, ledger records are rolled back."""
+    """Verify that if store persistence fails, unexposed reservation is safely cancelled."""
     broken_store = BrokenSealedStore()
     ledger = UnifiedPrivacyLedger(delta=1e-6)
     ledger.set_active_plan(plan=None, commitment=WEEK1_V2_CURVE)
@@ -322,10 +322,12 @@ def test_atomic_rollback_on_storage_failure():
         job.seal_day(day_index=1, date_str="2025-01-01", df_day=df_day)
 
     assert "simulated hardware fault" in str(exc_info.value)
-    # Both channels must have been rolled back from ledger
-    assert len(ledger.records) == 0
-    assert ledger.get_release("sdg_additive_req_1") is None
-    assert ledger.get_release("sdg_additive_fail_1") is None
+    # Output was never stored or exposed; reservation was safely cancelled
+    assert all(r.status == ReleaseStatus.CANCELLED.value for r in ledger.records)
+    # Cancelled records contribute exactly 0.0 to rho(h)
+    assert ledger.compute_rho(1) == 0.0
+    assert ledger.get_release("sdg_additive_req_1").status == ReleaseStatus.CANCELLED.value
+    assert ledger.get_release("sdg_additive_fail_1").status == ReleaseStatus.CANCELLED.value
 
 
 # ==============================================================================
@@ -334,7 +336,7 @@ def test_atomic_rollback_on_storage_failure():
 
 def test_multithreaded_concurrency():
     """Verify concurrent release registrations do not corrupt internal indices."""
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     num_threads = 10
     releases_per_thread = 20
 
@@ -348,7 +350,6 @@ def test_multithreaded_concurrency():
                 sensitivity=1.0,
                 sigma=10.0,
                 tag=f"thread_{tid}",
-                enforce_admission=False,
             )
 
     threads = [threading.Thread(target=worker, args=(t,)) for t in range(num_threads)]
@@ -371,7 +372,7 @@ def test_multithreaded_concurrency():
 
 def test_plan_update_preserves_historical_spend():
     """Verify changing active plan retains all historical release records and indices."""
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     # Record 10 days of releases
     for d in range(1, 11):
         ledger.record_gaussian_release(
@@ -380,7 +381,6 @@ def test_plan_update_preserves_historical_spend():
             sensitivity=50.0,
             sigma=3000.0,
             tag="historical",
-            enforce_admission=False,
         )
 
     assert len(ledger.records) == 10
@@ -629,4 +629,4 @@ def test_conflicting_batch_parameters_rejected():
     with pytest.raises(ValueError) as exc_info:
         ledger.admit_and_commit_batch([c1, c2], allow_unconfigured_policy=True)
 
-    assert "Conflicting duplicate release_id" in str(exc_info.value)
+    assert "Duplicate release_id" in str(exc_info.value)

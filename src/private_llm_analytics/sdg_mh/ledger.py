@@ -129,6 +129,25 @@ def closed_form_distinct_calendar_rho(
     return float(total_rho)
 
 
+def _release_params_equal(p1: Optional[Dict[str, Any]], p2: Optional[Dict[str, Any]]) -> bool:
+    """Compare two parameter dictionaries with floating point tolerance."""
+    if p1 is None and p2 is None:
+        return True
+    if p1 is None or p2 is None:
+        return False
+    if set(p1.keys()) != set(p2.keys()):
+        return False
+    for k in p1:
+        v1 = p1[k]
+        v2 = p2[k]
+        if isinstance(v1, (int, float)) and isinstance(v2, (int, float)):
+            if abs(float(v1) - float(v2)) > 1e-12:
+                return False
+        elif v1 != v2:
+            return False
+    return True
+
+
 class UnifiedPrivacyLedger:
     """Time-indexed unified privacy ledger maintaining zCDP accountability."""
 
@@ -177,46 +196,105 @@ class UnifiedPrivacyLedger:
            If conflicting parameters, raises ValueError.
         5. Fail-Closed Default: If no privacy commitment is set and allow_unconfigured_policy is False,
            raises PrivacyAdmissionError.
+        6. Batch Deduplication/Rejection: Duplicate IDs within candidate batch are rejected.
+        7. Irrevocability & Lifecycle: Resurrecting CANCELLED records requires full envelope check.
         """
         if not candidate_records:
             return []
 
         with self._lock:
-            # 1. Check internal batch validity & conflicts
-            seen_batch_ids: Dict[str, ReleaseRecord] = {}
+            # 1. Check internal batch validity & reject intra-batch duplicate IDs
+            seen_batch_ids: Set[str] = set()
             for cand in candidate_records:
                 if cand.rho_cost < 0:
                     raise ValueError(f"rho_cost must be >= 0, got {cand.rho_cost}")
                 if cand.release_id in seen_batch_ids:
-                    prev = seen_batch_ids[cand.release_id]
-                    if abs(prev.rho_cost - cand.rho_cost) > 1e-12 or prev.days_accessed != cand.days_accessed:
-                        raise ValueError(f"Conflicting duplicate release_id in batch: '{cand.release_id}'")
-                seen_batch_ids[cand.release_id] = cand
+                    raise ValueError(
+                        f"Duplicate release_id within candidate batch: '{cand.release_id}'. "
+                        "Candidate batch must have unique release IDs."
+                    )
+                seen_batch_ids.add(cand.release_id)
 
             # 2. Resolve candidates against existing ledger records
             effective_candidates: List[ReleaseRecord] = []
             reserved_to_commit: List[Tuple[int, ReleaseRecord]] = []
+            cancelled_to_readd: List[Tuple[int, ReleaseRecord]] = []
             all_idempotent = True
 
             for cand in candidate_records:
                 if cand.release_id in self._release_ids:
                     existing = self._release_ids[cand.release_id]
                     if existing.status == ReleaseStatus.COMMITTED.value:
-                        # Idempotency check: identical parameters required
-                        if abs(existing.rho_cost - cand.rho_cost) > 1e-12 or existing.days_accessed != cand.days_accessed:
+                        # Idempotency check: ALL parameters must match strictly
+                        if existing.days_accessed != cand.days_accessed:
                             raise ValueError(
-                                f"Conflicting parameters for already committed release '{cand.release_id}': "
-                                f"existing cost {existing.rho_cost} != candidate {cand.rho_cost}"
+                                f"Conflicting days_accessed for committed release '{cand.release_id}': "
+                                f"existing {sorted(list(existing.days_accessed))} != candidate {sorted(list(cand.days_accessed))}"
+                            )
+                        if existing.mechanism_type != cand.mechanism_type:
+                            raise ValueError(
+                                f"Conflicting mechanism_type for committed release '{cand.release_id}': "
+                                f"existing '{existing.mechanism_type}' != candidate '{cand.mechanism_type}'"
+                            )
+                        if abs(existing.sensitivity - cand.sensitivity) > 1e-12:
+                            raise ValueError(
+                                f"Conflicting sensitivity for committed release '{cand.release_id}': "
+                                f"existing {existing.sensitivity} != candidate {cand.sensitivity}"
+                            )
+                        if abs(existing.rho_cost - cand.rho_cost) > 1e-12:
+                            raise ValueError(
+                                f"Conflicting rho_cost for committed release '{cand.release_id}': "
+                                f"existing {existing.rho_cost} != candidate {cand.rho_cost}"
+                            )
+                        if existing.tag != cand.tag:
+                            raise ValueError(
+                                f"Conflicting tag for committed release '{cand.release_id}': "
+                                f"existing '{existing.tag}' != candidate '{cand.tag}'"
+                            )
+                        if not _release_params_equal(existing.params, cand.params):
+                            raise ValueError(
+                                f"Conflicting params for committed release '{cand.release_id}': "
+                                f"existing {existing.params} != candidate {cand.params}"
                             )
                         # Already committed, keep existing record
                         continue
+
                     elif existing.status == ReleaseStatus.RESERVED.value:
                         all_idempotent = False
+                        # Strict validation for reservation fulfillment
+                        if existing.days_accessed != cand.days_accessed:
+                            raise ValueError(
+                                f"Mismatched days_accessed for reservation '{cand.release_id}': "
+                                f"reserved {sorted(list(existing.days_accessed))} != candidate {sorted(list(cand.days_accessed))}"
+                            )
+                        if existing.mechanism_type != cand.mechanism_type:
+                            raise ValueError(
+                                f"Mismatched mechanism_type for reservation '{cand.release_id}': "
+                                f"reserved '{existing.mechanism_type}' != candidate '{cand.mechanism_type}'"
+                            )
+                        if abs(existing.sensitivity - cand.sensitivity) > 1e-12:
+                            raise ValueError(
+                                f"Mismatched sensitivity for reservation '{cand.release_id}': "
+                                f"reserved {existing.sensitivity} != candidate {cand.sensitivity}"
+                            )
+                        if existing.tag != cand.tag:
+                            raise ValueError(
+                                f"Mismatched tag for reservation '{cand.release_id}': "
+                                f"reserved '{existing.tag}' != candidate '{cand.tag}'"
+                            )
+                        # Actual cost cannot exceed reservation
                         if cand.rho_cost > existing.rho_cost + 1e-12:
                             raise PrivacyAdmissionError(
                                 f"Candidate release '{cand.release_id}' cost {cand.rho_cost:.8f} exceeds "
                                 f"reserved budget {existing.rho_cost:.8f}"
                             )
+                        # For Gaussian, verify candidate sigma does not reduce noise
+                        if cand.mechanism_type == "gaussian" and "sigma" in existing.params and "sigma" in cand.params:
+                            if cand.params["sigma"] < existing.params["sigma"] - 1e-12:
+                                raise ValueError(
+                                    f"Candidate sigma {cand.params['sigma']} is less noisy than reserved {existing.params['sigma']}"
+                                )
+
                         idx = next(i for i, r in enumerate(self.records) if r.release_id == cand.release_id)
                         updated = ReleaseRecord(
                             release_id=cand.release_id,
@@ -229,10 +307,12 @@ class UnifiedPrivacyLedger:
                             status=as_status,
                         )
                         reserved_to_commit.append((idx, updated))
+
                     elif existing.status == ReleaseStatus.CANCELLED.value:
                         all_idempotent = False
+                        # Cancelled records gave back budget: CANNOT be resurrected without full envelope admission!
                         idx = next(i for i, r in enumerate(self.records) if r.release_id == cand.release_id)
-                        updated = ReleaseRecord(
+                        new_rec = ReleaseRecord(
                             release_id=cand.release_id,
                             days_accessed=cand.days_accessed,
                             mechanism_type=cand.mechanism_type,
@@ -242,7 +322,8 @@ class UnifiedPrivacyLedger:
                             tag=cand.tag,
                             status=as_status,
                         )
-                        reserved_to_commit.append((idx, updated))
+                        cancelled_to_readd.append((idx, new_rec))
+                        effective_candidates.append(new_rec)
                 else:
                     all_idempotent = False
                     new_rec = ReleaseRecord(
@@ -312,8 +393,16 @@ class UnifiedPrivacyLedger:
                 self.records[idx] = updated
                 self._release_ids[updated.release_id] = updated
 
+            for idx, updated in cancelled_to_readd:
+                self.records[idx] = updated
+                self._release_ids[updated.release_id] = updated
+
             for new_rec in effective_candidates:
-                self._add_record(new_rec)
+                if new_rec.release_id not in self._release_ids:
+                    self._add_record(new_rec)
+
+            # Synchronously update index
+            self._rebuild_indices()
 
             return [self._release_ids[c.release_id] for c in candidate_records]
 
@@ -399,7 +488,9 @@ class UnifiedPrivacyLedger:
         sensitivity: float,
         sigma: float,
         tag: str = "",
-        enforce_admission: bool = True,
+        commitment_bound: Optional[Any] = None,
+        allow_unconfigured_policy: bool = False,
+        enforce_admission: Optional[bool] = None,
     ) -> ReleaseRecord:
         """Record an analytic Gaussian release: rho = Delta^2 / (2 * sigma^2).
 
@@ -425,9 +516,9 @@ class UnifiedPrivacyLedger:
 
         committed = self.admit_and_commit_batch(
             [record],
-            commitment_bound=self.active_commitment if enforce_admission else None,
+            commitment_bound=commitment_bound or self.active_commitment,
             as_status=ReleaseStatus.COMMITTED.value,
-            allow_unconfigured_policy=not enforce_admission or (self.active_commitment is None),
+            allow_unconfigured_policy=allow_unconfigured_policy or self.allow_unconfigured_policy,
         )
         return committed[0]
 
@@ -438,7 +529,9 @@ class UnifiedPrivacyLedger:
         sensitivity: float,
         epsilon: float,
         tag: str = "",
-        enforce_admission: bool = True,
+        commitment_bound: Optional[Any] = None,
+        allow_unconfigured_policy: bool = False,
+        enforce_admission: Optional[bool] = None,
     ) -> ReleaseRecord:
         """Record a pure Laplace release: rho = eps^2 / 2."""
         if epsilon <= 0:
@@ -457,9 +550,9 @@ class UnifiedPrivacyLedger:
         )
         committed = self.admit_and_commit_batch(
             [record],
-            commitment_bound=self.active_commitment if enforce_admission else None,
+            commitment_bound=commitment_bound or self.active_commitment,
             as_status=ReleaseStatus.COMMITTED.value,
-            allow_unconfigured_policy=not enforce_admission or (self.active_commitment is None),
+            allow_unconfigured_policy=allow_unconfigured_policy or self.allow_unconfigured_policy,
         )
         return committed[0]
 
@@ -470,7 +563,9 @@ class UnifiedPrivacyLedger:
         sensitivity: float,
         rho_cost: float,
         tag: str = "",
-        enforce_admission: bool = True,
+        commitment_bound: Optional[Any] = None,
+        allow_unconfigured_policy: bool = False,
+        enforce_admission: Optional[bool] = None,
     ) -> ReleaseRecord:
         """Directly record a release with known zCDP cost rho."""
         if rho_cost < 0:
@@ -488,35 +583,37 @@ class UnifiedPrivacyLedger:
         )
         committed = self.admit_and_commit_batch(
             [record],
-            commitment_bound=self.active_commitment if enforce_admission else None,
+            commitment_bound=commitment_bound or self.active_commitment,
             as_status=ReleaseStatus.COMMITTED.value,
-            allow_unconfigured_policy=not enforce_admission or (self.active_commitment is None),
+            allow_unconfigured_policy=allow_unconfigured_policy or self.allow_unconfigured_policy,
         )
         return committed[0]
 
     def rollback_release(self, release_id: str, allow_committed: bool = False) -> bool:
-        """Roll back a release if storage or execution fails (atomicity/recovery)."""
+        """Roll back an uncommitted release if storage or execution fails (atomicity/recovery)."""
         with self._lock:
             if release_id not in self._release_ids:
                 return False
             rec = self._release_ids[release_id]
-            if rec.status == ReleaseStatus.COMMITTED.value and not allow_committed:
+            if rec.status == ReleaseStatus.COMMITTED.value:
                 raise ValueError(
                     f"Cannot rollback committed release '{release_id}'; committed privacy spend is irrevocable."
                 )
             del self._release_ids[release_id]
             self.records = [r for r in self.records if r.release_id != release_id]
-            # Synchronously rebuild indexes
-            self._day_to_records.clear()
-            self._max_day = 0
-            for idx, r in enumerate(self.records):
-                for d in r.days_accessed:
-                    if d not in self._day_to_records:
-                        self._day_to_records[d] = []
-                    self._day_to_records[d].append(idx)
-                    if d > self._max_day:
-                        self._max_day = d
+            self._rebuild_indices()
             return True
+
+    def _rebuild_indices(self) -> None:
+        self._day_to_records.clear()
+        self._max_day = 0
+        for idx, r in enumerate(self.records):
+            for d in r.days_accessed:
+                if d not in self._day_to_records:
+                    self._day_to_records[d] = []
+                self._day_to_records[d].append(idx)
+                if d > self._max_day:
+                    self._max_day = d
 
     def _add_record(self, record: ReleaseRecord) -> None:
         idx = len(self.records)

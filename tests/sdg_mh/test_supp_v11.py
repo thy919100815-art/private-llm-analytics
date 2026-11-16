@@ -253,7 +253,7 @@ def test_full_horizon_gate_rejects_what_grid_misses():
     from private_llm_analytics.sdg_mh.ledger import ReleaseRecord
 
     # Create 365-day ledger with additive + calendar B releases
-    ledger = UnifiedPrivacyLedger()
+    ledger = UnifiedPrivacyLedger(allow_unconfigured_policy=True)
     C_r = 104.0
     sigma_r = 5200.0
     C_f = 7.0

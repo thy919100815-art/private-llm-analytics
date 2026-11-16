@@ -59,16 +59,37 @@ class SealedStore:
                 self._records[rec.day_index] = rec
 
     def append(self, record: DailySealedRecord) -> None:
-        """Append a newly sealed day. Raises ValueError if day_index already exists."""
+        """Append a newly sealed day atomically. Raises ValueError if day_index already exists."""
         if record.day_index in self._records:
             raise ValueError(
                 f"Append-only violation: day_index {record.day_index} ({record.date_str}) is already sealed!"
             )
-        self._records[record.day_index] = record
+
+        # Prepare serialization before disk I/O
+        rec_dict = asdict(record)
+        line = json.dumps(rec_dict) + "\n"
+
         if self.jsonl_path:
-            with open(self.jsonl_path, "a", encoding="utf-8") as f:
-                rec_dict = asdict(record)
-                f.write(json.dumps(rec_dict) + "\n")
+            initial_size = self.jsonl_path.stat().st_size if self.jsonl_path.exists() else 0
+            try:
+                with open(self.jsonl_path, "a", encoding="utf-8") as f:
+                    f.write(line)
+                    f.flush()
+                    import os
+                    os.fsync(f.fileno())
+            except Exception:
+                # If write failed or partially wrote, truncate file back to initial_size to avoid corruption
+                if self.jsonl_path.exists():
+                    try:
+                        with open(self.jsonl_path, "r+b") as f:
+                            f.truncate(initial_size)
+                    except Exception:
+                        pass
+                # Memory state remains untouched on failure
+                raise
+
+        # Memory is updated ONLY after disk append has completely succeeded
+        self._records[record.day_index] = record
 
     def get_day(self, day_index: int) -> Optional[DailySealedRecord]:
         return self._records.get(day_index)

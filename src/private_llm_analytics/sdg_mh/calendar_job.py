@@ -65,6 +65,11 @@ class DistinctCalendarStore:
 
     def append(self, record: CalendarReleaseRecord) -> None:
         key = (record.window_length, record.end_day)
+        if key in self._releases:
+            raise ValueError(
+                f"Append-only violation: calendar release for window {record.window_length}, "
+                f"end_day {record.end_day} already exists!"
+            )
         self._releases[key] = record
 
     def get_release(self, window_length: int, end_day: int) -> Optional[CalendarReleaseRecord]:
@@ -173,7 +178,7 @@ class CalendarJob:
                 days_accessed = list(range(start_day, current_day + 1))
                 rho_cost = float(self.delta_sq / (2.0 * sigma_w * sigma_w))
 
-                # 2. Group Atomic Admission and Commit in Unified Ledger (Fail-closed)
+                # 2. Reserve in Unified Ledger (Fail-closed)
                 cand = ReleaseRecord(
                     release_id=rel_id,
                     days_accessed=frozenset(days_accessed),
@@ -186,70 +191,105 @@ class CalendarJob:
                 try:
                     self.ledger.admit_and_commit_batch(
                         candidate_records=[cand],
-                        as_status=ReleaseStatus.COMMITTED.value,
+                        as_status=ReleaseStatus.RESERVED.value,
                         allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
                     )
                 except PrivacyAdmissionError as e:
                     raise PrivacyAdmissionError(f"CalendarJob rejected release {rel_id}: {e}") from e
 
-                # 3. Compute bounded distinct window histogram
-                if state is not None:
-                    # Preferred: compute strictly from RollingDistinctState (no raw data access)
-                    srv_counts, tsk_counts = state.compute_window_histogram(
-                        start_day=start_day,
+                # 3. Compute bounded distinct window histogram & add noise
+                try:
+                    if state is not None:
+                        # Preferred: compute strictly from RollingDistinctState (no raw data access)
+                        srv_counts, tsk_counts = state.compute_window_histogram(
+                            start_day=start_day,
+                            end_day=current_day,
+                            services_list=self.services_list,
+                            tasks_list=self.tasks_list,
+                            k_tasks_per_user=self.k_tasks_per_user,
+                        )
+                    elif df_history_fn is not None:
+                        # Legacy fallback
+                        df_window = df_history_fn(start_day, current_day)
+                        srv_counts, tsk_counts = compute_distinct_window_histogram(
+                            df_window=df_window,
+                            services_list=self.services_list,
+                            tasks_list=self.tasks_list,
+                            k_tasks_per_user=self.k_tasks_per_user,
+                        )
+                    else:
+                        raise ValueError("Either rolling_state or df_history_fn must be provided to execute_day.")
+
+                    # 4. Add discrete Gaussian noise
+                    noise_srv = sample_discrete_gaussian(
+                        sigma=sigma_w,
+                        size=len(srv_counts),
+                        rng=rng,
+                        seed=seed,
+                    )
+                    noise_tsk = sample_discrete_gaussian(
+                        sigma=sigma_w,
+                        size=len(tsk_counts),
+                        rng=rng,
+                        seed=None if seed is None else seed + 500003,
+                    )
+
+                    noisy_srv = (srv_counts + noise_srv).astype(np.int64).tolist()
+                    noisy_tsk = (tsk_counts + noise_tsk).astype(np.int64).tolist()
+
+                    rec = CalendarReleaseRecord(
+                        window_length=w,
+                        step=s,
                         end_day=current_day,
-                        services_list=self.services_list,
-                        tasks_list=self.tasks_list,
-                        k_tasks_per_user=self.k_tasks_per_user,
+                        start_day=start_day,
+                        sigma_w=sigma_w,
+                        service_names=self.services_list,
+                        task_names=self.tasks_list,
+                        noisy_services=noisy_srv,
+                        noisy_tasks=noisy_tsk,
+                        released_at=datetime.now(timezone.utc).isoformat(),
                     )
-                elif df_history_fn is not None:
-                    # Legacy fallback
-                    df_window = df_history_fn(start_day, current_day)
-                    srv_counts, tsk_counts = compute_distinct_window_histogram(
-                        df_window=df_window,
-                        services_list=self.services_list,
-                        tasks_list=self.tasks_list,
-                        k_tasks_per_user=self.k_tasks_per_user,
-                    )
-                else:
-                    raise ValueError("Either rolling_state or df_history_fn must be provided to execute_day.")
+                except Exception:
+                    # Output not generated or local only, safely cancel reservation
+                    self.ledger.cancel_reservation(rel_id)
+                    raise
 
-                # 4. Add discrete Gaussian noise
-                noise_srv = sample_discrete_gaussian(
-                    sigma=sigma_w,
-                    size=len(srv_counts),
-                    rng=rng,
-                    seed=seed,
-                )
-                noise_tsk = sample_discrete_gaussian(
-                    sigma=sigma_w,
-                    size=len(tsk_counts),
-                    rng=rng,
-                    seed=None if seed is None else seed + 500003,
-                )
-
-                noisy_srv = (srv_counts + noise_srv).astype(np.int64).tolist()
-                noisy_tsk = (tsk_counts + noise_tsk).astype(np.int64).tolist()
-
-                rec = CalendarReleaseRecord(
-                    window_length=w,
-                    step=s,
-                    end_day=current_day,
-                    start_day=start_day,
-                    sigma_w=sigma_w,
-                    service_names=self.services_list,
-                    task_names=self.tasks_list,
-                    noisy_services=noisy_srv,
-                    noisy_tasks=noisy_tsk,
-                    released_at=datetime.now(timezone.utc).isoformat(),
-                )
-
-                # 5. Append to store (with rollback on error)
+                # 5. Append to store (with safe exposure check before cancellation)
                 try:
                     self.calendar_store.append(rec)
-                    executed.append(rec)
-                except Exception:
-                    self.ledger.rollback_release(rel_id, allow_committed=True)
+                except ValueError as e:
+                    if "already exists" in str(e):
+                        # Concurrently sealed by another thread
+                        existing = self.calendar_store.get_release(window_length=w, end_day=current_day)
+                        if existing is not None:
+                            executed.append(existing)
+                            continue
                     raise
+                except Exception:
+                    # Check if output is stored/accessible
+                    if self.calendar_store.get_release(window_length=w, end_day=current_day) is None:
+                        # Output was not stored, cancel unexposed reservation
+                        self.ledger.cancel_reservation(rel_id)
+                    else:
+                        # Stored or uncertain, conservatively commit privacy spend!
+                        self.ledger.admit_and_commit_batch(
+                            candidate_records=[cand],
+                            as_status=ReleaseStatus.COMMITTED.value,
+                            allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
+                        )
+                    raise
+
+                # 6. Commit in ledger atomically (irrevocable)
+                try:
+                    self.ledger.admit_and_commit_batch(
+                        candidate_records=[cand],
+                        as_status=ReleaseStatus.COMMITTED.value,
+                        allow_unconfigured_policy=getattr(self.ledger, "allow_unconfigured_policy", False),
+                    )
+                except Exception:
+                    # Output already stored in calendar_store, privacy spend is retained
+                    raise
+
+                executed.append(rec)
 
         return executed

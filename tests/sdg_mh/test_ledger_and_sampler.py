@@ -52,7 +52,7 @@ def test_closed_form_sdg_additive_exact_match():
     # rho_1^add = C_r^2 / (2 * sigma_r^2) + C_f^2 / (2 * sigma_f^2)
     rho_1_add = (C_r ** 2) / (2.0 * sigma_r ** 2) + (C_f ** 2) / (2.0 * sigma_f ** 2)
 
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     n_days = 100
     for t in range(1, n_days + 1):
         # Day t release
@@ -85,7 +85,7 @@ def test_closed_form_distinct_calendar_exact_match():
     delta_sq = 11.0  # m=5, k=3 => delta^2 = 5 + 6 = 11
     sens = math.sqrt(delta_sq)
 
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     # Simulate a 180-day execution of Calendar B
     for w, s, sigma_w in calendar_b:
         for e in range(s, 181, s):
@@ -108,7 +108,7 @@ def test_closed_form_distinct_calendar_exact_match():
 
 def test_revisit_gate_accept_and_reject():
     """Verify that Revisit Gate strictly blocks releases exceeding bound E_bar(h)."""
-    ledger = UnifiedPrivacyLedger(delta=1e-6)
+    ledger = UnifiedPrivacyLedger(delta=1e-6, allow_unconfigured_policy=True)
     # Day 1-10 committed
     for t in range(1, 11):
         ledger.record_gaussian_release(
