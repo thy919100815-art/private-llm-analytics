@@ -2,7 +2,7 @@
 %%% Do NOT edit. File created by BibTeX with style
 %%% ACM-Reference-Format-Journals [18-Jan-2012].
 
-\begin{thebibliography}{21}
+\begin{thebibliography}{23}
 
 %%% ====================================================================
 %%% NOTE TO THE USER: you can override these defaults by providing
@@ -81,6 +81,24 @@
 \showDOI{\tempurl}
 \newblock
 \shownote{arXiv:1605.02065.}
+
+
+\bibitem[\protect\citeauthoryear{Canonne, Kamath, and Steinke}{Canonne
+  et~al\mbox{.}}{2020}]%
+        {canonne2020discrete}
+\bibfield{author}{\bibinfo{person}{Cl{\'e}ment~L. Canonne},
+  \bibinfo{person}{Gautam Kamath}, {and} \bibinfo{person}{Thomas Steinke}.}
+  \bibinfo{year}{2020}\natexlab{}.
+\newblock \showarticletitle{The Discrete {G}aussian for Differential Privacy}.
+  In \bibinfo{booktitle}{\emph{Advances in Neural Information Processing
+  Systems (NeurIPS)}}, Vol.~\bibinfo{volume}{33}.
+  \bibinfo{pages}{15676--15688}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.29012/jpc.784}
+\showDOI{\tempurl}
+\newblock
+\shownote{arXiv:2004.00010.}
 
 
 \bibitem[\protect\citeauthoryear{Chan, Shi, and Song}{Chan
@@ -185,6 +203,21 @@
 \newblock
 \urldef\tempurl%
 \url{https://doi.org/10.1145/1806689.1806787}
+\showDOI{\tempurl}
+
+
+\bibitem[\protect\citeauthoryear{Dwork and Roth}{Dwork and Roth}{2014}]%
+        {dwork2014algorithmic}
+\bibfield{author}{\bibinfo{person}{Cynthia Dwork} {and} \bibinfo{person}{Aaron
+  Roth}.} \bibinfo{year}{2014}\natexlab{}.
+\newblock \showarticletitle{The Algorithmic Foundations of Differential
+  Privacy}.
+\newblock \bibinfo{journal}{\emph{Foundations and Trends in Theoretical
+  Computer Science}} \bibinfo{volume}{9}, \bibinfo{number}{3--4}
+  (\bibinfo{year}{2014}), \bibinfo{pages}{211--407}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1561/0400000042}
 \showDOI{\tempurl}
 
 
