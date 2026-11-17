@@ -27,6 +27,7 @@ from private_llm_analytics.sdg_mh.joint_planner import (
     JointCalendarPlanner,
     PlannerConfig,
     PlanningResult,
+    build_admissible_phase_space,
     canonicalize_phase_orbit,
     certify_lagrangian_dual_bound_exact,
     enumerate_canonical_phase_orbits,
@@ -486,13 +487,120 @@ def test_p0c_crt_7_canonical_orbits_partition_1470_phases_and_match_210_slice():
 
 
 def test_p0c_pinned_phase_breaks_z210_orbit_symmetry():
-    """Verify pinning any phase coordinate disables full Z_210 orbit collapse and honors pinned coordinates."""
-    cfg_p90 = PlannerConfig(commitment=WEEK1_V2_CURVE, fixed_phi_90=17, use_canonical_7_orbits=True)
-    planner_p90 = JointCalendarPlanner(cfg_p90)
-    res_d = planner_p90.plan_group_d()
-    assert res_d.phases[2] == 17
-    assert res_d.optimality_scope == "CONSTRAINED_PHASE_CONVEX"
-    assert res_d.phase_certification_summary["use_canonical_7_orbits"] is False
-    assert res_d.phase_certification_summary["total_phases"] == 7  # 1 * 7 * 1 candidates
+    """Verify all 8 pinned-phase patterns, the (3,0,0) counterexample, and incomplete-search downgrade."""
+    wl_dh = (0.10, 0.40, 0.40, 0.10)
+
+    # 1. Counterexample: fixed_phi_30=0, fixed_phi_90=0, fixed_phi_7=None on Week1_v2 / DistinctHeavy.
+    # Previously, setting p7_candidates=[0] when fixed_phi_7=None only tested (0,0,0) (obj ~932.6324)
+    # and missed (3,0,0) and (2,0,0), which lie in the same Z_210 orbits as (0,4,0) and (0,5,0)
+    # and achieve obj ~922.9791!
+    cfg_ce = PlannerConfig(
+        commitment=WEEK1_V2_CURVE,
+        workload_weights=wl_dh,
+        fixed_phi_7=None,
+        fixed_phi_30=0,
+        fixed_phi_90=0,
+    )
+    planner_ce = JointCalendarPlanner(cfg_ce)
+    res_ce = planner_ce.plan_group_d()
+    assert res_ce.phases[1] == 0 and res_ce.phases[2] == 0
+    assert res_ce.phases in ((2, 0, 0), (3, 0, 0))
+    assert canonicalize_phase_orbit(res_ce.phases)[0] in ((0, 4, 0), (0, 5, 0))
+    assert res_ce.primal_objective_certified == pytest.approx(922.97911225, rel=1e-6)
+    assert res_ce.primal_objective_certified < 932.63236399 - 9.0
+    assert res_ce.phase_certification_summary["total_phases"] == 7
+    assert res_ce.phase_certification_summary["full_admissible_phases"] == 7
+    assert res_ce.phase_certification_summary["residual_symmetry_group_order"] == 1
+    assert res_ce.phase_certification_summary["quotient_orbits_complete"] is True
+    assert res_ce.optimality_scope == "CONSTRAINED_PHASE_CONVEX"
+    assert res_ce.optimality_certification_tier == OPT_TIER_NEAR_GLOBAL_CERTIFIED
+
+    # 2. Verify all 2^3 = 8 pinning patterns: quotient search (use_canonical_7_orbits=True)
+    # must match exhaustive admissible enumeration (use_canonical_7_orbits=False) identically.
+    patterns = [
+        (None, None, None, 1470, 210, 7, "JOINT_EXHAUSTIVE_MIXED_CONVEX"),
+        (4, None, None, 210, 30, 7, "CONSTRAINED_PHASE_CONVEX"),
+        (None, 0, None, 210, 30, 7, "CONSTRAINED_PHASE_CONVEX"),
+        (None, None, 17, 49, 7, 7, "CONSTRAINED_PHASE_CONVEX"),
+        (4, 0, None, 30, 30, 1, "CONSTRAINED_PHASE_CONVEX"),
+        (4, None, 17, 7, 1, 7, "CONSTRAINED_PHASE_CONVEX"),
+        (None, 0, 17, 7, 1, 7, "CONSTRAINED_PHASE_CONVEX"),
+        (4, 0, 17, 1, 1, 1, "CONSTRAINED_PHASE_CONVEX"),
+    ]
+    for p7_pin, p30_pin, p90_pin, exp_full, exp_gres, exp_quot, exp_scope in patterns:
+        sp = build_admissible_phase_space(p7_pin, p30_pin, p90_pin, use_quotient_orbits=True)
+        assert sp["full_admissible_count"] == exp_full
+        assert sp["residual_group_order"] == exp_gres
+        assert sp["quotient_orbits_count"] == exp_quot
+        assert len(sp["candidates"]) == exp_quot
+
+        p_quot = JointCalendarPlanner(
+            PlannerConfig(
+                commitment=WEEK1_V2_CURVE,
+                workload_weights=wl_dh,
+                fixed_phi_7=p7_pin,
+                fixed_phi_30=p30_pin,
+                fixed_phi_90=p90_pin,
+                use_canonical_7_orbits=True,
+            )
+        )
+        p_full = JointCalendarPlanner(
+            PlannerConfig(
+                commitment=WEEK1_V2_CURVE,
+                workload_weights=wl_dh,
+                fixed_phi_7=p7_pin,
+                fixed_phi_30=p30_pin,
+                fixed_phi_90=p90_pin,
+                use_canonical_7_orbits=False,
+            )
+        )
+        r_quot = p_quot.plan_group_d()
+        r_full = p_full.plan_group_d()
+        if p7_pin is not None:
+            assert r_quot.phases[0] == p7_pin and r_full.phases[0] == p7_pin
+        if p30_pin is not None:
+            assert r_quot.phases[1] == p30_pin and r_full.phases[1] == p30_pin
+        if p90_pin is not None:
+            assert r_quot.phases[2] == p90_pin and r_full.phases[2] == p90_pin
+        assert r_quot.optimality_scope == exp_scope
+        assert r_quot.phase_certification_summary["quotient_orbits_complete"] is True
+        assert r_quot.primal_objective_certified == pytest.approx(r_full.primal_objective_certified, abs=1e-12)
+        assert r_quot.dual_lower_bound == pytest.approx(r_full.dual_lower_bound, abs=1e-12)
+
+    # 3. Verify that if only a partial subset of admissible phases is searched, the result
+    # is NEVER labeled NEAR_GLOBAL_OPTIMAL_CERTIFIED or CONSTRAINED_PHASE_CONVEX.
+    import private_llm_analytics.sdg_mh.joint_planner as jp_mod
+    orig_builder = jp_mod.build_admissible_phase_space
+
+    def truncated_builder(*args, **kwargs):
+        d = orig_builder(*args, **kwargs)
+        # Drop candidates so only 1 of the 7 quotient orbits is searched
+        d["candidates"] = d["candidates"][:1]
+        return d
+
+    planner_sub = JointCalendarPlanner(cfg_ce)
+    jp_mod.build_admissible_phase_space = truncated_builder
+    try:
+        res_sub = planner_sub.plan_group_d()
+    finally:
+        jp_mod.build_admissible_phase_space = orig_builder
+
+    assert res_sub.phase_certification_summary["quotient_orbits_complete"] is False
+    assert res_sub.phase_certification_summary["all_phases_accounted_for"] is False
+    assert res_sub.optimality_scope == "INCOMPLETE_PHASE_SUBSET"
+    assert res_sub.optimality_certification_tier == OPT_TIER_FEASIBLE_CERTIFIED
+    assert res_sub.optimality_certification_tier != OPT_TIER_NEAR_GLOBAL_CERTIFIED
+
+
+def test_p0_manuscript_to_csv_provenance_verifier():
+    """Verify automated manuscript-to-CSV provenance check passes 100% of table and text checks."""
+    from scripts.verify_manuscript_csv_provenance import verify_manuscript_provenance
+
+    report = verify_manuscript_provenance()
+    assert report["all_passed"] is True
+    assert report["failed_checks"] == 0
+    assert report["passed_checks"] >= 170
+
+
 
 
