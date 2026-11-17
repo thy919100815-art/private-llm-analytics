@@ -459,3 +459,116 @@ class TreeBaseline(BaseDPBaseline):
         e = max(0, min(self.T, window_end))
         base_var = float(np.sum(self.cov_base[s:e, s:e]))
         return (beta**2) * base_var
+
+
+class BandedToeplitzBaseline(BaseDPBaseline):
+    """b-Banded Lower-Triangular Toeplitz Matrix Factorization Baseline.
+
+    Theoretical origins:
+      - Fichtenberger, Henzinger & Upadhyay (ICML 2023, arXiv:2202.11205): Canonical Toeplitz
+        factorization with generating function (1 - z)^(-alpha), alpha = 0.5:
+          f_0 = 1,  f_k = f_{k-1} * (2k - 1) / (2k)  for 1 <= k < b.
+      - Choquette-Choo et al. (NeurIPS 2023, arXiv:2306.08153) & Denisov et al. (NeurIPS 2022):
+        b-banded lower-triangular Toeplitz strategy matrix C^{(b)} in R^{T x T} where
+        C_{t, tau} = f_{t - tau} for 0 <= t - tau < b and 0 otherwise.
+
+    Multi-Horizon User-Time zCDP Accounting:
+      - Encoded release: y = C x_clip + z, where z ~ N(0, sigma_mf^2 I_T).
+      - Unbiased daily reconstruction: x_hat = C^{-1} y = x_clip + C^{-1} z.
+      - Under (u, I)-user-time adjacency over any contiguous h-day interval I = [s, s+h-1],
+        since C_{t, tau} >= 0, a user changing each day tau in I by up to +-C_clip induces
+        worst-case L2^2 sensitivity:
+          Delta_2^2(h) = C_clip^2 * max_{0 <= s <= T - h} 1_I^T (C^T C) 1_I,
+        with unit-sensitivity zCDP profile rho_u(h) = 0.5 * max_s 1_I^T M_base 1_I,
+        where M_base = C^T C.
+      - Satisfies the Cauchy-Schwarz multi-horizon variance bound (Theorem 7b):
+        Var(1_w^T x_hat) >= w^2 * C_clip^2 / (2 * rho(w)).
+    """
+
+    def __init__(
+        self,
+        T: int = 420,
+        bandwidth: int = 30,
+        alpha: float = 0.5,
+        C: float = 1.0,
+        delta: float = 1e-6,
+    ):
+        if bandwidth < 1 or bandwidth > T:
+            raise ValueError(f"bandwidth must be in [1, {T}], got {bandwidth}")
+        if not (0.0 < alpha <= 1.0):
+            raise ValueError(f"alpha must be in (0, 1], got {alpha}")
+        self.T = int(T)
+        self.bandwidth = int(bandwidth)
+        self.alpha = float(alpha)
+        self.C = float(C)
+        self.delta = float(delta)
+        self.name = f"Banded-MF(b={self.bandwidth},alpha={self.alpha:.2f})"
+        self.ledger = UnifiedPrivacyLedger(delta=self.delta, allow_unconfigured_policy=True)
+
+        # Toeplitz band coefficients f_0, ..., f_{b-1} from (1 - z)^(-alpha)
+        self.band_coeffs = np.zeros(self.bandwidth, dtype=np.float64)
+        self.band_coeffs[0] = 1.0
+        for k in range(1, self.bandwidth):
+            self.band_coeffs[k] = self.band_coeffs[k - 1] * (self.alpha + float(k) - 1.0) / float(k)
+
+        # Lower-triangular b-banded Toeplitz encoder C in R^{T x T}
+        self.C_mat = np.zeros((self.T, self.T), dtype=np.float64)
+        for k in range(self.bandwidth):
+            idx = np.arange(0, self.T - k)
+            self.C_mat[idx + k, idx] = self.band_coeffs[k]
+
+        # Fisher information matrix M_base = C^T C and decoder C^{-1}
+        self.M_base = self.C_mat.T @ self.C_mat
+        self.C_inv = np.linalg.inv(self.C_mat)
+        self.cov_base = self.C_inv @ self.C_inv.T
+
+        # 2D prefix sum of M_base for O(1) interval sensitivity lookup
+        self._P_m = np.zeros((self.T + 1, self.T + 1), dtype=np.float64)
+        self._P_m[1:, 1:] = np.cumsum(np.cumsum(self.M_base, axis=0), axis=1)
+
+    def get_worst_case_rho_term(self, h: int) -> float:
+        """Compute unit-sensitivity zCDP term 0.5 * max_s 1_h^T M_base 1_h for horizon h."""
+        h_clamped = max(1, min(self.T, int(h)))
+        s_idx = np.arange(0, self.T - h_clamped + 1)
+        e_idx = s_idx + h_clamped
+        block_sums = (
+            self._P_m[e_idx, e_idx]
+            - self._P_m[s_idx, e_idx]
+            - self._P_m[e_idx, s_idx]
+            + self._P_m[s_idx, s_idx]
+        )
+        return 0.5 * float(np.max(block_sums))
+
+    def calibrate_to_multi_horizon_envelope(
+        self,
+        rem_add_envelope: np.ndarray,
+        n_days: Optional[int] = None,
+    ) -> Dict[str, Any]:
+        """Calibrate noise multiplier beta so rho_MF(h) <= rem_add_envelope[h-1] for all h in [1, n_days]."""
+        eval_days = min(self.T, int(n_days) if n_days is not None else len(rem_add_envelope))
+        ratios: List[Tuple[int, float]] = []
+        for h in range(1, eval_days + 1):
+            rho_u = self.get_worst_case_rho_term(h)
+            ratios.append((h, rho_u / float(rem_add_envelope[h - 1])))
+        tight_h, beta_sq = max(ratios, key=lambda x: x[1])
+        rho_u_h1 = self.get_worst_case_rho_term(1)
+        beta_sq_h1_only = rho_u_h1 / float(rem_add_envelope[0])
+        rho_u_365 = self.get_worst_case_rho_term(min(365, eval_days))
+        naive_h1_violation_at_365 = (rho_u_365 / beta_sq_h1_only) / float(rem_add_envelope[min(365, eval_days) - 1])
+        return {
+            "beta_env": math.sqrt(beta_sq),
+            "tight_h_env": int(tight_h),
+            "rho_u_h1": rho_u_h1,
+            "rho_u_tight": self.get_worst_case_rho_term(tight_h),
+            "naive_h1_violation_ratio_at_365": float(naive_h1_violation_at_365),
+            "streaming_state_bytes": int(self.bandwidth * 8 * 2),  # 2 channels x b float64 ring buffer
+            "dense_decoder_bytes": int(self.C_inv.nbytes),
+        }
+
+    def get_window_variance(self, window_start: int, window_end: int, beta: float = 1.0) -> float:
+        """Compute exact variance of rolling sum over [window_start, window_end] (1-indexed)."""
+        s = max(0, min(self.T - 1, window_start - 1))
+        e = max(0, min(self.T, window_end))
+        base_var = float(np.sum(self.cov_base[s:e, s:e]))
+        return (beta**2) * (self.C**2) * base_var
+

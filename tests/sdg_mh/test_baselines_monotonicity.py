@@ -249,4 +249,34 @@ def test_tree_variance_ratios_distinct_and_tree2l_sub_one_at_90d():
     assert sub_one_count > 0, "Tree-2l at w=90 must have start positions with variance ratio < 1"
 
 
+def test_banded_toeplitz_multi_horizon_calibration_and_theorem_7b():
+    """Verify BandedToeplitzBaseline satisfies Theorem 7(b) and exact multi-horizon envelope calibration."""
+    from private_llm_analytics.sdg_mh.baselines import BandedToeplitzBaseline
+
+    T = 120
+    C = 50.0
+    for bw, alpha in [(8, 0.25), (30, 0.50)]:
+        bmf = BandedToeplitzBaseline(T=T, bandwidth=bw, alpha=alpha, C=C)
+        prev_rho = 0.0
+        for w in [1, 7, 30, 90, 120]:
+            rho_u = bmf.get_worst_case_rho_term(w)
+            assert rho_u >= prev_rho - 1e-12
+            prev_rho = rho_u
+            rho_w = (C**2) * rho_u
+            lower_bound = (w**2 * C**2) / (2.0 * rho_w)
+            for s in [0, (T - w) // 2, T - w]:
+                var_pos = bmf.get_window_variance(s + 1, s + w, beta=1.0)
+                assert var_pos >= lower_bound - 1e-6
+
+        # Multi-horizon envelope calibration check
+        rem_env = np.array([0.001 * h for h in range(1, T + 1)], dtype=np.float64)
+        cal = bmf.calibrate_to_multi_horizon_envelope(rem_env, n_days=T)
+        beta_env = cal["beta_env"]
+        for h in range(1, T + 1):
+            scaled_rho = bmf.get_worst_case_rho_term(h) / (beta_env**2)
+            assert scaled_rho <= rem_env[h - 1] + 1e-12
+        assert cal["naive_h1_violation_ratio_at_365"] > 1.0
+
+
+
 
