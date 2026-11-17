@@ -934,10 +934,13 @@ class JointCalendarPlanner:
 
         if not cert_ok:
             tier = OPT_TIER_SOLVER_CONVERGED
+            b_status = "SOLVER_OPT_UNCERTIFIED"
         elif dual_diag.get("dual_certified", False) and rel_gap <= NEAR_GLOBAL_REL_GAP_TOL:
             tier = OPT_TIER_NEAR_GLOBAL_CERTIFIED
+            b_status = "OPTIMAL"
         else:
             tier = OPT_TIER_FEASIBLE_CERTIFIED
+            b_status = "FEASIBLE"
 
         phase_summary = {
             "total_phases": 1,
@@ -952,7 +955,7 @@ class JointCalendarPlanner:
 
         return PlanningResult(
             group="B_BudgetOnly",
-            status="OPTIMAL" if cert_ok else "SOLVER_OPT_UNCERTIFIED",
+            status=b_status,
             phases=phases,
             daily_d=float(v_cert[0]),
             distinct_costs=(float(v_cert[1]), float(v_cert[2]), float(v_cert[3])),
@@ -1213,10 +1216,25 @@ class JointCalendarPlanner:
 
         if not cert_ok:
             tier = OPT_TIER_SOLVER_CONVERGED
-        elif all_phases_accounted and math.isfinite(rel_gap) and rel_gap <= NEAR_GLOBAL_REL_GAP_TOL:
+            d_status = "SOLVER_OPT_UNCERTIFIED"
+        elif (
+            all_phases_accounted
+            and quotient_orbits_complete
+            and optimality_scope != "INCOMPLETE_PHASE_SUBSET"
+            and math.isfinite(rel_gap)
+            and rel_gap <= NEAR_GLOBAL_REL_GAP_TOL
+        ):
             tier = OPT_TIER_NEAR_GLOBAL_CERTIFIED
+            d_status = "OPTIMAL"
         else:
             tier = OPT_TIER_FEASIBLE_CERTIFIED
+            d_status = "FEASIBLE"
+
+        d_solver_status = (
+            "CONVERGED"
+            if (uncertified_count == 0 and quotient_orbits_complete)
+            else "PARTIAL_CONVERGED"
+        )
 
         phase_summary = {
             "total_phases": phases_attempted,
@@ -1242,7 +1260,7 @@ class JointCalendarPlanner:
 
         return PlanningResult(
             group="D_JointPlanning",
-            status="OPTIMAL" if cert_ok else "SOLVER_OPT_UNCERTIFIED",
+            status=d_status,
             phases=best_phi,
             daily_d=float(v_cert[0]),
             distinct_costs=(float(v_cert[1]), float(v_cert[2]), float(v_cert[3])),
@@ -1262,7 +1280,7 @@ class JointCalendarPlanner:
             is_math_global_optimal=bool(tier == OPT_TIER_GLOBAL_PROVED),
             is_certified_publishable=cert_ok,
             optimality_scope=optimality_scope,
-            solver_status="CONVERGED",
+            solver_status=d_solver_status,
             certification_status="CERTIFIED_PUBLISHABLE" if cert_ok else "UNCERTIFIED_VIOLATION",
             optimality_certification_tier=tier,
             primal_objective_certified=certified_err if cert_ok else float("inf"),

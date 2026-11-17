@@ -329,6 +329,9 @@ def test_uncertified_phase_downgrades_tier_to_feasible_certified(monkeypatch):
     monkeypatch.setattr(planner, "solve_budget_for_phase", flaky_solve)
     res_d = planner.plan_group_d()
 
+    assert res_d.status == "FEASIBLE"
+    assert res_d.status != "OPTIMAL"
+    assert res_d.solver_status == "PARTIAL_CONVERGED"
     assert res_d.is_certified_publishable is True
     assert res_d.is_math_global_optimal is False
     assert res_d.optimality_certification_tier == OPT_TIER_FEASIBLE_CERTIFIED
@@ -585,6 +588,10 @@ def test_p0c_pinned_phase_breaks_z210_orbit_symmetry():
     finally:
         jp_mod.build_admissible_phase_space = orig_builder
 
+    assert res_sub.status == "FEASIBLE"
+    assert res_sub.status != "OPTIMAL"
+    assert res_sub.solver_status == "PARTIAL_CONVERGED"
+    assert res_sub.is_certified_publishable is True
     assert res_sub.phase_certification_summary["quotient_orbits_complete"] is False
     assert res_sub.phase_certification_summary["all_phases_accounted_for"] is False
     assert res_sub.optimality_scope == "INCOMPLETE_PHASE_SUBSET"
@@ -592,14 +599,76 @@ def test_p0c_pinned_phase_breaks_z210_orbit_symmetry():
     assert res_sub.optimality_certification_tier != OPT_TIER_NEAR_GLOBAL_CERTIFIED
 
 
+def test_status_separation_solver_convergence_privacy_feasibility_and_optimality(monkeypatch):
+    """Verify strict separation of solver convergence, privacy feasibility, and optimality status."""
+    planner = JointCalendarPlanner(
+        PlannerConfig(commitment=WEEK1_V2_CURVE, workload_weights=(0.10, 0.40, 0.40, 0.10))
+    )
+
+    # Case 1: Loose dual lower bound -> solver converged & privacy feasible, but gap not certified
+    def loose_dual_lb(phi, v_opt):
+        return {
+            "dual_lb": 100.0,  # Loose LB -> rel_gap > NEAR_GLOBAL_REL_GAP_TOL
+            "dual_certified": True,
+            "dual_cert_method": "DECIMAL100_DIRECTED_ROUNDING",
+        }
+
+    monkeypatch.setattr(planner, "compute_dual_lower_bound", loose_dual_lb)
+    res_b_loose = planner.plan_group_b()
+    assert res_b_loose.is_solver_approx_optimal is True
+    assert res_b_loose.solver_status == "CONVERGED"
+    assert res_b_loose.is_certified_publishable is True
+    assert res_b_loose.is_infinite_horizon_secure is True
+    assert res_b_loose.optimality_certification_tier == OPT_TIER_FEASIBLE_CERTIFIED
+    assert res_b_loose.status == "FEASIBLE"
+    assert res_b_loose.status != "OPTIMAL"
+
+    res_d_loose = planner.plan_group_d()
+    assert res_d_loose.is_solver_approx_optimal is True
+    assert res_d_loose.solver_status == "CONVERGED"
+    assert res_d_loose.is_certified_publishable is True
+    assert res_d_loose.is_infinite_horizon_secure is True
+    assert res_d_loose.optimality_certification_tier == OPT_TIER_FEASIBLE_CERTIFIED
+    assert res_d_loose.status == "FEASIBLE"
+    assert res_d_loose.status != "OPTIMAL"
+
+
 def test_p0_manuscript_to_csv_provenance_verifier():
-    """Verify automated manuscript-to-CSV provenance check passes 100% of table and text checks."""
+    """Verify structured manuscript-to-CSV provenance check passes and catches all 4 required mutations."""
+    from pathlib import Path
     from scripts.verify_manuscript_csv_provenance import verify_manuscript_provenance
 
     report = verify_manuscript_provenance()
     assert report["all_passed"] is True
     assert report["failed_checks"] == 0
-    assert report["passed_checks"] >= 170
+    assert report["passed_checks"] >= 260
+
+    orig_tex = (Path(__file__).resolve().parents[2] / "docs" / "pvlbd_2027_paper" / "main.tex").read_text(encoding="utf-8")
+
+    # Mutation 1: Modify a MAPE difference in Table 4 (-0.0271% -> -0.0371%)
+    # Even if we append the original string "-0.0271\%" in a comment, structured table parsing must fail!
+    mut_mape = orig_tex.replace(r"\mathbf{-0.0271\%}", r"\mathbf{-0.0371\%}", 1) + "\n% -0.0271\\%"
+    with pytest.raises(AssertionError, match="tab4_.*rel_7d_mape_pct.*_diff"):
+        verify_manuscript_provenance(tex_text=mut_mape, write_report=False)
+
+    # Mutation 2: Modify a p_holm value in Table 4 (1.0000 -> 0.0412 on rel_30d_mape_pct)
+    target_row = r"DistHeavy / Week1\_v2 & D $-$ B & \texttt{rel\_30d\_mape\_pct} (Own release) & $2.4907\%$ & $2.4666\%$ & $-0.0241\%$ ($\pm 0.0835\%$) & $0.5166$ & $1.0000$"
+    replacement_row = r"DistHeavy / Week1\_v2 & D $-$ B & \texttt{rel\_30d\_mape\_pct} (Own release) & $2.4907\%$ & $2.4666\%$ & $-0.0241\%$ ($\pm 0.0835\%$) & $0.5166$ & $0.0412$"
+    assert target_row in orig_tex
+    mut_holm = orig_tex.replace(target_row, replacement_row, 1)
+    with pytest.raises(AssertionError, match="tab4_.*rel_30d_mape_pct.*_holm_p"):
+        verify_manuscript_provenance(tex_text=mut_holm, write_report=False)
+
+    # Mutation 3: Modify a baseline method label in Table 5
+    mut_method = orig_tex.replace(r"\textbf{Tree-2l (MH-RemEnv)}", r"\textbf{Tree-2l (Uncalibrated-Raw)}", 1)
+    with pytest.raises(AssertionError, match="tab5_method_present_Tree-2l \\(MH-RemEnv\\)"):
+        verify_manuscript_provenance(tex_text=mut_method, write_report=False)
+
+    # Mutation 4: Modify service/task dimension in Section 2 (m = 5 -> m = 9 or |A| = 20 -> |A| = 12)
+    mut_dim = orig_tex.replace(r"$|\mathcal{S}| = m = 5$", r"$|\mathcal{S}| = m = 9$", 1)
+    with pytest.raises(AssertionError, match="sys_dim_services_m_eq_5"):
+        verify_manuscript_provenance(tex_text=mut_dim, write_report=False)
+
 
 
 

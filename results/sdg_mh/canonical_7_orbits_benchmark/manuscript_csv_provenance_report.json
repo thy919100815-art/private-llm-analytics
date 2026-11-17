@@ -1,7 +1,8 @@
 {
   "manuscript": "docs/pvlbd_2027_paper/main.tex",
-  "total_checks": 174,
-  "passed_checks": 174,
+  "verifier_mode": "STRUCTURED_LATEX_TABLE_JOINT_KEY_PARSER",
+  "total_checks": 478,
+  "passed_checks": 478,
   "failed_checks": 0,
   "all_passed": true,
   "checks": [
@@ -9,1219 +10,3347 @@
       "check": "ban_non_v3_token:N=180",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (N=180)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:180 users",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (180 users)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:M=9 cells",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (M=9 cells)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:9 provider-by-task cells",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (9 provider-by-task cells)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:10 independent data seeds",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (10 independent data seeds)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:S=10",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (S=10)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:20.05\\%",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (20.05\\%)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:39.95\\%",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (39.95\\%)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:35.61",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (35.61)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:39.65",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (39.65)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:41.61",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (41.61)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:43.82",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (43.82)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:50.09\\%",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (50.09\\%)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
       "check": "ban_non_v3_token:79.96\\%",
       "passed": true,
       "source": "docs/pvlbd_2027_paper/main.tex",
-      "expected": "absent (79.96\\%)",
-      "detail": ""
+      "expected": "absent",
+      "actual": "absent"
     },
     {
-      "check": "v3_users_2000",
+      "check": "sys_dim_services_m_eq_5",
       "passed": true,
-      "source": "experiments/sdg_mh/run_long_horizon_420d_audit_v3.py",
-      "expected": "2{,}000",
-      "detail": ""
+      "source": "src/private_llm_analytics/sdg_mh/rolling_state.py",
+      "expected": "m=5",
+      "actual": "|\\mathcal{S}| = m = 5"
     },
     {
-      "check": "v3_services_5",
+      "check": "sys_dim_tasks_A_eq_20",
       "passed": true,
-      "source": "src/private_llm_analytics/sdg_mh/distinct_state.py",
-      "expected": "m = 5",
-      "detail": ""
+      "source": "src/private_llm_analytics/sdg_mh/rolling_state.py",
+      "expected": "|A|=20",
+      "actual": "|\\mathcal{A}|=20"
     },
     {
-      "check": "v3_tasks_20",
+      "check": "sys_dim_distinct_sensitivity_5_plus_2x3_eq_11",
       "passed": true,
-      "source": "src/private_llm_analytics/sdg_mh/distinct_state.py",
-      "expected": "|\\mathcal{A}| = 20",
-      "detail": ""
+      "source": "src/private_llm_analytics/sdg_mh/calendar_job.py",
+      "expected": "5 + 2(3) = 11",
+      "actual": "\\Delta_{\\text{distinct}}^2 = m + 2k = 5 + 2(3) = 11"
     },
     {
-      "check": "v3_top_k_3",
-      "passed": true,
-      "source": "src/private_llm_analytics/sdg_mh/distinct_state.py",
-      "expected": "k = 3",
-      "detail": ""
-    },
-    {
-      "check": "v3_K_8_seeds",
+      "check": "exp_v3_K8_M5_40runs",
       "passed": true,
       "source": "results/sdg_mh/long_horizon_420d_v3_final/AUDIT_V3_REPORT.md",
-      "expected": "K = 8",
-      "detail": ""
+      "expected": "K=8, M=5, 40 runs",
+      "actual": "K = 8$ independent longitudinal dataset seeds ($\\{42, 1042, \\dots, 7042\\}$) $\\times$ $M = 5$ MC trials ($40$ runs"
     },
     {
-      "check": "v3_M_5_trials",
+      "check": "tab2_Original_Planner_name",
       "passed": true,
-      "source": "results/sdg_mh/long_horizon_420d_v3_final/AUDIT_V3_REPORT.md",
-      "expected": "M = 5",
-      "detail": ""
+      "source": "calendar_accounting.py",
+      "expected": "Original_Planner",
+      "actual": "Original_Planner"
     },
     {
-      "check": "v3_50520_seeds",
-      "passed": true,
-      "source": "results/sdg_mh/long_horizon_420d_v3_final/AUDIT_V3_REPORT.md",
-      "expected": "50{,}520",
-      "detail": ""
-    },
-    {
-      "check": "curve_Original_Planner_eps_0.9000",
+      "check": "tab2_Original_Planner_eps_h1",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.9000",
-      "detail": ""
+      "actual": "0.9000"
     },
     {
-      "check": "curve_Original_Planner_eps_1.0800",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "1.0800",
-      "detail": ""
-    },
-    {
-      "check": "curve_Original_Planner_eps_1.4900",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "1.4900",
-      "detail": ""
-    },
-    {
-      "check": "curve_Original_Planner_eps_2.2400",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "2.2400",
-      "detail": ""
-    },
-    {
-      "check": "curve_Original_Planner_eps_4.3900",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "4.3900",
-      "detail": ""
-    },
-    {
-      "check": "curve_Original_Planner_rho_0.014199",
+      "check": "tab2_Original_Planner_rho_h1",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.014199",
-      "detail": ""
+      "actual": "0.014199"
     },
     {
-      "check": "curve_Original_Planner_rho_0.020320",
+      "check": "tab2_Original_Planner_eps_h7",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "1.0800",
+      "actual": "1.0800"
+    },
+    {
+      "check": "tab2_Original_Planner_rho_h7",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.020320",
-      "detail": ""
+      "actual": "0.020320"
     },
     {
-      "check": "curve_Original_Planner_rho_0.038143",
+      "check": "tab2_Original_Planner_eps_h30",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "1.4900",
+      "actual": "1.4900"
+    },
+    {
+      "check": "tab2_Original_Planner_rho_h30",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.038143",
-      "detail": ""
+      "actual": "0.038143"
     },
     {
-      "check": "curve_Original_Planner_rho_0.084106",
+      "check": "tab2_Original_Planner_eps_h90",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "2.2400",
+      "actual": "2.2400"
+    },
+    {
+      "check": "tab2_Original_Planner_rho_h90",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.084106",
-      "detail": ""
+      "actual": "0.084106"
     },
     {
-      "check": "curve_Original_Planner_rho_0.302356",
+      "check": "tab2_Original_Planner_eps_h365",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "4.3900",
+      "actual": "4.3900"
+    },
+    {
+      "check": "tab2_Original_Planner_rho_h365",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.302356",
-      "detail": ""
+      "actual": "0.302356"
     },
     {
-      "check": "curve_Original_Planner_beta_tail",
+      "check": "tab2_Original_Planner_slope_0",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0010202",
+      "actual": "0.0010202"
+    },
+    {
+      "check": "tab2_Original_Planner_slope_1",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0007749",
+      "actual": "0.0007749"
+    },
+    {
+      "check": "tab2_Original_Planner_slope_2",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0007660",
+      "actual": "0.0007660"
+    },
+    {
+      "check": "tab2_Original_Planner_slope_3",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0007936",
+      "actual": "0.0007936"
+    },
+    {
+      "check": "tab2_Original_Planner_beta_tail",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.00079364",
-      "detail": ""
+      "actual": "0.00079364"
     },
     {
-      "check": "curve_Original_Planner_a_tail",
+      "check": "tab2_Original_Planner_a_tail",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.01267882",
-      "detail": ""
+      "actual": "0.01267882"
     },
     {
-      "check": "curve_Week1_v2_eps_1.0000",
+      "check": "tab2_Original_Planner_min_rho",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.01419861",
+      "actual": "0.01419861"
+    },
+    {
+      "check": "tab2_Original_Planner_drift",
+      "passed": true,
+      "source": "ledger.py",
+      "expected": "3.2193 \\times 10^{-11}",
+      "actual": "3.2193 \\times 10^{-11}"
+    },
+    {
+      "check": "tab2_Week1_v2_name",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "Week1_v2",
+      "actual": "Week1_v2"
+    },
+    {
+      "check": "tab2_Week1_v2_eps_h1",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "1.0000",
-      "detail": ""
+      "actual": "1.0000"
     },
     {
-      "check": "curve_Week1_v2_eps_1.2000",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "1.2000",
-      "detail": ""
-    },
-    {
-      "check": "curve_Week1_v2_eps_1.5000",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "1.5000",
-      "detail": ""
-    },
-    {
-      "check": "curve_Week1_v2_eps_2.2500",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "2.2500",
-      "detail": ""
-    },
-    {
-      "check": "curve_Week1_v2_eps_4.4000",
-      "passed": true,
-      "source": "calendar_accounting.py",
-      "expected": "4.4000",
-      "detail": ""
-    },
-    {
-      "check": "curve_Week1_v2_rho_0.017469",
+      "check": "tab2_Week1_v2_rho_h1",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.017469",
-      "detail": ""
+      "actual": "0.017469"
     },
     {
-      "check": "curve_Week1_v2_rho_0.024984",
+      "check": "tab2_Week1_v2_eps_h7",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "1.2000",
+      "actual": "1.2000"
+    },
+    {
+      "check": "tab2_Week1_v2_rho_h7",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.024984",
-      "detail": ""
+      "actual": "0.024984"
     },
     {
-      "check": "curve_Week1_v2_rho_0.038644",
+      "check": "tab2_Week1_v2_eps_h30",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "1.5000",
+      "actual": "1.5000"
+    },
+    {
+      "check": "tab2_Week1_v2_rho_h30",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.038644",
-      "detail": ""
+      "actual": "0.038644"
     },
     {
-      "check": "curve_Week1_v2_rho_0.084831",
+      "check": "tab2_Week1_v2_eps_h90",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "2.2500",
+      "actual": "2.2500"
+    },
+    {
+      "check": "tab2_Week1_v2_rho_h90",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.084831",
-      "detail": ""
+      "actual": "0.084831"
     },
     {
-      "check": "curve_Week1_v2_rho_0.303646",
+      "check": "tab2_Week1_v2_eps_h365",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "4.4000",
+      "actual": "4.4000"
+    },
+    {
+      "check": "tab2_Week1_v2_rho_h365",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.303646",
-      "detail": ""
+      "actual": "0.303646"
     },
     {
-      "check": "curve_Week1_v2_beta_tail",
+      "check": "tab2_Week1_v2_slope_0",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0012525",
+      "actual": "0.0012525"
+    },
+    {
+      "check": "tab2_Week1_v2_slope_1",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0005939",
+      "actual": "0.0005939"
+    },
+    {
+      "check": "tab2_Week1_v2_slope_2",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0007698",
+      "actual": "0.0007698"
+    },
+    {
+      "check": "tab2_Week1_v2_slope_3",
+      "passed": true,
+      "source": "calendar_accounting.py",
+      "expected": "0.0007957",
+      "actual": "0.0007957"
+    },
+    {
+      "check": "tab2_Week1_v2_beta_tail",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.00079569",
-      "detail": ""
+      "actual": "0.00079569"
     },
     {
-      "check": "curve_Week1_v2_a_tail",
+      "check": "tab2_Week1_v2_a_tail",
       "passed": true,
       "source": "calendar_accounting.py",
       "expected": "0.01321923",
-      "detail": ""
+      "actual": "0.01321923"
     },
     {
-      "check": "drift_orig_3.2193e-11",
+      "check": "tab2_Week1_v2_min_rho",
       "passed": true,
-      "source": "ledger.py:commitment_curve_drift_summary",
-      "expected": "3.219325e-11",
-      "detail": ""
+      "source": "calendar_accounting.py",
+      "expected": "0.01746890",
+      "actual": "0.01746890"
     },
     {
-      "check": "drift_w1v2_2.9122e-11",
+      "check": "tab2_Week1_v2_drift",
       "passed": true,
-      "source": "ledger.py:commitment_curve_drift_summary",
-      "expected": "2.912229e-11",
-      "detail": ""
+      "source": "ledger.py",
+      "expected": "2.9122 \\times 10^{-11}",
+      "actual": "2.9122 \\times 10^{-11}"
     },
     {
-      "check": "table3_primal_Default_Week1_v2_A_Baseline",
+      "check": "tab3_row_exists_('Default', 'Week1_v2', 'A_Base')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
-      "expected": "2047.7860",
-      "detail": ""
+      "expected": "('Default', 'Week1_v2', 'A_Base')",
+      "actual": "[('Default', 'Week1_v2', 'A_Base'), ('Default', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Week1_v2', 'B_Budg'), ('DistHeavy', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Original', 'B_Budg'), ('DistHeavy', 'Original', 'D_Joint')]"
     },
     {
-      "check": "table3_time_Default_Week1_v2_A_Baseline",
+      "check": "tab3_('Default', 'Week1_v2', 'A_Base')_phases",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "(0,0,0)",
+      "actual": "(0,0,0)"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'A_Base')_v3_time",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "0.024",
-      "detail": ""
+      "actual": "0.024\\,\\text{s} (1 phase)"
     },
     {
-      "check": "table3_sigma_add_Default_Week1_v2_A_Baseline",
+      "check": "tab3_('Default', 'Week1_v2', 'A_Base')_primal",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "2047.7860",
+      "actual": "2047.7860"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'A_Base')_daily_d",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "2.4160",
+      "actual": "2.4160"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'A_Base')_sigma_add",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "2319.7",
-      "detail": ""
+      "actual": "2319.7"
     },
     {
-      "check": "table3_primal_Default_Week1_v2_D_JointPlanning",
+      "check": "tab3_row_exists_('Default', 'Week1_v2', 'D_Joint')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
-      "expected": "1433.9182",
-      "detail": ""
+      "expected": "('Default', 'Week1_v2', 'D_Joint')",
+      "actual": "[('Default', 'Week1_v2', 'A_Base'), ('Default', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Week1_v2', 'B_Budg'), ('DistHeavy', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Original', 'B_Budg'), ('DistHeavy', 'Original', 'D_Joint')]"
     },
     {
-      "check": "table3_time_Default_Week1_v2_D_JointPlanning",
+      "check": "tab3_('Default', 'Week1_v2', 'D_Joint')_phases",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "(0,0,0)",
+      "actual": "(0,0,0)"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'D_Joint')_v3_time",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "1.540",
-      "detail": ""
+      "actual": "1.540\\,\\text{s} \\;/\\; \\mathbf{0.066\\,\\text{s}} (23.2\\times)"
     },
     {
-      "check": "table3_sigma_add_Default_Week1_v2_D_JointPlanning",
+      "check": "tab3_('Default', 'Week1_v2', 'D_Joint')_primal",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "1433.9182",
+      "actual": "1433.9182"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'D_Joint')_dual_lb",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "1433.9182",
+      "actual": "1433.9182 (2.04 \\times 10^{-11})"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'D_Joint')_daily_d",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "4.7113",
+      "actual": "4.7113"
+    },
+    {
+      "check": "tab3_('Default', 'Week1_v2', 'D_Joint')_sigma_add",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "1661.1",
-      "detail": ""
+      "actual": "1661.1"
     },
     {
-      "check": "table3_primal_DistinctHeavy_Week1_v2_B_BudgetOnly",
+      "check": "tab3_row_exists_('DistHeavy', 'Week1_v2', 'B_Budg')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
-      "expected": "932.6324",
-      "detail": ""
+      "expected": "('DistHeavy', 'Week1_v2', 'B_Budg')",
+      "actual": "[('Default', 'Week1_v2', 'A_Base'), ('Default', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Week1_v2', 'B_Budg'), ('DistHeavy', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Original', 'B_Budg'), ('DistHeavy', 'Original', 'D_Joint')]"
     },
     {
-      "check": "table3_time_DistinctHeavy_Week1_v2_B_BudgetOnly",
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'B_Budg')_phases",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "(0,0,0)",
+      "actual": "(0,0,0)"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'B_Budg')_v3_time",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "0.026",
-      "detail": ""
+      "actual": "0.026\\,\\text{s} (1 phase)"
     },
     {
-      "check": "table3_sigma_add_DistinctHeavy_Week1_v2_B_BudgetOnly",
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'B_Budg')_primal",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "932.6324",
+      "actual": "932.6324"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'B_Budg')_dual_lb",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "932.6324",
+      "actual": "932.6324 (1.00 \\times 10^{-11})"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'B_Budg')_daily_d",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "3.1711",
+      "actual": "3.1711"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'B_Budg')_sigma_add",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "2024.7",
-      "detail": ""
+      "actual": "2024.7"
     },
     {
-      "check": "table3_primal_DistinctHeavy_Week1_v2_D_JointPlanning",
+      "check": "tab3_row_exists_('DistHeavy', 'Week1_v2', 'D_Joint')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
-      "expected": "922.9791",
-      "detail": ""
+      "expected": "('DistHeavy', 'Week1_v2', 'D_Joint')",
+      "actual": "[('Default', 'Week1_v2', 'A_Base'), ('Default', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Week1_v2', 'B_Budg'), ('DistHeavy', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Original', 'B_Budg'), ('DistHeavy', 'Original', 'D_Joint')]"
     },
     {
-      "check": "table3_time_DistinctHeavy_Week1_v2_D_JointPlanning",
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'D_Joint')_phases",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "(0,4,0)",
+      "actual": "(0,4,0)"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'D_Joint')_v3_time",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "1.576",
-      "detail": ""
+      "actual": "1.576\\,\\text{s} \\;/\\; \\mathbf{0.068\\,\\text{s}} (22.4\\times)"
     },
     {
-      "check": "table3_sigma_add_DistinctHeavy_Week1_v2_D_JointPlanning",
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'D_Joint')_primal",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "922.9791",
+      "actual": "922.9791"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'D_Joint')_dual_lb",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "922.9791",
+      "actual": "922.9791 (7.45 \\times 10^{-9})"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'D_Joint')_daily_d",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "3.1309",
+      "actual": "3.1309"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Week1_v2', 'D_Joint')_sigma_add",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "2037.7",
-      "detail": ""
+      "actual": "2037.7"
     },
     {
-      "check": "table3_primal_DistinctHeavy_Original_B_BudgetOnly",
+      "check": "tab3_row_exists_('DistHeavy', 'Original', 'B_Budg')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
-      "expected": "940.8881",
-      "detail": ""
+      "expected": "('DistHeavy', 'Original', 'B_Budg')",
+      "actual": "[('Default', 'Week1_v2', 'A_Base'), ('Default', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Week1_v2', 'B_Budg'), ('DistHeavy', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Original', 'B_Budg'), ('DistHeavy', 'Original', 'D_Joint')]"
     },
     {
-      "check": "table3_time_DistinctHeavy_Original_B_BudgetOnly",
+      "check": "tab3_('DistHeavy', 'Original', 'B_Budg')_phases",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "(0,0,0)",
+      "actual": "(0,0,0)"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'B_Budg')_v3_time",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "0.028",
-      "detail": ""
+      "actual": "0.028\\,\\text{s} (1 phase)"
     },
     {
-      "check": "table3_sigma_add_DistinctHeavy_Original_B_BudgetOnly",
+      "check": "tab3_('DistHeavy', 'Original', 'B_Budg')_primal",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "940.8881",
+      "actual": "940.8881"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'B_Budg')_dual_lb",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "940.8881",
+      "actual": "940.8881 (1.00 \\times 10^{-11})"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'B_Budg')_daily_d",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "3.2064",
+      "actual": "3.2064"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'B_Budg')_sigma_add",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "2013.5",
-      "detail": ""
+      "actual": "2013.5"
     },
     {
-      "check": "table3_primal_DistinctHeavy_Original_D_JointPlanning",
+      "check": "tab3_row_exists_('DistHeavy', 'Original', 'D_Joint')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
-      "expected": "930.3260",
-      "detail": ""
+      "expected": "('DistHeavy', 'Original', 'D_Joint')",
+      "actual": "[('Default', 'Week1_v2', 'A_Base'), ('Default', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Week1_v2', 'B_Budg'), ('DistHeavy', 'Week1_v2', 'D_Joint'), ('DistHeavy', 'Original', 'B_Budg'), ('DistHeavy', 'Original', 'D_Joint')]"
     },
     {
-      "check": "table3_time_DistinctHeavy_Original_D_JointPlanning",
+      "check": "tab3_('DistHeavy', 'Original', 'D_Joint')_phases",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "(0,4,0)",
+      "actual": "(0,4,0)"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'D_Joint')_v3_time",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "1.661",
-      "detail": ""
+      "actual": "1.661\\,\\text{s} \\;/\\; \\mathbf{0.081\\,\\text{s}} (21.0\\times)"
     },
     {
-      "check": "table3_sigma_add_DistinctHeavy_Original_D_JointPlanning",
+      "check": "tab3_('DistHeavy', 'Original', 'D_Joint')_primal",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "930.3260",
+      "actual": "930.3260"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'D_Joint')_dual_lb",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "930.3260",
+      "actual": "930.3260 (1.02 \\times 10^{-11})"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'D_Joint')_daily_d",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
+      "expected": "3.1515",
+      "actual": "3.1515"
+    },
+    {
+      "check": "tab3_('DistHeavy', 'Original', 'D_Joint')_sigma_add",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\solver_runtime_and_dual_bounds.csv",
       "expected": "2031.0",
-      "detail": ""
+      "actual": "2031.0"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_requests_1d_total_rmse_base",
+      "check": "tab4_row_count",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "22",
+      "actual": "22"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "2577.91",
-      "detail": ""
+      "actual": "2577.91"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_requests_1d_total_rmse_trt",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "2587.75",
-      "detail": ""
+      "actual": "2587.75"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_requests_1d_total_rmse_ci95",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.80",
-      "detail": ""
+      "expected": "+9.85",
+      "actual": "+9.85 (\u00b1 0.80)"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_failures_1d_total_rmse_base",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_ci95",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "1389.53",
-      "detail": ""
+      "expected": "\u00b1 0.80",
+      "actual": "+9.85 (\u00b1 0.80)"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_failures_1d_total_rmse_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "1397.76",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_failures_1d_total_rmse_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.25",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_7d_mape_pct_base",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.8137",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_7d_mape_pct_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.7866",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_7d_mape_pct_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0049",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_7d_served_mape_base",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.9309",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_7d_served_mape_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.9039",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_7d_served_mape_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0042",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_30d_mape_pct_base",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4907",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_30d_mape_pct_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4666",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_30d_mape_pct_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0835",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_30d_served_mape_base",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4919",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_30d_served_mape_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4748",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_30d_served_mape_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0800",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_30d_drift_rmse_base",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "6.2368",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_30d_drift_rmse_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "4.9317",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_30d_drift_rmse_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.1750",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_sunday_30d_served_mape_base",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4907",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_sunday_30d_served_mape_trt",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4902",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_sunday_30d_served_mape_ci95",
-      "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0826",
-      "detail": ""
-    },
-    {
-      "check": "table4_DistinctHeavy_Week1_v2_common_sunday_30d_drift_rmse_base",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_raw_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "0.0000",
-      "detail": ""
+      "actual": "0.0000"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_common_sunday_30d_drift_rmse_trt",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'requests_1d_total_rmse')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0/8",
+      "actual": "0/8 (Trade-off)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1389.53",
+      "actual": "1389.53"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1397.76",
+      "actual": "1397.76"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "+8.24",
+      "actual": "+8.24 (\u00b1 0.25)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.25",
+      "actual": "+8.24 (\u00b1 0.25)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'failures_1d_total_rmse')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0/8",
+      "actual": "0/8 (Trade-off)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.8137%",
+      "actual": "2.8137%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.7866%",
+      "actual": "2.7866%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0271%",
+      "actual": "-0.0271% (\u00b1 0.0049%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0049%",
+      "actual": "-0.0271% (\u00b1 0.0049%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_7d_mape_pct')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.9309%",
+      "actual": "2.9309%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.9039%",
+      "actual": "2.9039%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0270%",
+      "actual": "-0.0270% (\u00b1 0.0042%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0042%",
+      "actual": "-0.0270% (\u00b1 0.0042%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_7d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4907%",
+      "actual": "2.4907%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4666%",
+      "actual": "2.4666%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0241%",
+      "actual": "-0.0241% (\u00b1 0.0835%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0835%",
+      "actual": "-0.0241% (\u00b1 0.0835%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.5166",
+      "actual": "0.5166"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1.0000",
+      "actual": "1.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.6406",
+      "actual": "0.6406"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_30d_mape_pct')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "5/8",
+      "actual": "5/8 (Non-sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4919%",
+      "actual": "2.4919%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4748%",
+      "actual": "2.4748%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0171%",
+      "actual": "-0.0171% (\u00b1 0.0800%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0800%",
+      "actual": "-0.0171% (\u00b1 0.0800%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.6293",
+      "actual": "0.6293"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1.0000",
+      "actual": "1.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.7422",
+      "actual": "0.7422"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "5/8",
+      "actual": "5/8 (Non-sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "6.2368",
+      "actual": "6.2368"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "4.9317",
+      "actual": "4.9317"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-1.3051",
+      "actual": "-1.3051 (\u00b1 0.1750)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.1750",
+      "actual": "-1.3051 (\u00b1 0.1750)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "diag",
+      "actual": "diag"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_30d_drift_rmse')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Lower drift)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4907%",
+      "actual": "2.4907%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4902%",
+      "actual": "2.4902%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0005%",
+      "actual": "-0.0005% (\u00b1 0.0826%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0826%",
+      "actual": "-0.0005% (\u00b1 0.0826%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.9886",
+      "actual": "0.9886"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1.0000",
+      "actual": "1.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.8438",
+      "actual": "0.8438"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "3/8",
+      "actual": "3/8 (+3d lag)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "7.5459",
-      "detail": ""
+      "actual": "7.5459"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_common_sunday_30d_drift_rmse_ci95",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.3936",
-      "detail": ""
+      "expected": "+7.5459",
+      "actual": "+7.5459 (\u00b1 0.3936)"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_90d_mape_pct_base",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_ci95",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.6957",
-      "detail": ""
+      "expected": "\u00b1 0.3936",
+      "actual": "+7.5459 (\u00b1 0.3936)"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_90d_mape_pct_trt",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_raw_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.6096",
-      "detail": ""
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_rel_90d_mape_pct_ci95",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_holm_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0119",
-      "detail": ""
+      "expected": "diag",
+      "actual": "diag"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_90d_served_mape_base",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_wilcoxon_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.6961",
-      "detail": ""
+      "expected": "0.0078",
+      "actual": "0.0078"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_90d_served_mape_trt",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_sunday_30d_drift_rmse')_seeds",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.6070",
-      "detail": ""
+      "expected": "0/8",
+      "actual": "0/8 (+3d lag)"
     },
     {
-      "check": "table4_DistinctHeavy_Week1_v2_common_daily_90d_served_mape_ci95",
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0092",
-      "detail": ""
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')",
+      "actual": "found"
     },
     {
-      "check": "table4_DistinctHeavy_Original_requests_1d_total_rmse_base",
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.6957%",
+      "actual": "2.6957%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.6096%",
+      "actual": "2.6096%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0861%",
+      "actual": "-0.0861% (\u00b1 0.0119%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0119%",
+      "actual": "-0.0861% (\u00b1 0.0119%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'rel_90d_mape_pct')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.6961%",
+      "actual": "2.6961%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.6070%",
+      "actual": "2.6070%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0891%",
+      "actual": "-0.0891% (\u00b1 0.0092%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0092%",
+      "actual": "-0.0891% (\u00b1 0.0092%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Week1_v2', 'D - B', 'common_daily_90d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "2569.64",
-      "detail": ""
+      "actual": "2569.64"
     },
     {
-      "check": "table4_DistinctHeavy_Original_requests_1d_total_rmse_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "2582.88",
-      "detail": ""
+      "actual": "2582.88"
     },
     {
-      "check": "table4_DistinctHeavy_Original_requests_1d_total_rmse_ci95",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.90",
-      "detail": ""
+      "expected": "+13.23",
+      "actual": "+13.23 (\u00b1 0.90)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_failures_1d_total_rmse_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.90",
+      "actual": "+13.23 (\u00b1 0.90)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'requests_1d_total_rmse')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0/8",
+      "actual": "0/8 (Trade-off)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "1382.56",
-      "detail": ""
+      "actual": "1382.56"
     },
     {
-      "check": "table4_DistinctHeavy_Original_failures_1d_total_rmse_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "1393.84",
-      "detail": ""
+      "actual": "1393.84"
     },
     {
-      "check": "table4_DistinctHeavy_Original_failures_1d_total_rmse_ci95",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.37",
-      "detail": ""
+      "expected": "+11.28",
+      "actual": "+11.28 (\u00b1 0.37)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_rel_7d_mape_pct_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_ci95",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.8185",
-      "detail": ""
+      "expected": "\u00b1 0.37",
+      "actual": "+11.28 (\u00b1 0.37)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_rel_7d_mape_pct_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_raw_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.7936",
-      "detail": ""
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table4_DistinctHeavy_Original_rel_7d_mape_pct_ci95",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_holm_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0050",
-      "detail": ""
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_7d_served_mape_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_wilcoxon_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.9354",
-      "detail": ""
+      "expected": "0.0078",
+      "actual": "0.0078"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_7d_served_mape_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'failures_1d_total_rmse')_seeds",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.9090",
-      "detail": ""
+      "expected": "0/8",
+      "actual": "0/8 (Trade-off)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_7d_served_mape_ci95",
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0045",
-      "detail": ""
+      "expected": "('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')",
+      "actual": "found"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_30d_served_mape_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.5202",
-      "detail": ""
+      "expected": "2.8185%",
+      "actual": "2.8185%"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_30d_served_mape_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.4971",
-      "detail": ""
+      "expected": "2.7936%",
+      "actual": "2.7936%"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_30d_served_mape_ci95",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0710",
-      "detail": ""
+      "expected": "-0.0248%",
+      "actual": "-0.0248% (\u00b1 0.0050%)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_sunday_30d_served_mape_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_ci95",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.5194",
-      "detail": ""
+      "expected": "\u00b1 0.0050%",
+      "actual": "-0.0248% (\u00b1 0.0050%)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_sunday_30d_served_mape_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_raw_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.5121",
-      "detail": ""
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_sunday_30d_served_mape_ci95",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_holm_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0739",
-      "detail": ""
+      "expected": "0.0001",
+      "actual": "0.0001"
     },
     {
-      "check": "table4_DistinctHeavy_Original_rel_90d_mape_pct_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_wilcoxon_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.7815",
-      "detail": ""
+      "expected": "0.0078",
+      "actual": "0.0078"
     },
     {
-      "check": "table4_DistinctHeavy_Original_rel_90d_mape_pct_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_7d_mape_pct')_seeds",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.6771",
-      "detail": ""
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
     },
     {
-      "check": "table4_DistinctHeavy_Original_rel_90d_mape_pct_ci95",
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0187",
-      "detail": ""
+      "expected": "('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')",
+      "actual": "found"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_90d_served_mape_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.7796",
-      "detail": ""
+      "expected": "2.9354%",
+      "actual": "2.9354%"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_90d_served_mape_trt",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.6759",
-      "detail": ""
+      "expected": "2.9090%",
+      "actual": "2.9090%"
     },
     {
-      "check": "table4_DistinctHeavy_Original_common_daily_90d_served_mape_ci95",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0179",
-      "detail": ""
+      "expected": "-0.0265%",
+      "actual": "-0.0265% (\u00b1 0.0045%)"
     },
     {
-      "check": "table4_Default_Week1_v2_requests_1d_total_rmse_base",
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0045%",
+      "actual": "-0.0265% (\u00b1 0.0045%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_7d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.5202%",
+      "actual": "2.5202%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.4971%",
+      "actual": "2.4971%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0231%",
+      "actual": "-0.0231% (\u00b1 0.0710%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0710%",
+      "actual": "-0.0231% (\u00b1 0.0710%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.4671",
+      "actual": "0.4671"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1.0000",
+      "actual": "1.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.5469",
+      "actual": "0.5469"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_30d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "5/8",
+      "actual": "5/8 (Non-sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.5194%",
+      "actual": "2.5194%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.5121%",
+      "actual": "2.5121%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.0073%",
+      "actual": "-0.0073% (\u00b1 0.0739%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0739%",
+      "actual": "-0.0073% (\u00b1 0.0739%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.8223",
+      "actual": "0.8223"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "1.0000",
+      "actual": "1.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.8438",
+      "actual": "0.8438"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_sunday_30d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "4/8",
+      "actual": "4/8 (+3d lag)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.7815%",
+      "actual": "2.7815%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.6771%",
+      "actual": "2.6771%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.1044%",
+      "actual": "-0.1044% (\u00b1 0.0187%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0187%",
+      "actual": "-0.1044% (\u00b1 0.0187%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'rel_90d_mape_pct')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.7796%",
+      "actual": "2.7796%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.6759%",
+      "actual": "2.6759%"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "-0.1037%",
+      "actual": "-0.1037% (\u00b1 0.0179%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0179%",
+      "actual": "-0.1037% (\u00b1 0.0179%)"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('DistHeavy / Original', 'D - B', 'common_daily_90d_served_mape')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.)"
+    },
+    {
+      "check": "tab4_key_in_csv_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "2802.06",
-      "detail": ""
+      "actual": "2802.06"
     },
     {
-      "check": "table4_Default_Week1_v2_requests_1d_total_rmse_trt",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "2314.55",
-      "detail": ""
+      "actual": "2314.55"
     },
     {
-      "check": "table4_Default_Week1_v2_requests_1d_total_rmse_ci95",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "12.76",
-      "detail": ""
+      "expected": "-487.51",
+      "actual": "-487.51 (\u00b1 12.76)"
     },
     {
-      "check": "table4_Default_Week1_v2_failures_1d_total_rmse_base",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 12.76",
+      "actual": "-487.51 (\u00b1 12.76)"
+    },
+    {
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_raw_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_holm_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
+    },
+    {
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_wilcoxon_p",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'requests_1d_total_rmse')_seeds",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (-17.40%)"
+    },
+    {
+      "check": "tab4_key_in_csv_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_base",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "1572.99",
-      "detail": ""
+      "actual": "1572.99"
     },
     {
-      "check": "table4_Default_Week1_v2_failures_1d_total_rmse_trt",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_trt",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
       "expected": "1159.37",
-      "detail": ""
+      "actual": "1159.37"
     },
     {
-      "check": "table4_Default_Week1_v2_failures_1d_total_rmse_ci95",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_diff",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "12.81",
-      "detail": ""
+      "expected": "-413.62",
+      "actual": "-413.62 (\u00b1 12.81)"
     },
     {
-      "check": "table4_Default_Week1_v2_common_daily_7d_served_mape_base",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_ci95",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "2.9726",
-      "detail": ""
+      "expected": "\u00b1 12.81",
+      "actual": "-413.62 (\u00b1 12.81)"
     },
     {
-      "check": "table4_Default_Week1_v2_common_daily_7d_served_mape_trt",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_raw_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "3.6571",
-      "detail": ""
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table4_Default_Week1_v2_common_daily_7d_served_mape_ci95",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_holm_p",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
-      "expected": "0.0196",
-      "detail": ""
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_requests_1d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_wilcoxon_p",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "2314.5\\pm 32.2",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_requests_7d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'failures_1d_total_rmse')_seeds",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "11034.3\\pm 261.3",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "8/8",
+      "actual": "8/8 (-26.29%)"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_requests_30d_rmse",
+      "check": "tab4_key_in_csv_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "43866.8\\pm 1247.3",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')",
+      "actual": "found"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_requests_90d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "126664.8\\pm 4104.2",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "2.9726%",
+      "actual": "2.9726%"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_failures_1d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "1159.4\\pm 28.9",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "3.6571%",
+      "actual": "3.6571%"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_failures_30d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "7468.4\\pm 583.1",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "+0.6845%",
+      "actual": "+0.6845% (\u00b1 0.0196%)"
     },
     {
-      "check": "table5_SDG-MH (D_JointPlanning)_failures_90d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "14003.3\\pm 991.9",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "\u00b1 0.0196%",
+      "actual": "+0.6845% (\u00b1 0.0196%)"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_requests_1d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_raw_p",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "4378.6\\pm 64.2",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_requests_7d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_holm_p",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "12716.7\\pm 176.4",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0000",
+      "actual": "0.0000"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_requests_30d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_wilcoxon_p",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "44587.3\\pm 924.4",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_requests_90d_rmse",
+      "check": "tab4_('Default / Week1_v2', 'D - A', 'common_daily_7d_served_mape')_seeds",
       "passed": true,
-      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "126186.5\\pm 3209.9",
-      "detail": ""
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_paired_with_holm_wilcoxon.csv",
+      "expected": "0/8",
+      "actual": "0/8 (Weight shift)"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_failures_1d_rmse",
+      "check": "tab5_method_present_SDG-MH (D_Joint)",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "2724.1\\pm 51.1",
-      "detail": ""
+      "expected": "SDG-MH (D_Joint)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_failures_30d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_scope",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "9467.8\\pm 498.9",
-      "detail": ""
+      "expected": "Infinite",
+      "actual": "Infinite h \\ge 1 (eval [1,420])"
     },
     {
-      "check": "table5_Tree-2l (MH-RemEnv)_failures_90d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_distinct_col",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "16154.0\\pm 1224.1",
-      "detail": ""
+      "expected": "Supported",
+      "actual": "Supported (Native)"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_requests_1d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_requests_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "4407.0\\pm 64.8",
-      "detail": ""
+      "expected": "2314.5\u00b1 32.2",
+      "actual": "2314.5\u00b1 32.2"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_requests_7d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_requests_7d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "12753.4\\pm 176.6",
-      "detail": ""
+      "expected": "11034.3\u00b1 261.3",
+      "actual": "11034.3\u00b1 261.3"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_requests_30d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_requests_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "44612.6\\pm 927.6",
-      "detail": ""
+      "expected": "43866.8\u00b1 1247.3",
+      "actual": "43866.8\u00b1 1247.3"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_requests_90d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_requests_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "126197.5\\pm 3223.4",
-      "detail": ""
+      "expected": "126664.8\u00b1 4104.2",
+      "actual": "126664.8\u00b1 4104.2"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_failures_1d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_failures_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "2743.0\\pm 51.2",
-      "detail": ""
+      "expected": "1159.4\u00b1 28.9",
+      "actual": "1159.4\u00b1 28.9"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_failures_30d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_failures_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "9530.3\\pm 504.1",
-      "detail": ""
+      "expected": "7468.4\u00b1 583.1",
+      "actual": "7468.4\u00b1 583.1"
     },
     {
-      "check": "table5_Tree-2l (Daily-d Parity)_failures_90d_rmse",
+      "check": "tab5_SDG-MH (D_Joint)_failures_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "16253.4\\pm 1233.7",
-      "detail": ""
+      "expected": "14003.3\u00b1 991.9",
+      "actual": "14003.3\u00b1 991.9"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_requests_1d_rmse",
+      "check": "tab5_method_present_Banded-MF (b=8, MH-RemEnv)",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "27907.0\\pm 528.7",
-      "detail": ""
+      "expected": "Banded-MF (b=8, MH-RemEnv)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_requests_7d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_scope",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "49855.3\\pm 601.3",
-      "detail": ""
+      "expected": "Finite Toeplitz",
+      "actual": "Finite Toeplitz T=420 (\\alpha=0.25)"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_requests_30d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_distinct_col",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "72369.7\\pm 1298.6",
-      "detail": ""
+      "expected": "N/A",
+      "actual": "N/A (Non-Additive)"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_requests_90d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "138543.3\\pm 3926.2",
-      "detail": ""
+      "expected": "3446.9\u00b1 18.5",
+      "actual": "3446.9\u00b1 18.5"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_failures_1d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_7d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "14142.6\\pm 284.3",
-      "detail": ""
+      "expected": "11589.1\u00b1 281.3",
+      "actual": "11589.1\u00b1 281.3"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_failures_30d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "40923.8\\pm 1438.6",
-      "detail": ""
+      "expected": "43975.5\u00b1 1337.5",
+      "actual": "43975.5\u00b1 1337.5"
     },
     {
-      "check": "table5_Tree-U (MH-RemEnv)_failures_90d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "45397.7\\pm 2852.4",
-      "detail": ""
+      "expected": "126617.7\u00b1 4385.9",
+      "actual": "126617.7\u00b1 4385.9"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_requests_1d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_failures_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "3649.9\\pm 198.6",
-      "detail": ""
+      "expected": "2069.1\u00b1 23.0",
+      "actual": "2069.1\u00b1 23.0"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_requests_7d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_failures_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "15780.3\\pm 1294.4",
-      "detail": ""
+      "expected": "7829.9\u00b1 330.2",
+      "actual": "7829.9\u00b1 330.2"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_requests_30d_rmse",
+      "check": "tab5_Banded-MF (b=8, MH-RemEnv)_failures_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "51601.9\\pm 4170.4",
-      "detail": ""
+      "expected": "13880.6\u00b1 1261.6",
+      "actual": "13880.6\u00b1 1261.6"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_requests_90d_rmse",
+      "check": "tab5_method_present_Banded-MF (b=30, MH-RemEnv)",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "133714.2\\pm 4199.2",
-      "detail": ""
+      "expected": "Banded-MF (b=30, MH-RemEnv)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_failures_1d_rmse",
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_scope",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "1278.4\\pm 86.4",
-      "detail": ""
+      "expected": "Finite Toeplitz",
+      "actual": "Finite Toeplitz T=420 (\\alpha=0.50)"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_failures_30d_rmse",
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_distinct_col",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "14172.9\\pm 2672.6",
-      "detail": ""
+      "expected": "N/A",
+      "actual": "N/A (Non-Additive)"
     },
     {
-      "check": "table5_W-BD-30 (MH-Calibrated)_failures_90d_rmse",
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "24464.7\\pm 3159.7",
-      "detail": ""
+      "expected": "9919.5\u00b1 125.5",
+      "actual": "9919.5\u00b1 125.5"
+    },
+    {
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_7d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "18846.8\u00b1 358.6",
+      "actual": "18846.8\u00b1 358.6"
+    },
+    {
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "46369.0\u00b1 1260.5",
+      "actual": "46369.0\u00b1 1260.5"
+    },
+    {
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "127926.1\u00b1 4450.8",
+      "actual": "127926.1\u00b1 4450.8"
+    },
+    {
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_failures_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "5733.8\u00b1 90.4",
+      "actual": "5733.8\u00b1 90.4"
+    },
+    {
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_failures_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "13248.0\u00b1 583.0",
+      "actual": "13248.0\u00b1 583.0"
+    },
+    {
+      "check": "tab5_Banded-MF (b=30, MH-RemEnv)_failures_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "19658.6\u00b1 1043.5",
+      "actual": "19658.6\u00b1 1043.5"
+    },
+    {
+      "check": "tab5_method_present_Tree-2l (MH-RemEnv)",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Tree-2l (MH-RemEnv)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_scope",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Finite Dyadic",
+      "actual": "Finite Dyadic T \\le 512"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_distinct_col",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "N/A",
+      "actual": "N/A (Non-Additive)"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_requests_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "4378.6\u00b1 64.2",
+      "actual": "4378.6\u00b1 64.2"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_requests_7d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "12716.7\u00b1 176.4",
+      "actual": "12716.7\u00b1 176.4"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_requests_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "44587.3\u00b1 924.4",
+      "actual": "44587.3\u00b1 924.4"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_requests_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "126186.5\u00b1 3209.9",
+      "actual": "126186.5\u00b1 3209.9"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_failures_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "2724.1\u00b1 51.1",
+      "actual": "2724.1\u00b1 51.1"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_failures_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "9467.8\u00b1 498.9",
+      "actual": "9467.8\u00b1 498.9"
+    },
+    {
+      "check": "tab5_Tree-2l (MH-RemEnv)_failures_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "16154.0\u00b1 1224.1",
+      "actual": "16154.0\u00b1 1224.1"
+    },
+    {
+      "check": "tab5_method_present_Tree-2l (Daily-d)",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Tree-2l (Daily-d)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_scope",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Finite Dyadic",
+      "actual": "Finite Dyadic T \\le 512"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_distinct_col",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "N/A",
+      "actual": "N/A (Non-Additive)"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_requests_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "4407.0\u00b1 64.8",
+      "actual": "4407.0\u00b1 64.8"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_requests_7d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "12753.4\u00b1 176.6",
+      "actual": "12753.4\u00b1 176.6"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_requests_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "44612.6\u00b1 927.6",
+      "actual": "44612.6\u00b1 927.6"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_requests_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "126197.5\u00b1 3223.4",
+      "actual": "126197.5\u00b1 3223.4"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_failures_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "2743.0\u00b1 51.2",
+      "actual": "2743.0\u00b1 51.2"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_failures_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "9530.3\u00b1 504.1",
+      "actual": "9530.3\u00b1 504.1"
+    },
+    {
+      "check": "tab5_Tree-2l (Daily-d)_failures_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "16253.4\u00b1 1233.7",
+      "actual": "16253.4\u00b1 1233.7"
+    },
+    {
+      "check": "tab5_method_present_Tree-U (MH-RemEnv)",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Tree-U (MH-RemEnv)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_scope",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Finite Dyadic",
+      "actual": "Finite Dyadic T \\le 512"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_distinct_col",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "N/A",
+      "actual": "N/A (Non-Additive)"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_requests_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "27907.0\u00b1 528.7",
+      "actual": "27907.0\u00b1 528.7"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_requests_7d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "49855.3\u00b1 601.3",
+      "actual": "49855.3\u00b1 601.3"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_requests_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "72369.7\u00b1 1298.6",
+      "actual": "72369.7\u00b1 1298.6"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_requests_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "138543.3\u00b1 3926.2",
+      "actual": "138543.3\u00b1 3926.2"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_failures_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "14142.6\u00b1 284.3",
+      "actual": "14142.6\u00b1 284.3"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_failures_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "40923.8\u00b1 1438.6",
+      "actual": "40923.8\u00b1 1438.6"
+    },
+    {
+      "check": "tab5_Tree-U (MH-RemEnv)_failures_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "45397.7\u00b1 2852.4",
+      "actual": "45397.7\u00b1 2852.4"
+    },
+    {
+      "check": "tab5_method_present_W-BD-30 (MH-Calib)",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "W-BD-30 (MH-Calib)",
+      "actual": "['SDG-MH (D_Joint)', 'Banded-MF (b=8, MH-RemEnv)', 'Banded-MF (b=30, MH-RemEnv)', 'Tree-2l (MH-RemEnv)', 'Tree-2l (Daily-d)', 'Tree-U (MH-RemEnv)', 'W-BD-30 (MH-Calib)']"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_scope",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "Rolling Finite",
+      "actual": "Rolling Finite [1,420]"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_distinct_col",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "N/A",
+      "actual": "N/A (Non-Additive)"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_requests_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "3649.9\u00b1 198.6",
+      "actual": "3649.9\u00b1 198.6"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_requests_7d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "15780.3\u00b1 1294.4",
+      "actual": "15780.3\u00b1 1294.4"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_requests_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "51601.9\u00b1 4170.4",
+      "actual": "51601.9\u00b1 4170.4"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_requests_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "133714.2\u00b1 4199.2",
+      "actual": "133714.2\u00b1 4199.2"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_failures_1d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "1278.4\u00b1 86.4",
+      "actual": "1278.4\u00b1 86.4"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_failures_30d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "14172.9\u00b1 2672.6",
+      "actual": "14172.9\u00b1 2672.6"
+    },
+    {
+      "check": "tab5_W-BD-30 (MH-Calib)_failures_90d_rmse",
+      "passed": true,
+      "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
+      "expected": "24464.7\u00b1 3159.7",
+      "actual": "24464.7\u00b1 3159.7"
+    },
+    {
+      "check": "tab5_authorized_method_SDG-MH (D_Joint)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "SDG-MH (D_Joint)",
+      "actual": "SDG-MH (D_Joint)"
+    },
+    {
+      "check": "tab5_authorized_method_Banded-MF (b=8, MH-RemEnv)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "Banded-MF (b=8, MH-RemEnv)",
+      "actual": "Banded-MF (b=8, MH-RemEnv)"
+    },
+    {
+      "check": "tab5_authorized_method_Banded-MF (b=30, MH-RemEnv)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "Banded-MF (b=30, MH-RemEnv)",
+      "actual": "Banded-MF (b=30, MH-RemEnv)"
+    },
+    {
+      "check": "tab5_authorized_method_Tree-2l (MH-RemEnv)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "Tree-2l (MH-RemEnv)",
+      "actual": "Tree-2l (MH-RemEnv)"
+    },
+    {
+      "check": "tab5_authorized_method_Tree-2l (Daily-d)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "Tree-2l (Daily-d)",
+      "actual": "Tree-2l (Daily-d)"
+    },
+    {
+      "check": "tab5_authorized_method_Tree-U (MH-RemEnv)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "Tree-U (MH-RemEnv)",
+      "actual": "Tree-U (MH-RemEnv)"
+    },
+    {
+      "check": "tab5_authorized_method_W-BD-30 (MH-Calib)",
+      "passed": true,
+      "source": "Table 5 method whitelist",
+      "expected": "W-BD-30 (MH-Calib)",
+      "actual": "W-BD-30 (MH-Calib)"
     },
     {
       "check": "ablation_Cr_30_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "3337.54",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_30_bias",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "-2866.45",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_50_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "2346.22",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_50_bias",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "-1439.56",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_100_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "3175.34",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_100_bias",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "-417.07",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_200_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "6195.86",
-      "detail": ""
+      "actual": ""
     },
     {
       "check": "ablation_Cr_200_bias",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d\\cr_clipping_ablation_420d.csv",
       "expected": "-81.99",
-      "detail": ""
+      "actual": ""
+    },
+    {
+      "check": "tab6_row_count",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "13",
+      "actual": "13"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "65.25%",
+      "actual": "65.25%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "64.72%",
+      "actual": "64.72%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-0.52%",
+      "actual": "-0.52% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.02%",
+      "actual": "-0.52% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (359d gap-free: 63.96%)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "26.79%",
+      "actual": "26.79%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "27.50%",
+      "actual": "27.50%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "+0.71%",
+      "actual": "+0.71% (\u00b1 0.54%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.54%",
+      "actual": "+0.71% (\u00b1 0.54%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0/8",
+      "actual": "0/8 (Phase-shift rollout drift)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "15.85%",
+      "actual": "15.85%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "15.46%",
+      "actual": "15.46%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-0.39%",
+      "actual": "-0.39% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.02%",
+      "actual": "-0.39% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Sig.\\ improvement)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "47.49",
+      "actual": "47.49"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "47.05",
+      "actual": "47.05"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-0.44",
+      "actual": "-0.44 (\u00b1 0.01)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.01",
+      "actual": "-0.44 (\u00b1 0.01)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Denominator-free)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "53.52",
+      "actual": "53.52"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "53.00",
+      "actual": "53.00"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-0.52",
+      "actual": "-0.52 (\u00b1 0.78)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.78",
+      "actual": "-0.52 (\u00b1 0.78)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.2500",
+      "actual": "0.2500"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "5/8",
+      "actual": "5/8 (Lower \\ell_2 user error)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "66.80",
+      "actual": "66.80"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "65.13",
+      "actual": "65.13"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-1.67",
+      "actual": "-1.67 (\u00b1 0.02)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.02",
+      "actual": "-1.67 (\u00b1 0.02)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Denominator-free)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "1493.98",
+      "actual": "1493.98"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "1502.74",
+      "actual": "1502.74"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "+8.76",
+      "actual": "+8.76 (\u00b1 0.21)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.21",
+      "actual": "+8.76 (\u00b1 0.21)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0/8",
+      "actual": "0/8 (Additive trade-off)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "9611.68",
+      "actual": "9611.68"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "9658.61",
+      "actual": "9658.61"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "+46.93",
+      "actual": "+46.93 (\u00b1 4.94)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 4.94",
+      "actual": "+46.93 (\u00b1 4.94)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0/8",
+      "actual": "0/8 (BMF8: 10614.1)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "65.33%",
+      "actual": "65.33%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "64.82%",
+      "actual": "64.82%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-0.51%",
+      "actual": "-0.51% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.02%",
+      "actual": "-0.51% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (RMSE: 47.56 \\to 47.13)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "27.03%",
+      "actual": "27.03%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "27.70%",
+      "actual": "27.70%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "+0.66%",
+      "actual": "+0.66% (\u00b1 0.54%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.54%",
+      "actual": "+0.66% (\u00b1 0.54%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0/8",
+      "actual": "0/8 (RMSE: 54.06 \\to 53.42)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "16.20%",
+      "actual": "16.20%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "15.75%",
+      "actual": "15.75%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-0.45%",
+      "actual": "-0.45% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 0.02%",
+      "actual": "-0.45% (\u00b1 0.02%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (RMSE: 68.31 \\to 66.37)"
+    },
+    {
+      "check": "tab6_key_in_csv_('Default / Week1_v2', 'D - A', 'req_1d_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('Default / Week1_v2', 'D - A', 'req_1d_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "1694.25",
+      "actual": "1694.25"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "1249.75",
+      "actual": "1249.75"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-444.50",
+      "actual": "-444.50 (\u00b1 10.79)"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 10.79",
+      "actual": "-444.50 (\u00b1 10.79)"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (-26.24% reduction)"
+    },
+    {
+      "check": "tab6_key_in_csv_('Default / Week1_v2', 'D - A', 'req_30d_rmse')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "('Default / Week1_v2', 'D - A', 'req_30d_rmse')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "10689.93",
+      "actual": "10689.93"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8304.90",
+      "actual": "8304.90"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "-2385.03",
+      "actual": "-2385.03 (\u00b1 255.71)"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "\u00b1 255.71",
+      "actual": "-2385.03 (\u00b1 255.71)"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "expected": "8/8",
+      "actual": "8/8 (BMF8: 9100.5)"
+    },
+    {
+      "check": "wildchat_audit_mean_dedup_reduction_7d_pct",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "expected": "7.56\\%",
+      "actual": ""
+    },
+    {
+      "check": "wildchat_audit_mean_dedup_reduction_30d_pct",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "expected": "10.76\\%",
+      "actual": ""
+    },
+    {
+      "check": "wildchat_audit_mean_dedup_reduction_90d_pct",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "expected": "13.06\\%",
+      "actual": ""
+    },
+    {
+      "check": "wildchat_audit_mean_daily_req_clip_bias_pct",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "expected": "11.24\\%",
+      "actual": ""
+    },
+    {
+      "check": "wildchat_audit_mean_cat30d_k3_clip_bias_pct",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "expected": "1.06\\%",
+      "actual": ""
     }
   ]
 }

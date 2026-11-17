@@ -1,0 +1,4 @@
+method,horizon_scope,supports_distinct,offline_preproc_ms,online_exec_420d_ms,streaming_state_bytes,matrix_memory_kb,naive_h1_violation_at_365
+SDG-MH (D_Joint),Infinite h >= 1,Yes (7d/30d/90d),66.2,0.42,16,0.0,1.0
+"Banded-MF (b=30, MH-RemEnv)","Finite Toeplitz T=420 (b=30, alpha=0.50)",No (Additive only),173.01,0.182,480,1378.1,275.86
+"Banded-MF (b=8, MH-RemEnv)","Finite Toeplitz T=420 (b=8, alpha=0.25)",No (Additive only),214.42,0.152,128,1378.1,47.74
