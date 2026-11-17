@@ -194,6 +194,13 @@ def main() -> None:
         f"logical_sha256_match={manifest['logical_sha256_matches_expected']} | "
         f"file_sha256={file_sha256[:12]}..."
     )
+    if not manifest["row_count_matches_expected"] or not manifest["logical_sha256_matches_expected"]:
+        print(
+            f"[Manifest-v6] FAIL-CLOSED: expected rows={EXPECTED_ROWS}, got {manifest['row_count']}; "
+            f"expected logical_sha256={EXPECTED_LOGICAL_RECORDS_SHA256}, got {logical_sha256}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 
@@ -118,3 +119,33 @@ def test_v5_topk_multiuser_multiwindow_ties_differential_against_rolling_state()
                 prod_svc, prod_cat = rs.compute_window_histogram(d - w + 1, d, services, tasks, k_tasks_per_user=3)
                 np.testing.assert_array_equal(suff["distinct_windows"][w]["true_svc"][d], prod_svc)
                 np.testing.assert_array_equal(suff["distinct_windows"][w]["clipped_cat"][d], prod_cat)
+
+
+def test_public_manifest_gate_fails_closed_on_hash_or_row_mismatch():
+    """prepare_wildchat_public_manifest.py must exit non-zero when row count or logical hash mismatches."""
+    with tempfile.TemporaryDirectory() as tmp:
+        bad_parquet = Path(tmp) / "bad_wildchat.parquet"
+        out_dir = Path(tmp) / "out"
+        df_bad = pd.DataFrame({
+            "hashed_ip": ["u1", "u2"],
+            "timestamp": pd.to_datetime(["2024-01-01T00:00:00Z", "2024-01-02T00:00:00Z"]),
+            "model": ["gpt-4o", "gpt-4o-mini"],
+            "country": ["US", None],
+        })
+        df_bad.to_parquet(bad_parquet, index=False)
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                str(ROOT / "scripts" / "prepare_wildchat_public_manifest.py"),
+                "--no-git-fallback",
+                "--cache-path",
+                str(bad_parquet),
+                "--output-dir",
+                str(out_dir),
+            ],
+            capture_output=True,
+            text=True,
+        )
+        assert proc.returncode != 0, "Public manifest gate must fail closed (non-zero exit) on mismatch!"
+        assert "FAIL-CLOSED" in proc.stderr

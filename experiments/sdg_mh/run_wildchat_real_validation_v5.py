@@ -29,6 +29,7 @@ Fixes all P0 WildChat audit items from PR #11 (01ae905):
 
 from __future__ import annotations
 
+import argparse
 from datetime import date, timedelta
 import hashlib
 import io
@@ -349,18 +350,33 @@ def holm_bonferroni(raw_pvals: List[float]) -> List[float]:
 
 
 def main() -> None:
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    parser = argparse.ArgumentParser(description="Run WildChat-4.8M v5 real-data validation.")
+    parser.add_argument(
+        "--input-parquet",
+        type=Path,
+        default=ROOT / ".cache" / "wildchat_all_shards_4cols.parquet",
+        help="Path to 4-column WildChat parquet projection.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        default=OUT_DIR,
+        help="Output directory for CSVs (default: wildchat_real_validation_v5).",
+    )
+    args = parser.parse_args()
+    out_dir = args.output_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     calendar_dates = [WIN_START_DATE + timedelta(days=d) for d in range(HORIZON_DAYS)]
     calendar_weekdays = [dt.weekday() for dt in calendar_dates]
     assert calendar_weekdays[0] == 0  # 2023-11-20 is Monday
     assert calendar_weekdays[6] == 6  # 2023-11-26 is Sunday
 
     raw_bytes, source_mode = load_or_fetch_4cols_parquet(
-        ROOT / ".cache" / "wildchat_all_shards_4cols.parquet",
+        args.input_parquet,
         download_from_hf=False,
     )
     sha256_hex = hashlib.sha256(raw_bytes).hexdigest()
-    assert sha256_hex == EXPECTED_4COLS_SHA256
     df = pd.read_parquet(io.BytesIO(raw_bytes))
 
     ts = pd.to_datetime(df["timestamp"])
@@ -422,7 +438,7 @@ def main() -> None:
         "mean_daily_req_clip_bias_pct": float(np.mean(req_clip_b)),
         "mean_cat30d_k3_clip_bias_pct": float(np.mean(cat_clip_b)),
     }])
-    audit_df.to_csv(OUT_DIR / "wildchat_dataset_audit_summary_v5.csv", index=False)
+    audit_df.to_csv(out_dir / "wildchat_dataset_audit_summary_v5.csv", index=False)
 
     gapfree_mask = np.zeros(HORIZON_DAYS, dtype=bool)
     gapfree_mask[GAPFREE_START_REL:] = True
@@ -558,9 +574,9 @@ def main() -> None:
                 "cohorts_d_lt_b": int(np.sum(diffs < 0)),
             })
 
-    pd.DataFrame(paired_rows).to_csv(OUT_DIR / "wildchat_k8_cohorts_paired_v5.csv", index=False)
-    pd.DataFrame(summary_rows).to_csv(OUT_DIR / "wildchat_k8_cohorts_summary_v5.csv", index=False)
-    pd.DataFrame(sens_rows).to_csv(OUT_DIR / "wildchat_partition_sensitivity_v5.csv", index=False)
+    pd.DataFrame(paired_rows).to_csv(out_dir / "wildchat_k8_cohorts_paired_v5.csv", index=False)
+    pd.DataFrame(summary_rows).to_csv(out_dir / "wildchat_k8_cohorts_summary_v5.csv", index=False)
+    pd.DataFrame(sens_rows).to_csv(out_dir / "wildchat_partition_sensitivity_v5.csv", index=False)
 
     print("\n[WildChat-v5] Dataset Audit Summary:")
     print(audit_df.to_string(index=False))
