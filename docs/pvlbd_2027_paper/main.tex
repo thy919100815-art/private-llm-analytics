@@ -33,9 +33,9 @@
 \email{author.placeholder@institution-placeholder.edu}
 
 \begin{abstract}
-Long-running telemetry platforms---such as enterprise Large Language Model (LLM) gateways---must continuously publish both additive volume metrics (daily and rolling requests and failures) and non-additive distinct-user histograms (7-, 30-, and 90-day active services and top-$k$ interaction categories) over an open-ended lifetime. Existing continual differential privacy (DP) designs face structural tensions on such mixed, perpetual workloads: fixed calendar epochs suffer from budget exhaustion or boundary-reset spikes; decaying budget schedules ($1/t^2$) cause noise variance to diverge; and binary-tree or banded Toeplitz matrix factorizations support only additive streams while incurring sensitivity inflation when constrained simultaneously across short and annual time scales.
+Long-running telemetry platforms---such as enterprise Large Language Model (LLM) gateways---must continuously publish both additive volume metrics (daily and rolling requests and failures) and non-additive distinct-user histograms (7-, 30-, and 90-day active services and top-$k$ categories) over an indefinite lifetime. Existing continual differential privacy (DP) designs struggle on such mixed, open-ended workloads: fixed epochs suffer from boundary-reset spikes or early exhaustion, decaying budgets cause noise variance to diverge, and binary-tree or banded Toeplitz matrix factorizations support only additive streams while incurring sensitivity inflation when constrained simultaneously across short and annual horizons.
 
-We present \textbf{SDG-MH}, a longitudinal analytics architecture built around two core ideas. First, we formalize \emph{Multi-Horizon User-Time Differential Privacy} via a zero-Concentrated Differential Privacy (zCDP) commitment curve $\bar{\rho}(h)$ that enforces tight sub-linear caps from one day to one year ($h \in \{1, 7, 30, 90, 365\}$) and a governed affine tail $\bar{\rho}(h) = a_{\mathrm{tail}} + \beta_{\mathrm{tail}} h$ for $h \ge 365$. We clarify that ``No Epochs, No Expiry'' denotes stationary utility without hard calendar resets rather than constant lifetime privacy for daily participants, and show why daily independent Discrete Gaussian sealing outperforms binary trees, $b$-banded Toeplitz factorizations, and $w$-event baselines on short-to-medium rolling windows under affine tail constraints. Second, we develop a unified calendar accounting and joint phase--budget planner for periodic distinct-user histograms. We derive an exact data-window intersection count $n_f(s, h; \phi_f)$ over $L = W_f + h - 1$ days (preventing a $5\times$ undercounting error in release-date-only accounting), a 210-day shift identity, and a concavity-free 575-day finite-to-infinite reduction theorem. Using the Orbit--Stabilizer Theorem and Chinese Remainder Theorem (CRT), we prove that all $1{,}470$ phase tuples collapse into 7 canonical equivalence classes (accelerating joint planning from $1.54\text{--}1.66\,\text{s}$ to $0.066\text{--}0.081\,\text{s}$), paired with a 100-digit directed-rounding Lagrangian dual certificate ($\text{relative gap} \le 7.45 \times 10^{-9}$) and zero-tolerance atomic ledger admission. Across 420-day synthetic workloads and $1{,}721{,}032$ public conversations from \texttt{WildChat-4.8M}, SDG-MH maintains zero privacy violations, improves 1d/7d additive accuracy over calibrated tree and banded matrix baselines, and reveals clear workload-dependent trade-offs between phase shifting, query staleness, and non-stationary traffic.
+We present \textbf{SDG-MH}, a longitudinal analytics architecture built on two contributions. First, we formalize \emph{Multi-Horizon User-Time Differential Privacy} via a zCDP commitment curve $\bar{\rho}(h)$ that enforces tight sub-linear caps from one day to one year and a governed affine daily rate for $h \ge 365$. We clarify that ``No Epochs, No Expiry'' denotes stationary utility without calendar reset spikes rather than bounded lifetime exposure for daily participants, and show why daily independent Discrete Gaussian sealing outperforms multi-horizon calibrated trees, banded Toeplitz factorizations, and $w$-event baselines on short-to-medium additive windows. Second, we develop a unified calendar accounting and joint phase--budget planner for periodic distinct-user histograms. We derive an exact data-window intersection formula (correcting a $5\times$ undercount in release-date-only accounting), a 210-day shift identity, and a concavity-free 575-day finite-to-infinite reduction theorem. By quotienting calendar shifts via the Orbit--Stabilizer Theorem and Chinese Remainder Theorem, all $1{,}470$ phase combinations collapse into 7 canonical equivalence classes, paired with 100-digit directed-rounding dual certification and atomic two-phase ledger admission. Across 420-day synthetic workloads and $1{,}721{,}032$ public conversations from \texttt{WildChat-4.8M}, SDG-MH maintains zero privacy violations, improves short-window additive accuracy over calibrated continual baselines, and characterizes the practical trade-offs between phase shifting, weekday staleness, and non-stationary traffic.
 \end{abstract}
 
 \maketitle
@@ -64,13 +64,7 @@ Moreover, binary trees, banded Toeplitz factorizations, and $w$-event mechanisms
 In SDG-MH, ``No Epochs, No Expiry'' means the engine operates indefinitely with \emph{time-invariant noise variance} and \emph{zero calendar reset spikes}. It does \textbf{not} imply constant bounded lifetime privacy for a user active every day forever: by continual-release lower bounds~\cite{dwork2010continual,chan2011private,kellaris2014wevent}, bounded daily variance requires cumulative exposure over an $h$-day span to grow as $\Omega(h)$. Instead, SDG-MH bounds every user's zero-Concentrated Differential Privacy (zCDP) loss over \emph{every contiguous interval of length $h \ge 1$} by a deterministic multi-horizon commitment curve $\bar{\rho}(h)$ with tight sub-linear caps from 1 day to 1 year and a governed affine daily rate $\beta_{\mathrm{tail}}$ for $h \ge 365$.
 
 \paragraph{Contributions and Scope.}
-This paper integrates classical DP primitives---daily Discrete Gaussian sealing~\cite{canonne2020discrete}, Cauchy--Schwarz isotropic splitting, and $k$-capped distinct histograms~\cite{amin2019bounding}---with four original problem formulations and theoretical/optimization results:
-\begin{enumerate}[leftmargin=*, nosep, topsep=2pt]
-    \item \textbf{Multi-Horizon User-Time DP and Daily Sealing Characterization} (Sections~\ref{sec:model}--\ref{sec:sealing}): We formalize $(u, I)$-interval adjacency under multi-horizon zCDP curves $\bar{\rho}(h)$, derive a unified $(\varepsilon, \delta)$ floating-point drift bound across commitments, and show why daily independent sealing achieves lower short- and medium-window error than multi-horizon calibrated binary trees, $b$-banded Toeplitz factorizations, and $w$-event baselines.
-    \item \textbf{Exact Calendar Accounting and Non-Concave 575-Day Reduction} (Section~\ref{sec:calendar}): We derive the exact data-window intersection formula $n_f(s, h; \phi_f)$ over $L = W_f + h - 1$ days (exposing a $5\times$ undercounting flaw in release-date-only accounting) and a 210-day shift identity. Because production zCDP commitments are \emph{not} globally concave, we prove a concavity-free theorem reducing infinite-horizon verification ($\forall h \ge 1$) to a 575-day prefix check plus an asymptotic slope bound.
-    \item \textbf{CRT 7-Orbit Phase Reduction and Certified Joint Planning} (Section~\ref{sec:planner}): Using the Orbit--Stabilizer Theorem and CRT under $\mathbb{Z}_{210}$, we prove that all $1{,}470$ phase combinations collapse into 7 canonical equivalence classes (and characterize the residual symmetry subgroup under pinned weekday constraints), pairing convex optimization with a 100-digit directed-rounding Lagrangian dual certificate and atomic two-phase ledger admission.
-    \item \textbf{Controlled and Real-World Evaluation} (Section~\ref{sec:exp}): Over 420-day synthetic workloads ($K=8$ independent populations) and $1{,}721{,}032$ conversations from \texttt{WildChat-4.8M}~\cite{zhao2024wildchat}, we answer five research questions on safety, phase optimization, baseline competitiveness, clipping trade-offs, and real-trace generalization, transparently reporting non-significant and negative 30-day regimes.
-\end{enumerate}
+Building on classical DP primitives---daily Discrete Gaussian sealing~\cite{canonne2020discrete}, Cauchy--Schwarz isotropic splitting, and $k$-capped distinct histograms~\cite{amin2019bounding}---we make three cohesive contributions. First, we formalize Multi-Horizon User-Time DP under $(u, I)$-interval adjacency (Sections~\ref{sec:model}--\ref{sec:sealing}), bound floating-point ledger drift uniformly across commitments, and explain why daily sealing outperforms multi-horizon calibrated trees, banded Toeplitz factorizations, and $w$-event baselines on short-to-medium rolling windows. Second, we establish exact data-window intersection accounting and a concavity-free 575-day infinite-horizon reduction theorem (Section~\ref{sec:calendar}), alongside an Orbit--Stabilizer/CRT 7-orbit phase reduction and 100-digit dual certification framework (Section~\ref{sec:planner}). Third, we evaluate SDG-MH across 420-day synthetic workloads and $1{,}721{,}032$ conversations from \texttt{WildChat-4.8M}~\cite{zhao2024wildchat} (Section~\ref{sec:exp}), documenting both its accuracy gains and its non-significant or negative 30-day regimes.
 
 % ============================================================================
 \section{Problem Formulation and System Architecture}
@@ -133,36 +127,49 @@ Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily
 \begin{figure*}[t]
 \centering
 \begin{tikzpicture}[
-    node distance=0.45cm and 0.65cm,
-    box/.style={draw=black!75, rounded corners=2pt, fill=blue!4, minimum height=0.82cm, minimum width=2.3cm, align=center, font=\scriptsize},
-    store/.style={draw=teal!70!black, rounded corners=2pt, fill=teal!6, minimum height=0.78cm, minimum width=2.25cm, align=center, font=\scriptsize},
-    gate/.style={draw=orange!70!black, rounded corners=2pt, fill=orange!8, minimum height=0.82cm, minimum width=2.45cm, align=center, font=\scriptsize},
-    arr/.style={-{Stealth[length=4pt]}, semithick, draw=black!75}
+    node distance=0.42cm and 0.68cm,
+    box/.style={draw=black!75, rounded corners=2pt, fill=blue!4, minimum height=0.82cm, minimum width=2.35cm, align=center, font=\scriptsize},
+    off/.style={draw=purple!65!black, rounded corners=2pt, fill=purple!5, minimum height=0.72cm, minimum width=3.1cm, align=center, font=\scriptsize},
+    store/.style={draw=teal!70!black, rounded corners=2pt, fill=teal!6, minimum height=0.78cm, minimum width=2.3cm, align=center, font=\scriptsize},
+    gate/.style={draw=red!65!black, rounded corners=2pt, fill=red!6, minimum height=1.15cm, minimum width=2.45cm, align=center, font=\scriptsize},
+    noise/.style={draw=orange!75!black, rounded corners=2pt, fill=orange!7, minimum height=0.78cm, minimum width=2.3cm, align=center, font=\scriptsize},
+    arr/.style={-{Stealth[length=4.5pt]}, semithick, draw=black!75}
 ]
-\node[box, fill=gray!10, minimum width=1.65cm] (stream) {Daily Stream\\$D_t$};
-\node[box, above right=0.18cm and 0.6cm of stream] (clip) {Additive Clipper\\$(C_r=50, C_f=10)$};
-\node[box, below right=0.18cm and 0.6cm of stream] (roll) {Rolling Distinct State\\$(w_{\max}=90, k=3)$};
-\node[gate, right=0.65cm of clip] (seal) {Daily $\mathcal{N}_{\mathbb{Z}}$ Sealing\\$(\sigma_r, \sigma_f)$};
-\node[gate, right=0.65cm of roll] (cal) {Periodic $\mathcal{N}_{\mathbb{Z}}$ Release\\$t \equiv \phi_f \pmod{S_f}$};
-\node[gate, fill=red!6, draw=red!60!black, right=0.75cm of $(seal)!0.5!(cal)$, minimum width=2.55cm] (ledger) {Atomic Privacy Ledger\\Two-Phase Gate ($\tau_{\mathrm{tol}}=0$)};
-\node[box, fill=purple!6, draw=purple!60!black, above=0.25cm of ledger, minimum width=2.55cm] (planner) {Joint Planner (7-Orbit CRT)\\+ Dual Certificate};
-\node[store, right=0.75cm of ledger, yshift=0.34cm] (sstore) {Immutable Daily Store\\$(y_{R,t}, y_{F,t})$};
-\node[store, right=0.75cm of ledger, yshift=-0.34cm] (cstore) {Immutable Distinct Store\\$(7\text{d}, 30\text{d}, 90\text{d})$};
-\node[box, fill=gray!10, right=0.6cm of $(sstore)!0.5!(cstore)$, minimum width=2.15cm] (query) {Read-Only Query\\Service (Post-Proc.)};
+% Bottom tier: Runtime Pipeline
+\node[box, fill=gray!10, minimum width=1.6cm] (stream) {Daily Stream\\$D_t$};
+\node[box, above right=0.22cm and 0.65cm of stream] (clip) {Additive Clipper\\$(C_r=50, C_f=10)$};
+\node[box, below right=0.22cm and 0.65cm of stream] (roll) {Rolling Distinct State\\$(w_{\max}=90, k=3)$};
 
-\draw[arr] (stream.east) -- (clip.west);
-\draw[arr] (stream.east) -- (roll.west);
-\draw[arr] (clip.east) -- (seal.west);
-\draw[arr] (roll.east) -- (cal.west);
-\draw[arr] (seal.east) -- (ledger.west);
-\draw[arr] (cal.east) -- (ledger.west);
-\draw[arr] (planner.south) -- node[right, font=\tiny] {certified $(\boldsymbol{\phi}, \mathbf{v})$} (ledger.north);
-\draw[arr] (ledger.east) -- (sstore.west);
-\draw[arr] (ledger.east) -- (cstore.west);
-\draw[arr] (sstore.east) -- (query.west);
-\draw[arr] (cstore.east) -- (query.west);
+\node[gate, right=0.75cm of $(clip.east)!0.5!(roll.east)$] (ledger) {\textbf{Atomic Privacy Ledger}\\1.\ Reserve ($\tau_{\mathrm{tol}}=0$)\\2.\ Commit Irrevocably};
+
+\node[noise, right=0.75cm of ledger, yshift=0.58cm] (seal) {Daily $\mathcal{N}_{\mathbb{Z}}$ Sealing\\$(\sigma_r, \sigma_f)$};
+\node[noise, right=0.75cm of ledger, yshift=-0.58cm] (cal) {Periodic $\mathcal{N}_{\mathbb{Z}}$ Release\\$t \equiv \phi_f \pmod{S_f}$};
+
+\node[store, right=0.65cm of seal] (sstore) {Immutable Daily Store\\$(y_{R,t}, y_{F,t})$};
+\node[store, right=0.65cm of cal] (cstore) {Immutable Distinct Store\\$(7\text{d}, 30\text{d}, 90\text{d})$};
+
+\node[box, fill=gray!10, right=0.65cm of $(sstore.east)!0.5!(cstore.east)$, minimum width=2.1cm] (query) {Read-Only Query\\Service (Post-Proc.)};
+
+% Top tier: Offline Planning & Certification
+\node[off, above=0.65cm of $(clip.north)!0.5!(ledger.north)$] (curve) {Commitment $\bar{\rho}(h)$\\+ Workload Weights $\mathbf{w}$};
+\node[off, right=0.75cm of curve] (planner) {\textbf{Offline Joint Planner}\\7-Orbit CRT + 100-Digit Dual Cert.};
+
+\draw[arr] (stream.east) |- (clip.west);
+\draw[arr] (stream.east) |- (roll.west);
+\draw[arr] (clip.east) -- (ledger.north west);
+\draw[arr] (roll.east) -- (ledger.south west);
+\draw[arr] (ledger.north east) -- (seal.west);
+\draw[arr] (ledger.south east) -- (cal.west);
+\draw[arr] (seal.east) -- (sstore.west);
+\draw[arr] (cal.east) -- (cstore.west);
+\draw[arr] (sstore.east) -| (query.north);
+\draw[arr] (cstore.east) -| (query.south);
+
+\draw[arr, draw=purple!70!black] (curve.east) -- (planner.west);
+\draw[arr, dashed, draw=purple!70!black] (planner.south) -- node[left, pos=0.55, font=\tiny, text=purple!70!black] {certified $(\boldsymbol{\phi}^*, \mathbf{v}^*)$} (ledger.north);
+\draw[arr, dashed, draw=purple!70!black] (planner.south -| seal.north) -- node[right, pos=0.5, align=left, font=\tiny, text=purple!70!black] {noise scales\\$(\sigma_r, \sigma_f, \sigma_d)$} (seal.north);
 \end{tikzpicture}
-\caption{SDG-MH architecture: raw telemetry is isolated behind daily additive clipping and 90-day bounded distinct state, gated by an atomic two-phase privacy ledger configured via 7-orbit CRT joint planning.}
+\caption{SDG-MH architecture separating \emph{offline planning} (top: commitment curve, 7-orbit CRT optimization, and dual certification) from \emph{runtime execution} (bottom: physical data isolation, atomic two-phase ledger reservation prior to $\mathcal{N}_{\mathbb{Z}}$ sampling, immutable storage, and read-only query service).}
 \label{fig:arch}
 \end{figure*}
 
@@ -231,7 +238,7 @@ where $\Delta_f(s) = (\phi_f - s) \bmod S_f \in \{0, \dots, S_f - 1\}$.
 Intervals $[t - W_f + 1, t]$ and $[s, s+h-1]$ intersect iff $s \le t \le s + W_f + h - 2 = s + L - 1$. The earliest congruent release $t_0 \ge s$ is $s + \Delta_f(s)$, and $t_j = t_0 + jS_f \le s + L - 1$ yields $1 + \lfloor (L - 1 - \Delta_f(s)) / S_f \rfloor$ non-negative solutions when $\Delta_f(s) \le L - 1$.
 \end{proof}
 
-\paragraph{Counterexample.} For $(W_f, S_f, \phi_f) = (30, 7, 0)$ and a 1-day span $I = [0,0]$, release-date-only accounting counts $t = 0$ (1 release), whereas Theorem~\ref{thm:intersection} ($L = 30$) counts $t \in \{0, 7, 14, 21, 28\}$ (5 releases), exposing a $5\times$ undercount.
+\paragraph{Counterexample.} For $(W_f, S_f, \phi_f) = (30, 7, 0)$ and a single-day span $I = [7, 7]$ ($s=7, h=1 \in \mathbb{N}^+$), release-date-only accounting counts $t = 7$ (1 release), whereas Theorem~\ref{thm:intersection} ($L = 30$, $\Delta_f(7) = 0$) counts $t \in \{7, 14, 21, 28, 35\}$ (5 releases), exposing a $5\times$ undercount.
 
 \subsection{210-Day Periodicity and Non-Concave 575-Day Reduction}
 For schedule $\mathcal{S} = (\boldsymbol{\phi}, \mathbf{v})$ with phases $\boldsymbol{\phi} = (\phi_7, \phi_{30}, \phi_{90})$ and budgets $\mathbf{v} = (d, x_7, x_{30}, x_{90}) > 0$, total zCDP exposure over $[s, s+h-1]$ is $L(s, h; \boldsymbol{\phi}, \mathbf{v}) = h d + \sum_f n_f(s, h; \phi_f) x_f$, with envelope $L_{\max}(h; \boldsymbol{\phi}, \mathbf{v}) = \max_{s \in \mathbb{Z}} L(s, h; \boldsymbol{\phi}, \mathbf{v})$. Let $P = \operatorname{lcm}(7, 7, 30) = 210$ be the joint calendar period and define the asymptotic daily rate $\operatorname{slope}(\mathbf{v}) \triangleq d + \frac{x_7}{7} + \frac{x_{30}}{7} + \frac{x_{90}}{30}$.
@@ -264,14 +271,14 @@ Moreover, starting the system at $t=1$ (no releases at $t \le 0$) only omits non
 ($\Rightarrow$) Condition (i) is immediate; if $\operatorname{slope}(\mathbf{v}) > \beta_{\mathrm{tail}}$, Theorem~\ref{thm:periodicity} drives $\bar{\rho}(H_0 + kP) - L_{\max}(H_0 + kP) \to -\infty$. ($\Leftarrow$) For $h > 575$, write $h - H_0 = kP + r$ with $k \ge 1$ and $r \in [0, P-1]$, and set $h' = H_0 + r \in [365, 574] \subset [1, 575]$. Because \emph{both} $h'$ and $h$ lie in the affine tail $[365, \infty)$, $\bar{\rho}(h) = \bar{\rho}(h') + kP\beta_{\mathrm{tail}}$ exactly without invoking concavity on $[1, 365]$. Applying Theorem~\ref{thm:periodicity}(2) $k$ times yields $\bar{\rho}(h) - L_{\max}(h) = (\bar{\rho}(h') - L_{\max}(h')) + kP(\beta_{\mathrm{tail}} - \operatorname{slope}(\mathbf{v})) \ge 0$.
 \end{proof}
 
-Figure~\ref{fig:privacy_envelope}(a) verifies Theorem~\ref{thm:reduction} over 420 days: observed ledger loss $\rho_{\mathrm{ledger}}(h)$ remains strictly below both the 575-day envelope $L_{\max}(h)$ and commitment $\bar{\rho}(h)$ with positive headroom across all horizons.
+Figure~\ref{fig:privacy_envelope}(a) illustrates empirical ledger compliance over a 420-day evaluation window: observed ledger loss $\rho_{\mathrm{ledger}}(h)$ remains strictly below both the 575-day envelope $L_{\max}(h)$ and commitment $\bar{\rho}(h)$, consistent with Theorem~\ref{thm:reduction}'s infinite-horizon guarantee under Assumption~\ref{assump:static}.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_privacy_envelope.pdf}
+\includegraphics[width=0.92\textwidth]{figures/fig_privacy_envelope.pdf}
 \caption{Multi-horizon zCDP safety and non-concavity: (a) 420-day observed ledger loss remains strictly within the 575-day envelope and commitment $\bar{\rho}(h)$; (b) rising secant slopes prove non-concavity, necessitating Theorem~\ref{thm:reduction}.}
 \label{fig:privacy_envelope}
-\end{figure}
+\end{figure*}
 
 % ============================================================================
 \section{Joint Phase--Budget Planning and Dual Certificates}
@@ -308,34 +315,42 @@ Proposition~\ref{prop:orbits}(3) separates \emph{steady-state budget equivalence
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}[scale=0.68, every node/.style={font=\tiny}]
-\draw[->, >=Stealth, thin] (0,0) -- (8.6,0) node[right] {$d$};
+\begin{tikzpicture}[scale=0.82, every node/.style={font=\scriptsize}]
+% Column headers: days 0..13
 \foreach \x in {0,1,...,13} {
-    \draw (\x*0.6, 0.08) -- (\x*0.6, -0.08) node[below] {\x};
+    \node[font=\tiny, text=black!75] at (\x*0.52 + 0.26, 2.32) {\x};
 }
-% Budget-Opt (0,0,0)
-\node[left] at (-0.1, 1.45) {\textbf{Budget-Opt} $(0,0,0)$};
+\node[font=\tiny, text=black!75] at (3.64, 2.58) {Calendar Offset $d$ (days; Day 0, 7 = Sun in synthetic / Mon in WildChat)};
+
+% Row 1: Budget-Opt (0,0,0)
+\node[left, font=\scriptsize] at (-0.05, 1.72) {\textbf{Budget-Opt} $(0,0,0)$};
+\foreach \x in {0,...,13} {
+    \draw[draw=black!25, fill=gray!4] (\x*0.52, 1.48) rectangle ++(0.48, 0.48);
+}
 \foreach \x in {0,7} {
-    \fill[blue!70!black] (\x*0.6, 1.45) circle (2.2pt);
-    \fill[teal!70!black] (\x*0.6+0.12, 1.45) rectangle ++(0.11, 0.14);
+    \draw[draw=red!70!black, fill=red!12, thick] (\x*0.52, 1.48) rectangle ++(0.48, 0.48);
+    \node[font=\tiny\bfseries, text=blue!75!black] at (\x*0.52+0.24, 1.82) {7d};
+    \node[font=\tiny\bfseries, text=teal!75!black] at (\x*0.52+0.24, 1.60) {30d};
 }
-\fill[orange!80!black] (0, 1.65) -- (0.08, 1.8) -- (-0.08, 1.8) -- cycle;
-\node[right, red!70!black] at (4.45, 1.45) {7d/30d/90d collide};
+\node[font=\tiny\bfseries, text=orange!80!black] at (0.24, 1.32) {+90d};
 
-% Joint-Opt (0,4,0)
-\node[left] at (-0.1, 0.85) {\textbf{Joint-Opt} $(0,4,0)$};
-\foreach \x in {0,7} { \fill[blue!70!black] (\x*0.6, 0.85) circle (2.2pt); }
-\foreach \x in {4,11} { \fill[teal!70!black] (\x*0.6-0.05, 0.78) rectangle ++(0.11, 0.14); }
-\fill[orange!80!black] (0, 1.05) -- (0.08, 1.2) -- (-0.08, 1.2) -- cycle;
-\node[right, teal!70!black] at (4.45, 0.85) {30d staggered ($+4$d)};
-
-% Legend
-\fill[blue!70!black] (0.2, 2.15) circle (2.2pt) node[right, black] {7d release};
-\fill[teal!70!black] (2.2, 2.08) rectangle ++(0.11, 0.14) node[right, black, yshift=-2pt] {30d release};
-\fill[orange!80!black] (4.4, 2.08) -- (4.48, 2.23) -- (4.32, 2.23) -- cycle;
-\node[right] at (4.5, 2.15) {90d release};
+% Row 2: Joint-Opt (0,4,0)
+\node[left, font=\scriptsize] at (-0.05, 0.72) {\textbf{Joint-Opt} $(0,4,0)$};
+\foreach \x in {0,...,13} {
+    \draw[draw=black!25, fill=gray!4] (\x*0.52, 0.48) rectangle ++(0.48, 0.48);
+}
+\foreach \x in {0,7} {
+    \draw[draw=blue!70!black, fill=blue!10] (\x*0.52, 0.48) rectangle ++(0.48, 0.48);
+    \node[font=\tiny\bfseries, text=blue!75!black] at (\x*0.52+0.24, 0.72) {7d};
+}
+\foreach \x in {4,11} {
+    \draw[draw=teal!70!black, fill=teal!14, thick] (\x*0.52, 0.48) rectangle ++(0.48, 0.48);
+    \node[font=\tiny\bfseries, text=teal!75!black] at (\x*0.52+0.24, 0.72) {30d};
+}
+\node[font=\tiny\bfseries, text=orange!80!black] at (0.24, 0.32) {+90d};
+\draw[->, >=Stealth, thick, teal!75!black] (0.50, 1.44) -- node[above, font=\tiny, sloped] {$+4$d} (2.30, 1.00);
 \end{tikzpicture}
-\caption{Release calendar schematic: staggering $\phi_{30}$ from $0$ to $4$ reduces worst-case overlap with $7\text{d}$ and $90\text{d}$ windows while trading weekday freshness.}
+\caption{14-day release schedule grid: \textbf{Budget-Opt} $(0,0,0)$ stacks $7\text{d}$, $30\text{d}$, and $90\text{d}$ releases on Days $0$ and $7$ (red cells), whereas \textbf{Joint-Opt} $(0,4,0)$ shifts $30\text{d}$ releases by $+4$ days to Days $4$ and $11$, reducing overlap while trading weekday freshness.}
 \label{fig:calendar_schematic}
 \end{figure}
 
@@ -386,19 +401,19 @@ We organize our evaluation around five research questions across three distinct 
 \subsection{RQ1: Long-Horizon Multi-Scale Privacy Compliance}
 \textbf{Setup.} We execute \textbf{Joint-Opt} end-to-end for 420 days across all $K=8$ synthetic seeds, auditing the atomic privacy ledger at checkpoints $t \in \{210, 365, 420\}$ for horizons $h \in \{1, 7, 30, 90, 210, 365, 420\}$.
 
-\textbf{Findings and Scope.} Across all checkpoints, seeds, and schedules, SDG-MH records zero privacy violations, with strictly positive zCDP headroom ($+0.00123$ to $+0.01696$; Figure~\ref{fig:privacy_envelope}(a)). This confirms Theorem~\ref{thm:reduction} across two full 210-day periods under static periodic operation (Assumption~\ref{assump:static}); ad-hoc queries outside the static calendar remain dynamically gated by the ledger.
+\textbf{Findings and Scope.} Across all checkpoints, seeds, and schedules, SDG-MH records zero privacy violations, with strictly positive zCDP headroom ($+0.00123$ to $+0.01696$; Figure~\ref{fig:privacy_envelope}(a)). This empirically demonstrates privacy compliance over the 420-day evaluation window, consistent with Theorem~\ref{thm:reduction}'s infinite-horizon guarantee under static periodic operation (Assumption~\ref{assump:static}); ad-hoc queries outside the static calendar remain dynamically gated by the ledger.
 
 \subsection{RQ2: Utility Gains and Staleness Trade-offs of Joint Planning}
 \textbf{Setup.} Under \textbf{DistinctHeavy} weights, we compare \textbf{Joint-Opt} ($\boldsymbol{\phi}=(0,4,0)$) against \textbf{Budget-Opt} ($\boldsymbol{\phi}=(0,0,0)$) using paired CRN ($r \approx 0.915\text{--}0.985$). Because $\phi_{30}$ shifts from Day 0 (Sunday) to Day 4 (Thursday), we separate \emph{own release-day} MAPE from \emph{same-query-date} latest-available MAPE across all 386 shared daily queries and 55 fixed Sunday queries.
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_joint_planning_eval.pdf}
-\caption{Paired distinct-user MAPE differences (\textbf{Joint-Opt} minus \textbf{Budget-Opt}, $95\%$ CIs, $K=8$, $df=7$): (a) synthetic workload ($t \bmod 7 = 0$ Sunday origin); (b) \texttt{WildChat-4.8M} real trace (\texttt{2023-11-20} Monday origin, conditional on trace). Negative values favor \textbf{Joint-Opt}.}
+\includegraphics[width=0.92\textwidth]{figures/fig_joint_planning_eval.pdf}
+\caption{Paired distinct-user MAPE differences in percentage points (\textbf{Joint-Opt} minus \textbf{Budget-Opt}, $95\%$ CIs, $K=8$, $df=7$): (a) synthetic workload ($t \bmod 7 = 0$ Sunday origin, scale $\pm 0.13$\,pp); (b) \texttt{WildChat-4.8M} real trace (\texttt{2023-11-20} Monday origin, conditional on trace, scale $\pm 2.6$\,pp). Negative values favor \textbf{Joint-Opt}.}
 \label{fig:joint_eval}
-\end{figure}
+\end{figure*}
 
-\textbf{Findings and Cause.} As Figure~\ref{fig:joint_eval}(a) shows, \textbf{Joint-Opt} significantly improves 7d and 90d distinct accuracy where release dates coincide ($\phi_7=\phi_{90}=0$): 90d MAPE drops by $-0.0861\%$ (\textbf{Standard}, $p_{\mathrm{holm}} < 10^{-4}$) and $-0.1044\%$ (\textbf{Balanced}, $p_{\mathrm{holm}} < 10^{-4}$), and 7d MAPE drops by $-0.0271\%$ and $-0.0248\%$ ($8/8$ seeds). On 30d queries, however, \textbf{Joint-Opt} reduces pure staleness drift RMSE on common daily queries ($6.24 \to 4.93$), yet total served 30d MAPE is \emph{not} statistically significant ($-0.0171\% \pm 0.0800\%$, $p_{\mathrm{holm}} = 1.000$) because day-of-week sample variance dominates the $-0.62\%$ noise scale reduction. On fixed Sunday queries, $(0,4,0)$ serves Thursday's release ($+3.0\text{d}$ lag, $+7.55$ drift RMSE), canceling its noise gain ($-0.0005\%$, $p_{\mathrm{holm}}=1.000$). Moreover, \textbf{Joint-Opt} trades $+0.38\%$ daily request RMSE ($2577.9 \to 2587.8$, $p_{\mathrm{holm}}<10^{-4}$) to fund distinct budget expansion.
+\textbf{Findings and Cause.} As Figure~\ref{fig:joint_eval}(a) shows, \textbf{Joint-Opt} significantly improves 7d and 90d distinct accuracy where release dates coincide ($\phi_7=\phi_{90}=0$): 90d MAPE drops by $-0.0861\,\text{pp}$ (\textbf{Standard}, $p_{\mathrm{holm}} < 10^{-4}$) and $-0.1044\,\text{pp}$ (\textbf{Balanced}, $p_{\mathrm{holm}} < 10^{-4}$), and 7d MAPE drops by $-0.0271\,\text{pp}$ and $-0.0248\,\text{pp}$ ($8/8$ seeds). On 30d queries, however, \textbf{Joint-Opt} reduces pure staleness drift RMSE on common daily queries ($6.24 \to 4.93$), yet total served 30d MAPE is \emph{not} statistically significant ($-0.0171 \pm 0.0800\,\text{pp}$, $p_{\mathrm{holm}} = 1.000$) because day-of-week sample variance dominates the $-0.62\%$ relative noise-scale reduction. On fixed Sunday queries, $(0,4,0)$ serves Thursday's release ($+3.0\text{d}$ lag, $+7.55$ drift RMSE), canceling its noise gain ($-0.0005\,\text{pp}$, $p_{\mathrm{holm}}=1.000$). Moreover, \textbf{Joint-Opt} trades $+0.38\%$ daily request RMSE ($2577.9 \to 2587.8$, $p_{\mathrm{holm}}<10^{-4}$) to fund distinct budget expansion.
 
 \subsection{RQ3: Comparison Against Continual DP Baselines}
 \textbf{Setup.} Under \textbf{Default} / \textbf{Standard}, we compare SDG-MH against \texttt{Tree-2l}, \texttt{Tree-U} (with Honaker GLS~\cite{honaker2015efficient}), \texttt{W-BD-30}~\cite{kellaris2014wevent}, and two representative fixed-$(b,\alpha)$ $b$-banded lower-triangular Toeplitz baselines~\cite{fichtenberger2023constant,choquette2023banded} (\texttt{Banded-MF} with $b=8,\alpha=0.25$ and $b=30,\alpha=0.50$). All methods share the $[1,420]$ horizon, identical clipping $(C_r=50, C_f=10)$, identical remaining additive envelope $\bar{\rho}_{\mathrm{add}}(h)$ across all $h \in [1, 420]$, and identical window post-processing~(\ref{eq:postproc}). Separately, our microbenchmark measures the \emph{420-day online additive streaming operator only} (excluding post-processing, ledger checks, and rolling distinct state) under two regimes: (A) including per-day noise sampling inside the timer, and (B) excluding pre-generated noise.
@@ -421,12 +436,12 @@ We organize our evaluation around five research questions across three distinct 
 \end{tabular}
 \end{table*}
 
-\begin{figure}[t]
+\begin{figure*}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/fig_baselines_and_clipping.pdf}
+\includegraphics[width=0.92\textwidth]{figures/fig_baselines_and_clipping.pdf}
 \caption{Baseline comparison and clipping trade-off: (a) additive Requests RMSE across $w \in \{1,7,30,90\}$ under identical $[1,420]$ privacy envelope; (b) daily clipping threshold $C_r$ U-curve.}
 \label{fig:baselines_clipping}
-\end{figure}
+\end{figure*}
 
 \textbf{Findings, Boundaries, and Systems Cost.} As Table~\ref{tab:baselines_all} and Figure~\ref{fig:baselines_clipping}(a) show, SDG-MH significantly outperforms \texttt{Tree-2l}, \texttt{Tree-U}, \texttt{W-BD-30}, and \texttt{Banded-MF ($b=30$)} on 1d, 7d, and 30d Requests (e.g., $1.89\times$ lower 1d RMSE than \texttt{Tree-2l} and $4.31\times$ lower than \texttt{Banded-MF ($b=30$)}, $p_{\mathrm{holm}} \le 0.0013$), and outperforms \texttt{Banded-MF ($b=8$)} on 1d/7d Requests ($p_{\mathrm{holm}} \le 0.0133$) and 1d/7d Failures ($1151.7$ vs.\ $2069.4$ at 1d, $p_{\mathrm{holm}} \le 3.05\times 10^{-5}$). However, at 30d/90d vs.\ \texttt{Banded-MF ($b=8$)} and at 90d vs.\ \texttt{Tree-2l} and \texttt{Banded-MF ($b=30$)}, cumulative clipping bias dwarfs mechanism variance: point-estimate differences ($43866.8$ vs.\ $43651.1$ at 30d; $126664.8$ vs.\ $125048.5$ at 90d) are \textbf{not} statistically significant ($p_{\mathrm{holm}}=1.000$ vs.\ $b=8$; $p_{\mathrm{holm}}=0.284$ vs.\ $b=30$).
 
@@ -440,7 +455,7 @@ In the streaming microbenchmark, under Regime (A), SDG-MH's exact $\mathcal{N}_{
 
 \begin{table}[t]
 \centering
-\caption{WildChat-4.8M Real-Trace Evaluation ($K=8$ Disjoint Cohorts, $df=7$, Conditional on Fixed 420d Trace; \textbf{Standard} Commitment). Negative Diff Favors Treatment.}
+\caption{WildChat-4.8M Real-Trace Evaluation ($K=8$ Disjoint Cohorts, $df=7$, Conditional on Fixed 420d Trace; \textbf{Standard} Commitment). Diffs in Percentage Points (pp) for MAPE and Users/Convs for RMSE; Negative Diff Favors Treatment.}
 \label{tab:wildchat}
 \footnotesize
 \setlength{\tabcolsep}{3.5pt}
@@ -448,12 +463,12 @@ In the streaming microbenchmark, under Regime (A), SDG-MH's exact $\mathcal{N}_{
 \toprule
 \textbf{Contrast / Metric} & \textbf{Base} & \textbf{Trt} & \textbf{Diff ($\pm$CI95)} & $p_{\mathrm{holm}}$ \\ \midrule
 \multicolumn{5}{@{}l}{\textit{DistinctHeavy: Joint-Opt vs.\ Budget-Opt}} \\
-7d Active MAPE (\%) & $65.10$ & $64.34$ & $\mathbf{-0.76}$ ($\pm 0.41$) & $0.0064$ \\
-30d Active MAPE (\%) & $26.18$ & $27.85$ & $\mathbf{+1.67}$ ($\pm 0.62$) & $0.0018$ \\
-90d Active MAPE (\%) & $15.94$ & $15.50$ & $\mathbf{-0.44}$ ($\pm 0.17$) & $0.0020$ \\
+7d Active MAPE (\% / pp) & $65.10$ & $64.34$ & $\mathbf{-0.76}$ ($\pm 0.41$) & $0.0064$ \\
+30d Active MAPE (\% / pp) & $26.18$ & $27.85$ & $\mathbf{+1.67}$ ($\pm 0.62$) & $0.0018$ \\
+90d Active MAPE (\% / pp) & $15.94$ & $15.50$ & $\mathbf{-0.44}$ ($\pm 0.17$) & $0.0020$ \\
 30d Release RMSE (users) & $53.56$ & $52.78$ & $-0.77$ ($\pm 0.80$) & $0.0574$ \\
-30d All-Day Latest MAPE (\%) & $33.49$ & $32.25$ & $\mathbf{-1.24}$ ($\pm 0.61$) & $0.0061$ \\
-30d UTC-Sun Latest MAPE (\%) & $41.32$ & $30.12$ & $\mathbf{-11.20}$ ($\pm 0.49$) & $<10^{-8}$ \\
+30d All-Day Latest MAPE (\% / pp) & $33.49$ & $32.25$ & $\mathbf{-1.24}$ ($\pm 0.61$) & $0.0061$ \\
+30d UTC-Sun Latest MAPE (\% / pp) & $41.32$ & $30.12$ & $\mathbf{-11.20}$ ($\pm 0.49$) & $<10^{-8}$ \\
 1d Conv.\ RMSE (scalar) & $1486.1$ & $1494.9$ & $\mathbf{+8.81}$ ($\pm 0.30$) & $<10^{-9}$ \\ \midrule
 \multicolumn{5}{@{}l}{\textit{Default: Joint-Opt vs.\ Fixed-Cal}} \\
 1d Conv.\ RMSE (scalar) & $1686.8$ & $1240.7$ & $\mathbf{-446.1}$ ($\pm 15.5$) & $<10^{-9}$ \\
@@ -461,7 +476,7 @@ In the streaming microbenchmark, under Regime (A), SDG-MH's exact $\mathcal{N}_{
 \end{tabular}
 \end{table}
 
-\textbf{Findings and Real-Data Boundaries.} User activity is strongly heavy-tailed ($p_{50}=1$, $p_{90}=1$, $p_{99}=13$, $\max=35{,}588$ conversations). Window deduplication reduces daily user sums by $7.56\%$ (7d), $10.76\%$ (30d), and $13.06\%$ (90d); $C_r=50$ clipping incurs $11.24\%$ bias and $k=3$ truncation incurs $1.06\%$ 30d bias. As Table~\ref{tab:wildchat} and Figure~\ref{fig:joint_eval}(b) show, \textbf{Joint-Opt} $(0,4,0)$ improves 7d and 90d active MAPE (cells with $\mathrm{true} \ge 10$) and denominator-free Release RMSE ($-0.42$ and $-1.80$ users, $p_{\mathrm{holm}} \le 3.13\times 10^{-5}$). At 30d, release-day active MAPE \emph{worsens} by $+1.67\%$ ($p_{\mathrm{holm}}=0.0018$, retained as a negative result; Release RMSE $-0.77$ users is non-significant), whereas \emph{all-day latest-available} 30d MAPE improves by $-1.24\%$ ($p_{\mathrm{holm}}=0.0061$). One untested hypothesis for the release-day divergence is that $+4\text{d}$ phase shifts sample different windows across dated checkpoint launches (e.g., \texttt{gpt-4o}), altering the active-cell set. Because \texttt{2023-11-20} is Monday, \textbf{Budget-Opt} $(0,0,0)$ releases on Monday and suffers $6.0\text{d}$ lag on UTC Sundays ($41.32\%$ MAPE), whereas $(0,4,0)$ releases on Friday ($2.0\text{d}$ lag, $30.12\%$ MAPE); pinning UTC Sunday ($\phi_{30}=6$) yields $(1,6,0)$ with $0.0\text{d}$ Sunday lag. Across partition sensitivities ($K \in \{4, 8, 16\}$ and hash partitioning), results support only \emph{directional consistency}: 7d ($-0.48\%$ to $-0.85\%$) and 90d ($-0.47\%$ to $-1.25\%$) signs and 30d release-day increases ($+0.37\%$ to $+1.76\%$) agree, while 30d significance varies with grouping ($p=0.211$ at $K=4$, $p=0.649$ at $K=16$).
+\textbf{Findings and Real-Data Boundaries.} User activity is strongly heavy-tailed ($p_{50}=1$, $p_{90}=1$, $p_{99}=13$, $\max=35{,}588$ conversations). Window deduplication reduces daily user sums by $7.56\%$ (7d), $10.76\%$ (30d), and $13.06\%$ (90d); $C_r=50$ clipping incurs $11.24\%$ bias and $k=3$ truncation incurs $1.06\%$ 30d bias. As Table~\ref{tab:wildchat} and Figure~\ref{fig:joint_eval}(b) show, \textbf{Joint-Opt} $(0,4,0)$ improves 7d and 90d active MAPE (cells with $\mathrm{true} \ge 10$) and denominator-free Release RMSE ($-0.42$ and $-1.80$ users, $p_{\mathrm{holm}} \le 3.13\times 10^{-5}$). At 30d, release-day active MAPE \emph{worsens} by $+1.67\,\text{pp}$ ($p_{\mathrm{holm}}=0.0018$, retained as a negative result; Release RMSE $-0.77$ users is non-significant), whereas \emph{all-day latest-available} 30d MAPE improves by $-1.24\,\text{pp}$ ($p_{\mathrm{holm}}=0.0061$). One untested hypothesis for the release-day divergence is that $+4\text{d}$ phase shifts sample different windows across dated checkpoint launches (e.g., \texttt{gpt-4o}), altering the active-cell set. Because \texttt{2023-11-20} is Monday, \textbf{Budget-Opt} $(0,0,0)$ releases on Monday and suffers $6.0\text{d}$ lag on UTC Sundays ($41.32\%$ MAPE), whereas $(0,4,0)$ releases on Friday ($2.0\text{d}$ lag, $30.12\%$ MAPE); pinning UTC Sunday ($\phi_{30}=6$) yields $(1,6,0)$ with $0.0\text{d}$ Sunday lag. Across partition sensitivities ($K \in \{4, 8, 16\}$ and hash partitioning), results support only \emph{directional consistency}: 7d ($-0.48$ to $-0.85\,\text{pp}$) and 90d ($-0.47$ to $-1.25\,\text{pp}$) signs and 30d release-day increases ($+0.37$ to $+1.76\,\text{pp}$) agree, while 30d significance varies with grouping ($p=0.211$ at $K=4$, $p=0.649$ at $K=16$).
 
 Four dataset boundaries apply: (i) the trace is a public filtered release; (ii) \texttt{hashed\_ip} is an IP pseudonym subject to NAT sharing and DHCP churn, not an authenticated account ID; (iii) top-level \texttt{timestamp} records the conversation's \emph{last turn} rather than HTTP request time, one conversation does not equal one API request, and HTTP error logs are absent; and (iv) the 20 categories serve as an interaction-category proxy rather than semantic NLP topics.
 
@@ -483,13 +498,13 @@ Bolot et al.~\cite{bolot2013decayed} studied decayed predicate sums under event-
 
 \paragraph{Limitations.}
 (1) \emph{Static Calendar Scope}: Theorems~\ref{thm:periodicity}--\ref{thm:reduction} require static periodic schedules (Assumption~\ref{assump:static}); ad-hoc queries must be gated dynamically by the ledger.
-(2) \emph{Workload-Dependent Phase Gains}: Under \textbf{Default} weights, tail-slope binding eliminates phase-shift gains; under \textbf{DistinctHeavy}, 7d and 90d distinct errors improve reliably, whereas 30d gains depend on weekday alignment ($+3.0\text{d}$ Sunday lag under $t \bmod 7 = 0$ synthetic queries; $+1.67\%$ release-day active MAPE regression on WildChat).
+(2) \emph{Workload-Dependent Phase Gains}: Under \textbf{Default} weights, tail-slope binding eliminates phase-shift gains; under \textbf{DistinctHeavy}, 7d and 90d distinct errors improve reliably, whereas 30d gains depend on weekday alignment ($+3.0\text{d}$ Sunday lag under $t \bmod 7 = 0$ synthetic queries; $+1.67\,\text{pp}$ release-day active MAPE regression on WildChat).
 (3) \emph{Heavy-Tailed Clipping Bias}: At $C_r=50$, 90-day additive error is dominated by clipping bias rather than DP noise.
 (4) \emph{Numerical Certification}: Our 100-digit dual certificate establishes tight numerical near-global optimality ($\mathrm{gap} \le 7.45 \times 10^{-9}$) rather than a symbolic closed-form proof.
 (5) \emph{Trace and Baseline Scope}: WildChat lacks HTTP error logs and true account IDs, and our matrix comparison covers fixed $(b,\alpha)$ Toeplitz baselines rather than optimized BLT mechanisms.
 
 \paragraph{Conclusion.}
-SDG-MH integrates Multi-Horizon User-Time DP, daily Discrete Gaussian sealing, exact data-window calendar accounting, concavity-free 575-day infinite-horizon verification, CRT 7-orbit phase reduction, and 100-digit dual certification into a practical architecture for perpetual mixed-workload analytics.
+SDG-MH demonstrates that perpetual, mixed-workload analytics can satisfy strict multi-horizon user-time privacy without calendar reset spikes or diverging noise. Combining daily Discrete Gaussian sealing with data-window calendar accounting, concavity-free 575-day verification, and 7-orbit CRT planning yields a practical design whose accuracy gains and weekday-alignment trade-offs are characterized across both controlled and real-world telemetry.
 
 \bibliographystyle{ACM-Reference-Format}
 \bibliography{references}
