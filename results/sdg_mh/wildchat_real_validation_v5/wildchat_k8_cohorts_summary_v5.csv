@@ -1,0 +1,4 @@
+workload,curve,contrast,d_phases,sun_pinned_phases,base_sun_staleness_30d,d_sun_staleness_30d,sun_pinned_staleness_30d,d_gapfree_d7_active_mape,d_gapfree_d30_active_mape
+DistinctHeavy,Week1_v2,D_JointPlanning vs B_BudgetOnly,"(0, 4, 0)","(1, 6, 0)",6.0,2.0,0.0,64.09489922311326,28.560123863627826
+DistinctHeavy,Original,D_JointPlanning vs B_BudgetOnly,"(0, 4, 0)","(1, 6, 0)",6.0,2.0,0.0,64.08527249671454,28.75623077706573
+Default,Week1_v2,D_JointPlanning vs A_Baseline,"(0, 0, 0)","(0, 6, 0)",6.0,6.0,0.0,78.0688845833456,31.44179116442164

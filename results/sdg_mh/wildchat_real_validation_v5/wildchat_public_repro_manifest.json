@@ -1,0 +1,32 @@
+{
+  "dataset_id": "allenai/WildChat-4.8M",
+  "pinned_hf_revision": "c827c6df8fcf008219ffaffa4d1dd77491099367",
+  "license": "ODC-By 1.0 / AI2 ImpACT Low-Risk Artifact",
+  "source_mode": "offline_preprojected_cache(sha256=581e68ce482d)",
+  "input_bytes": 171001653,
+  "input_sha256": "581e68ce482d506a3985fcd4f8cc71c3ba349d5b021164629235d885a3476a2a",
+  "sha256_matches_expected": true,
+  "row_count": 3199860,
+  "columns": [
+    "hashed_ip",
+    "timestamp",
+    "model",
+    "country"
+  ],
+  "unique_hashed_ip_count": 1833730,
+  "field_mapping": {
+    "service_axis_m5": "5 OpenAI model families (gpt-4o, gpt-4o-mini, gpt-3.5-turbo, gpt-4-turbo, other-openai)",
+    "category_axis_A20": "20 interaction-category proxies = 5 model_families x 4 UTC_6h_quadrants (NOT semantic NLP task topics)",
+    "user_identifier": "hashed_ip (IP-derived pseudonym; NOT authenticated account ID)",
+    "unit_of_record": "1 conversation record (NOT 1 raw HTTP API request)",
+    "dataset_scope": "3,199,860-conversation public filtered release"
+  },
+  "dependencies": {
+    "python": "3.14.0",
+    "pandas": "3.1.0",
+    "numpy": "2.5.4",
+    "pyarrow": "26.0.0",
+    "scipy": "1.18.1"
+  },
+  "privacy_publishing_policy": "Only aggregate cohort/window summaries are stored in git; no hashed_ip values or conversation texts are written to tracked outputs."
+}

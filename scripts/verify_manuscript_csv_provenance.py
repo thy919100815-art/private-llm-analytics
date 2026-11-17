@@ -299,8 +299,8 @@ def verify_manuscript_provenance(
         for r in csv.DictReader(f):
             csv_base[(r["method"], r["metric"])] = r
 
-    # Also load Banded-MF v4 summary CSV if present
-    banded_csv = ROOT / "results" / "sdg_mh" / "banded_mf_baseline_v4" / "banded_mf_competitive_summary.csv"
+    # Also load Banded-MF v5 summary CSV
+    banded_csv = ROOT / "results" / "sdg_mh" / "banded_mf_baseline_v5" / "banded_mf_competitive_summary_v5.csv"
     if banded_csv.exists():
         with banded_csv.open("r", encoding="utf-8") as f:
             for r in csv.DictReader(f):
@@ -353,10 +353,10 @@ def verify_manuscript_provenance(
             record_check(f"ablation_Cr_{cr_int}_bias", bias_str in tex, str(abl_csv.relative_to(ROOT)), bias_str)
 
     # -------------------------------------------------------------------------
-    # 8. Structured Parsing of Table 6 (`tab:wildchat_v4`) against WildChat v4 CSVs
+    # 8. Structured Parsing of Table 6 (`tab:wildchat_v4`) against WildChat v5 CSVs
     # -------------------------------------------------------------------------
-    wc_paired_csv = ROOT / "results" / "sdg_mh" / "wildchat_real_validation_v4" / "wildchat_k8_cohorts_paired_d_vs_b.csv"
-    wc_audit_csv = ROOT / "results" / "sdg_mh" / "wildchat_real_validation_v4" / "wildchat_dataset_audit_summary.csv"
+    wc_paired_csv = ROOT / "results" / "sdg_mh" / "wildchat_real_validation_v5" / "wildchat_k8_cohorts_paired_v5.csv"
+    wc_audit_csv = ROOT / "results" / "sdg_mh" / "wildchat_real_validation_v5" / "wildchat_dataset_audit_summary_v5.csv"
     rows_t6 = _extract_tabular_rows_by_label(tex, "tab:wildchat_v4")
     t6_map: Dict[Tuple[str, str, str], List[str]] = {}
     for r in rows_t6[1:]:
@@ -374,7 +374,7 @@ def verify_manuscript_provenance(
             for r in csv.DictReader(f)
         }
 
-    record_check("tab6_row_count", len(t6_map) == 13, str(wc_paired_csv.relative_to(ROOT)), "13", str(len(t6_map)))
+    record_check("tab6_row_count", len(t6_map) == 15, str(wc_paired_csv.relative_to(ROOT)), "15", str(len(t6_map)))
     for key, t_row in t6_map.items():
         record_check(f"tab6_key_in_csv_{key}", key in csv_wc_paired, str(wc_paired_csv.relative_to(ROOT)), str(key), "found" if key in csv_wc_paired else "missing")
         c_row = csv_wc_paired[key]
@@ -400,6 +400,7 @@ def verify_manuscript_provenance(
 
     with wc_audit_csv.open("r", encoding="utf-8") as f:
         wc_aud = next(csv.DictReader(f))
+        record_check("wildchat_origin_weekday", wc_aud["win420_start_weekday"] == "Monday" and "2023-11-20} (Monday)" in tex, str(wc_audit_csv.relative_to(ROOT)), "2023-11-20 (Monday)")
         for field_key, fmt_fn in [
             ("mean_dedup_reduction_7d_pct", lambda v: f"{float(v):.2f}%"),
             ("mean_dedup_reduction_30d_pct", lambda v: f"{float(v):.2f}%"),
