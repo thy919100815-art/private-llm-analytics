@@ -188,17 +188,87 @@ class UnifiedPrivacyLedger:
     ) -> float:
         """Compute conservative upper bound on (epsilon, delta) drift from rho_tol.
 
-        Since eps(rho) = rho + 2 * sqrt(rho * ln(1/delta)) is concave for rho > 0,
-        by tangent linearization:
-          eps(rho + rho_tol) - eps(rho) <= (1 + sqrt(ln(1/delta) / rho)) * rho_tol.
-        For Default/Original commitments (min_rho >= 0.0141986, delta=1e-6, rho_tol=1e-12),
-        this drift is bounded by ~3.22e-11 in epsilon.
+        Since eps(rho) = rho + 2 * sqrt(rho * ln(1/delta)) is concave and subadditive
+        for rho >= 0, any excess Delta_rho <= rho_tol satisfies:
+          1) Tangent bound (for rho > 0):
+             eps(rho + rho_tol) - eps(rho) <= (1 + sqrt(ln(1/delta) / rho)) * rho_tol
+          2) Universal non-singular root bound (for all rho >= 0):
+             eps(rho + rho_tol) - eps(rho) <= rho_tol + 2 * sqrt(rho_tol * ln(1/delta))
+        Across all source-code commitment curves and horizons h >= 1:
+          - ORIGINAL_PLANNER_CURVE: min_rho = rho(1) = 0.01419861 -> drift <= 3.2193e-11
+          - WEEK1_V2_CURVE:         min_rho = rho(1) = 0.01746890 -> drift <= 2.9122e-11
+          - Unified across both commitment curves: min_rho = 0.01419861 -> drift <= 3.2193e-11.
         """
         if min_rho <= 0.0 or rho_tol <= 0.0:
             return 0.0
         c = math.log(1.0 / delta)
-        deriv = 1.0 + math.sqrt(c / min_rho)
-        return float(deriv * rho_tol)
+        tangent_bound = (1.0 + math.sqrt(c / min_rho)) * rho_tol
+        universal_bound = rho_tol + 2.0 * math.sqrt(rho_tol * c)
+        return float(min(tangent_bound, universal_bound))
+
+    @classmethod
+    def commitment_curve_drift_summary(
+        cls,
+        curves: Optional[Sequence[Any]] = None,
+        delta: float = 1e-6,
+        rho_tol: float = PRIVACY_LEDGER_TOL,
+    ) -> Dict[str, Any]:
+        """Compute verified min_rho and epsilon drift bounds across all commitment curves and horizons."""
+        if curves is None:
+            from private_llm_analytics.sdg_mh.calendar_accounting import (
+                ORIGINAL_PLANNER_CURVE,
+                WEEK1_V2_CURVE,
+            )
+            curves = (ORIGINAL_PLANNER_CURVE, WEEK1_V2_CURVE)
+
+        per_curve: Dict[str, Dict[str, float]] = {}
+        global_min_rho = float("inf")
+        global_min_curve = ""
+        global_min_h = 1
+
+        for curve in curves:
+            # Because curve.rhos is non-decreasing in h >= 1 and affine for h >= 365 with beta_tail > 0,
+            # the minimum across all h >= 1 is achieved at h = 1.
+            h_vals = list(getattr(curve, "horizons", (1, 7, 30, 90, 365)))
+            rho_vals = [float(r) for r in getattr(curve, "rhos", ())]
+            min_idx = int(min(range(len(rho_vals)), key=lambda i: rho_vals[i]))
+            c_min_rho = rho_vals[min_idx]
+            c_min_h = int(h_vals[min_idx])
+            c_drift = cls.conservative_epsilon_drift_bound(
+                min_rho=c_min_rho, delta=delta, rho_tol=rho_tol
+            )
+            per_curve[str(getattr(curve, "name", "curve"))] = {
+                "min_rho": c_min_rho,
+                "min_horizon_h": float(c_min_h),
+                "max_epsilon_drift": c_drift,
+            }
+            if c_min_rho < global_min_rho:
+                global_min_rho = c_min_rho
+                global_min_curve = str(getattr(curve, "name", "curve"))
+                global_min_h = c_min_h
+
+        c_log = math.log(1.0 / delta)
+        universal_root_bound = float(rho_tol + 2.0 * math.sqrt(rho_tol * c_log))
+        return {
+            "per_curve": per_curve,
+            "global_min_rho": global_min_rho,
+            "global_min_curve": global_min_curve,
+            "global_min_horizon_h": global_min_h,
+            "global_max_epsilon_drift": cls.conservative_epsilon_drift_bound(
+                min_rho=global_min_rho, delta=delta, rho_tol=rho_tol
+            ),
+            "additive_subchannel_min_rho": 0.0003020396600159819,
+            "additive_subchannel_max_epsilon_drift": cls.conservative_epsilon_drift_bound(
+                min_rho=0.0003020396600159819, delta=delta, rho_tol=rho_tol
+            ),
+            "solver_box_floor_min_rho": 1e-6,
+            "solver_box_floor_max_epsilon_drift": cls.conservative_epsilon_drift_bound(
+                min_rho=1e-6, delta=delta, rho_tol=rho_tol
+            ),
+            "universal_nonsingular_root_bound": universal_root_bound,
+            "delta": delta,
+            "rho_tol": rho_tol,
+        }
 
     def admit_and_commit_batch(
         self,

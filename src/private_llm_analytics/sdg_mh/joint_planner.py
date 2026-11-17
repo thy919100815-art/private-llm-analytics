@@ -64,6 +64,38 @@ OPT_TIER_NEAR_GLOBAL_CERTIFIED: str = "NEAR_GLOBAL_OPTIMAL_CERTIFIED"
 OPT_TIER_GLOBAL_PROVED: str = "GLOBAL_OPTIMAL_PROVED"
 NEAR_GLOBAL_REL_GAP_TOL: float = 1e-4
 
+# Exact 7 canonical phase orbit representatives for Z_7 x Z_7 x Z_30 under common time-shift Z_210.
+# By Orbit-Stabilizer and the Chinese Remainder Theorem (gcd(7, 30) = 1, 120 = 1 mod 7 & 0 mod 30,
+# 91 = 0 mod 7 & 1 mod 30), every phase tuple (phi_7, phi_30, phi_90) in Z_7 x Z_7 x Z_30 lies in a
+# free Z_210-orbit of size 210 with unique canonical representative (0, (phi_30 - phi_7) mod 7, 0).
+CANONICAL_7_ORBIT_REPRESENTATIVES: Tuple[Tuple[int, int, int], ...] = tuple(
+    (0, d, 0) for d in range(7)
+)
+
+
+def canonicalize_phase_orbit(phi: Tuple[int, int, int]) -> Tuple[Tuple[int, int, int], int]:
+    """Map any phase tuple (phi_7, phi_30, phi_90) in Z_7 x Z_7 x Z_30 to its canonical Z_210 orbit representative.
+
+    Using CRT idempotents e_7 = 120 (120 == 1 mod 7, 120 == 0 mod 30) and
+    e_30 = 91 (91 == 0 mod 7, 91 == 1 mod 30), the unique shift delta in Z_210
+    satisfying delta == phi_7 (mod 7) and delta == phi_90 (mod 30) is:
+        delta = (120 * (phi_7 % 7) + 91 * (phi_90 % 30)) % 210.
+    Shifting the schedule origin by -delta maps phi to:
+        phi_can = (0, (phi_30 - phi_7) % 7, 0).
+    Returns (phi_can, delta).
+    """
+    p7 = int(phi[0]) % 7
+    p30 = int(phi[1]) % 7
+    p90 = int(phi[2]) % 30
+    delta = (120 * p7 + 91 * p90) % 210
+    d = (p30 - p7) % 7
+    return (0, d, 0), delta
+
+
+def enumerate_canonical_phase_orbits() -> List[Tuple[int, int, int]]:
+    """Return the 7 canonical phase orbit representatives [(0, d, 0) for d in 0..6]."""
+    return list(CANONICAL_7_ORBIT_REPRESENTATIVES)
+
 
 def certify_lagrangian_dual_bound_exact(
     A: np.ndarray,
@@ -196,6 +228,7 @@ class PlannerConfig:
     max_eval_horizon: int = 575
     solver_max_iters: int = 15
     apply_conservative_shrinkage: bool = True
+    use_canonical_7_orbits: bool = True
 
     def __post_init__(self) -> None:
         if len(self.workload_weights) != 4:
@@ -872,9 +905,22 @@ class JointCalendarPlanner:
         best_tightest_h = 0
         best_slope = 0.0
 
+        unpinned_c = (
+            self.config.fixed_phi_7 is None
+            and self.config.fixed_phi_30 is None
+            and self.config.fixed_phi_90 is None
+        )
         p7_candidates = [self.config.fixed_phi_7] if self.config.fixed_phi_7 is not None else [0]
         p30_candidates = [self.config.fixed_phi_30] if self.config.fixed_phi_30 is not None else range(7)
-        p90_candidates = [self.config.fixed_phi_90] if self.config.fixed_phi_90 is not None else range(30)
+        if self.config.fixed_phi_90 is not None:
+            p90_candidates = [self.config.fixed_phi_90]
+        elif unpinned_c and self.config.use_canonical_7_orbits:
+            # By CRT (gcd(7, 30) = 1), shifting by delta = (120*p7 + 91*p90) mod 210 maps any
+            # (p7, p30, p90) in Z_7 x Z_7 x Z_30 to (0, (p30 - p7) mod 7, 0) with an identical
+            # multiset of 210 start-day intersection profiles. Thus p90 = 0 suffices.
+            p90_candidates = [0]
+        else:
+            p90_candidates = range(30)
 
         for p7 in p7_candidates:
             for p30 in p30_candidates:
@@ -955,9 +1001,22 @@ class JointCalendarPlanner:
         t0 = time.time()
         c = self._effective_weights()
 
+        unpinned_c = (
+            self.config.fixed_phi_7 is None
+            and self.config.fixed_phi_30 is None
+            and self.config.fixed_phi_90 is None
+        )
         p7_candidates = [self.config.fixed_phi_7] if self.config.fixed_phi_7 is not None else [0]
         p30_candidates = [self.config.fixed_phi_30] if self.config.fixed_phi_30 is not None else range(7)
-        p90_candidates = [self.config.fixed_phi_90] if self.config.fixed_phi_90 is not None else range(30)
+        if self.config.fixed_phi_90 is not None:
+            p90_candidates = [self.config.fixed_phi_90]
+        elif unpinned_c and self.config.use_canonical_7_orbits:
+            # By CRT (gcd(7, 30) = 1), shifting by delta = (120*p7 + 91*p90) mod 210 maps any
+            # (p7, p30, p90) in Z_7 x Z_7 x Z_30 to (0, (p30 - p7) mod 7, 0) with an identical
+            # multiset of 210 start-day intersection profiles. Thus p90 = 0 suffices.
+            p90_candidates = [0]
+        else:
+            p90_candidates = range(30)
 
         phases_attempted = 0
         phases_converged = 0
@@ -1092,6 +1151,12 @@ class JointCalendarPlanner:
 
         phase_summary = {
             "total_phases": phases_attempted,
+            "canonical_orbits_total": 7 if unpinned else phases_attempted,
+            "use_canonical_7_orbits": bool(unpinned and self.config.use_canonical_7_orbits),
+            "orbit_multiplicity_in_210_slice": 30 if (unpinned and self.config.use_canonical_7_orbits) else 1,
+            "orbit_size_in_1470_space": 210 if (unpinned and self.config.use_canonical_7_orbits) else 1,
+            "expanded_210_slice_phases": 210 if unpinned else phases_attempted,
+            "full_1470_phase_space": 1470 if unpinned else phases_attempted,
             "certified_phases": certified_phases,
             "infeasible_proved_phases": infeasible_proved_phases,
             "uncertified_phases": uncertified_count,

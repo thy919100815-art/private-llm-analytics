@@ -1,154 +1,355 @@
-\begin{thebibliography}{10}
+%%% -*-BibTeX-*-
+%%% Do NOT edit. File created by BibTeX with style
+%%% ACM-Reference-Format-Journals [18-Jan-2012].
 
-\bibitem{amin2019bounding}
-K.~Amin, A.~Kulesza, A.~M. Medina, and S.~Vassilvitskii.
-\newblock Bounding user contributions: A bias-variance trade-off in
-  differential privacy.
-\newblock In {\em Proceedings of the 36th International Conference on Machine
-  Learning (ICML)}, volume~97, pages 263--271, 2019.
-\newblock arXiv:1902.07502.
+\begin{thebibliography}{21}
 
-\bibitem{bolot2013decayed}
-J.~Bolot, N.~Fawaz, S.~Muthukrishnan, A.~Nikolov, and N.~Taft.
-\newblock Private decayed predicate sums on streams.
-\newblock In {\em Proceedings of the 16th International Conference on Database
-  Theory (ICDT)}, pages 284--295, 2013.
+%%% ====================================================================
+%%% NOTE TO THE USER: you can override these defaults by providing
+%%% customized versions of any of these macros before the \bibliography
+%%% command.  Each of them MUST provide its own final punctuation,
+%%% except for \shownote{}, \showDOI{}, and \showURL{}.  The latter two
+%%% do not use final punctuation, in order to avoid confusing it with
+%%% the Web address.
+%%%
+%%% To suppress output of a particular field, define its macro to expand
+%%% to an empty string, or better, \unskip, like this:
+%%%
+%%% \newcommand{\showDOI}[1]{\unskip}   % LaTeX syntax
+%%%
+%%% \def \showDOI #1{\unskip}           % plain TeX syntax
+%%%
+%%% ====================================================================
 
-\bibitem{bun2016concentrated}
-M.~Bun and T.~Steinke.
-\newblock Concentrated differential privacy: Simplifications, extensions, and
-  lower bounds.
-\newblock In {\em Proceedings of the 14th Theory of Cryptography Conference
-  (TCC)}, pages 635--658, 2016.
-\newblock arXiv:1605.02065.
+\ifx \showCODEN    \undefined \def \showCODEN     #1{\unskip}     \fi
+\ifx \showDOI      \undefined \def \showDOI       #1{#1}\fi
+\ifx \showISBNx    \undefined \def \showISBNx     #1{\unskip}     \fi
+\ifx \showISBNxiii \undefined \def \showISBNxiii  #1{\unskip}     \fi
+\ifx \showISSN     \undefined \def \showISSN      #1{\unskip}     \fi
+\ifx \showLCCN     \undefined \def \showLCCN      #1{\unskip}     \fi
+\ifx \shownote     \undefined \def \shownote      #1{#1}          \fi
+\ifx \showarticletitle \undefined \def \showarticletitle #1{#1}   \fi
+\ifx \showURL      \undefined \def \showURL       {\relax}        \fi
+% The following commands are used for tagged output and should be
+% invisible to TeX
+\providecommand\bibfield[2]{#2}
+\providecommand\bibinfo[2]{#2}
+\providecommand\natexlab[1]{#1}
+\providecommand\showeprint[2][]{arXiv:#2}
 
-\bibitem{canonne2020discrete}
-C.~L. Canonne, G.~Kamath, and T.~Steinke.
-\newblock The discrete {G}aussian for differential privacy.
-\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
-  volume~33, pages 15676--15688, 2020.
-\newblock arXiv:2004.00010.
+\bibitem[\protect\citeauthoryear{Amin, Kulesza, Medina, and Vassilvitskii}{Amin
+  et~al\mbox{.}}{2019}]%
+        {amin2019bounding}
+\bibfield{author}{\bibinfo{person}{Kareem Amin}, \bibinfo{person}{Alex
+  Kulesza}, \bibinfo{person}{Andr{\'e}s~Mu{\~n}oz Medina}, {and}
+  \bibinfo{person}{Sergei Vassilvitskii}.} \bibinfo{year}{2019}\natexlab{}.
+\newblock \showarticletitle{Bounding User Contributions: A Bias-Variance
+  Trade-off in Differential Privacy}. In \bibinfo{booktitle}{\emph{Proceedings
+  of the 36th International Conference on Machine Learning (ICML)}},
+  Vol.~\bibinfo{volume}{97}. \bibinfo{pages}{263--271}.
+\newblock
+\newblock
+\shownote{arXiv:1902.07502.}
 
-\bibitem{chan2011private}
-T.-H.~H. Chan, E.~Shi, and D.~Song.
-\newblock Private and continual release of statistics.
-\newblock {\em ACM Transactions on Information and System Security (TISSEC)},
-  14(3):26:1--26:24, 2011.
 
-\bibitem{choquette2023banded}
-C.~A. Choquette-Choo, A.~Ganesh, R.~McKenna, H.~B. McMahan, K.~Rush, A.~G.
-  Thakurta, and Z.~Xu.
-\newblock (amplified) banded matrix factorization: A unified approach to
-  private training.
-\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
-  volume~36, 2023.
-\newblock arXiv:2306.08153.
+\bibitem[\protect\citeauthoryear{Bolot, Fawaz, Muthukrishnan, Nikolov, and
+  Taft}{Bolot et~al\mbox{.}}{2013}]%
+        {bolot2013decayed}
+\bibfield{author}{\bibinfo{person}{Jean Bolot}, \bibinfo{person}{Nadia Fawaz},
+  \bibinfo{person}{S. Muthukrishnan}, \bibinfo{person}{Aleksandar Nikolov},
+  {and} \bibinfo{person}{Nina Taft}.} \bibinfo{year}{2013}\natexlab{}.
+\newblock \showarticletitle{Private Decayed Predicate Sums on Streams}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 16th International Conference on
+  Database Theory (ICDT)}}. \bibinfo{pages}{284--295}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/2448496.2448530}
+\showDOI{\tempurl}
 
-\bibitem{choquette2023multiepoch}
-C.~A. Choquette-Choo, H.~B. McMahan, K.~Rush, and A.~Thakurta.
-\newblock Multi-epoch matrix factorization mechanisms for private machine
-  learning.
-\newblock In {\em Proceedings of the 40th International Conference on Machine
-  Learning (ICML)}, volume 202, pages 5924--5963, 2023.
-\newblock arXiv:2211.06530.
 
-\bibitem{cummings2018growing}
-R.~Cummings, S.~Krehbiel, K.~A. Lai, and U.~Tantipongpipat.
-\newblock Differential privacy for growing databases.
-\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
-  volume~31, 2018.
-\newblock arXiv:1803.06416.
+\bibitem[\protect\citeauthoryear{Bun and Steinke}{Bun and Steinke}{2016}]%
+        {bun2016concentrated}
+\bibfield{author}{\bibinfo{person}{Mark Bun} {and} \bibinfo{person}{Thomas
+  Steinke}.} \bibinfo{year}{2016}\natexlab{}.
+\newblock \showarticletitle{Concentrated Differential Privacy: Simplifications,
+  Extensions, and Lower Bounds}. In \bibinfo{booktitle}{\emph{Proceedings of
+  the 14th Theory of Cryptography Conference (TCC)}}.
+  \bibinfo{pages}{635--658}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/978-3-662-53641-4_24}
+\showDOI{\tempurl}
+\newblock
+\shownote{arXiv:1605.02065.}
 
-\bibitem{denisov2022improved}
-S.~Denisov, H.~B. McMahan, K.~Rush, A.~Smith, and A.~G. Thakurta.
-\newblock Improved differential privacy for {SGD} via optimal private linear
-  operators on adaptive streams.
-\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
-  volume~35, pages 5910--5924, 2022.
-\newblock arXiv:2202.08312.
 
-\bibitem{dwork2006calibrating}
-C.~Dwork, F.~McSherry, K.~Nissim, and A.~Smith.
-\newblock Calibrating noise to sensitivity in private data analysis.
-\newblock In {\em Proceedings of the 3rd Theory of Cryptography Conference
-  (TCC)}, pages 265--284, 2006.
+\bibitem[\protect\citeauthoryear{Chan, Shi, and Song}{Chan
+  et~al\mbox{.}}{2011}]%
+        {chan2011private}
+\bibfield{author}{\bibinfo{person}{T.-H.~Hubert Chan}, \bibinfo{person}{Elaine
+  Shi}, {and} \bibinfo{person}{Dawn Song}.} \bibinfo{year}{2011}\natexlab{}.
+\newblock \showarticletitle{Private and Continual Release of Statistics}.
+\newblock \bibinfo{journal}{\emph{ACM Transactions on Information and System
+  Security (TISSEC)}} \bibinfo{volume}{14}, \bibinfo{number}{3}
+  (\bibinfo{year}{2011}), \bibinfo{pages}{26:1--26:24}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/2043621.2043626}
+\showDOI{\tempurl}
 
-\bibitem{dwork2010continual}
-C.~Dwork, M.~Naor, T.~Pitassi, and G.~N. Rothblum.
-\newblock Differential privacy under continual observation.
-\newblock In {\em Proceedings of the 42nd ACM Symposium on Theory of Computing
-  (STOC)}, pages 715--724, 2010.
 
-\bibitem{dwork2014algorithmic}
-C.~Dwork and A.~Roth.
-\newblock The algorithmic foundations of differential privacy.
-\newblock {\em Foundations and Trends in Theoretical Computer Science},
-  9(3--4):211--407, 2014.
+\bibitem[\protect\citeauthoryear{Choquette-Choo, Ganesh, McKenna, McMahan,
+  Rush, Thakurta, and Xu}{Choquette-Choo et~al\mbox{.}}{2023a}]%
+        {choquette2023banded}
+\bibfield{author}{\bibinfo{person}{Christopher~A. Choquette-Choo},
+  \bibinfo{person}{Arun Ganesh}, \bibinfo{person}{Ryan McKenna},
+  \bibinfo{person}{H.~Brendan McMahan}, \bibinfo{person}{Keith Rush},
+  \bibinfo{person}{Abhradeep~Guha Thakurta}, {and} \bibinfo{person}{Zheng Xu}.}
+  \bibinfo{year}{2023}\natexlab{a}.
+\newblock \showarticletitle{(Amplified) Banded Matrix Factorization: A Unified
+  Approach to Private Training}. In \bibinfo{booktitle}{\emph{Advances in
+  Neural Information Processing Systems (NeurIPS)}}, Vol.~\bibinfo{volume}{36}.
+\newblock
+\newblock
+\shownote{arXiv:2306.08153.}
 
-\bibitem{epasto2023frequency}
-A.~Epasto, J.~Mao, A.~M. Medina, V.~Mirrokni, S.~Vassilvitskii, and P.~Zhong.
-\newblock Differentially private continual releases of streaming frequency
-  moment estimations.
-\newblock In {\em 14th Innovations in Theoretical Computer Science Conference
-  (ITCS)}, volume 251, pages 48:1--48:24, 2023.
-\newblock arXiv:2301.05605.
 
-\bibitem{fichtenberger2023constant}
-H.~Fichtenberger, M.~Henzinger, and J.~Upadhyay.
-\newblock Constant matters: Fine-grained error bound on differentially private
-  continual observation.
-\newblock In {\em Proceedings of the 40th International Conference on Machine
-  Learning (ICML)}, volume 202, pages 10072--10092, 2023.
-\newblock arXiv:2202.11205.
+\bibitem[\protect\citeauthoryear{Choquette-Choo, McMahan, Rush, and
+  Thakurta}{Choquette-Choo et~al\mbox{.}}{2023b}]%
+        {choquette2023multiepoch}
+\bibfield{author}{\bibinfo{person}{Christopher~A. Choquette-Choo},
+  \bibinfo{person}{H.~Brendan McMahan}, \bibinfo{person}{Keith Rush}, {and}
+  \bibinfo{person}{Abhradeep Thakurta}.} \bibinfo{year}{2023}\natexlab{b}.
+\newblock \showarticletitle{Multi-Epoch Matrix Factorization Mechanisms for
+  Private Machine Learning}. In \bibinfo{booktitle}{\emph{Proceedings of the
+  40th International Conference on Machine Learning (ICML)}},
+  Vol.~\bibinfo{volume}{202}. \bibinfo{pages}{5924--5963}.
+\newblock
+\newblock
+\shownote{arXiv:2211.06530.}
 
-\bibitem{ghazi2023distinct}
-B.~Ghazi, R.~Kumar, P.~Manurangsi, and J.~Nelson.
-\newblock Private counting of distinct and $k$-occurring items in time windows.
-\newblock In {\em 14th Innovations in Theoretical Computer Science Conference
-  (ITCS)}, volume 251, pages 55:1--55:24, 2023.
-\newblock arXiv:2211.11718.
 
-\bibitem{henzinger2024group}
-M.~Henzinger and J.~Upadhyay.
-\newblock Improved differentially private continual observation using group
-  algebra.
-\newblock {\em arXiv preprint arXiv:2412.02840}, 2024.
+\bibitem[\protect\citeauthoryear{Cummings, Krehbiel, Lai, and
+  Tantipongpipat}{Cummings et~al\mbox{.}}{2018}]%
+        {cummings2018growing}
+\bibfield{author}{\bibinfo{person}{Rachel Cummings}, \bibinfo{person}{Sara
+  Krehbiel}, \bibinfo{person}{Kevin~A. Lai}, {and} \bibinfo{person}{Uthaipon
+  Tantipongpipat}.} \bibinfo{year}{2018}\natexlab{}.
+\newblock \showarticletitle{Differential Privacy for Growing Databases}. In
+  \bibinfo{booktitle}{\emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}}, Vol.~\bibinfo{volume}{31}.
+\newblock
+\newblock
+\shownote{arXiv:1803.06416.}
 
-\bibitem{honaker2015efficient}
-J.~Honaker.
-\newblock Efficient use of differentially private binary trees.
-\newblock Technical report, Harvard University Privacy Tools Project, 2015.
 
-\bibitem{jain2023turnstile}
-P.~Jain, I.~Kalemaj, S.~Raskhodnikova, S.~Sivakumar, and A.~D. Smith.
-\newblock Counting distinct elements in the turnstile model with differential
-  privacy under continual observation.
-\newblock In {\em Advances in Neural Information Processing Systems (NeurIPS)},
-  volume~36, 2023.
-\newblock arXiv:2306.06723.
+\bibitem[\protect\citeauthoryear{Denisov, McMahan, Rush, Smith, and
+  Thakurta}{Denisov et~al\mbox{.}}{2022}]%
+        {denisov2022improved}
+\bibfield{author}{\bibinfo{person}{Sergey Denisov}, \bibinfo{person}{H.~Brendan
+  McMahan}, \bibinfo{person}{Keith Rush}, \bibinfo{person}{Adam Smith}, {and}
+  \bibinfo{person}{Abhradeep~Guha Thakurta}.} \bibinfo{year}{2022}\natexlab{}.
+\newblock \showarticletitle{Improved Differential Privacy for {SGD} via Optimal
+  Private Linear Operators on Adaptive Streams}. In
+  \bibinfo{booktitle}{\emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}}, Vol.~\bibinfo{volume}{35}. \bibinfo{pages}{5910--5924}.
+\newblock
+\newblock
+\shownote{arXiv:2202.08312.}
 
-\bibitem{kellaris2014wevent}
-G.~Kellaris, S.~Papadopoulos, X.~Xiao, and D.~Papadias.
-\newblock Differentially private event sequences over infinite streams.
-\newblock {\em Proceedings of the VLDB Endowment (PVLDB)}, 7(12):1155--1166,
-  2014.
 
-\bibitem{li2015matrix}
-C.~Li, G.~Miklau, M.~Hay, A.~McGregor, and V.~Rastogi.
-\newblock The matrix mechanism: Optimizing linear counting queries under
-  differential privacy.
-\newblock {\em The VLDB Journal}, 24(6):757--781, 2015.
+\bibitem[\protect\citeauthoryear{Dwork, McSherry, Nissim, and Smith}{Dwork
+  et~al\mbox{.}}{2006}]%
+        {dwork2006calibrating}
+\bibfield{author}{\bibinfo{person}{Cynthia Dwork}, \bibinfo{person}{Frank
+  McSherry}, \bibinfo{person}{Kobbi Nissim}, {and} \bibinfo{person}{Adam
+  Smith}.} \bibinfo{year}{2006}\natexlab{}.
+\newblock \showarticletitle{Calibrating Noise to Sensitivity in Private Data
+  Analysis}. In \bibinfo{booktitle}{\emph{Proceedings of the 3rd Theory of
+  Cryptography Conference (TCC)}}. \bibinfo{pages}{265--284}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/11681878_14}
+\showDOI{\tempurl}
 
-\bibitem{mcmahan2025blt}
-H.~B. McMahan and K.~Pillutla.
-\newblock An inversion theorem for buffered linear {T}oeplitz ({BLT}) matrices
-  and applications to streaming differential privacy.
-\newblock {\em arXiv preprint arXiv:2504.21413}, 2025.
 
-\bibitem{mir2011panprivate}
-D.~J. Mir, S.~Muthukrishnan, A.~Nikolov, and R.~N. Wright.
-\newblock Pan-private algorithms via statistics on sketches.
-\newblock In {\em Proceedings of the 30th ACM SIGMOD-SIGACT-SIGART Symposium on
-  Principles of Database Systems (PODS)}, pages 37--48, 2011.
+\bibitem[\protect\citeauthoryear{Dwork, Naor, Pitassi, and Rothblum}{Dwork
+  et~al\mbox{.}}{2010}]%
+        {dwork2010continual}
+\bibfield{author}{\bibinfo{person}{Cynthia Dwork}, \bibinfo{person}{Moni Naor},
+  \bibinfo{person}{Toniann Pitassi}, {and} \bibinfo{person}{Guy~N. Rothblum}.}
+  \bibinfo{year}{2010}\natexlab{}.
+\newblock \showarticletitle{Differential Privacy Under Continual Observation}.
+  In \bibinfo{booktitle}{\emph{Proceedings of the 42nd ACM Symposium on Theory
+  of Computing (STOC)}}. \bibinfo{pages}{715--724}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/1806689.1806787}
+\showDOI{\tempurl}
+
+
+\bibitem[\protect\citeauthoryear{Epasto, Mao, Medina, Mirrokni, Vassilvitskii,
+  and Zhong}{Epasto et~al\mbox{.}}{2023}]%
+        {epasto2023frequency}
+\bibfield{author}{\bibinfo{person}{Alessandro Epasto}, \bibinfo{person}{Jieming
+  Mao}, \bibinfo{person}{Andr{\'e}s~Mu{\~n}oz Medina}, \bibinfo{person}{Vahab
+  Mirrokni}, \bibinfo{person}{Sergei Vassilvitskii}, {and}
+  \bibinfo{person}{Peilin Zhong}.} \bibinfo{year}{2023}\natexlab{}.
+\newblock \showarticletitle{Differentially Private Continual Releases of
+  Streaming Frequency Moment Estimations}. In \bibinfo{booktitle}{\emph{14th
+  Innovations in Theoretical Computer Science Conference (ITCS)}},
+  Vol.~\bibinfo{volume}{251}. \bibinfo{pages}{48:1--48:24}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.4230/LIPIcs.ITCS.2023.48}
+\showDOI{\tempurl}
+\newblock
+\shownote{arXiv:2301.05605.}
+
+
+\bibitem[\protect\citeauthoryear{Fichtenberger, Henzinger, and
+  Upadhyay}{Fichtenberger et~al\mbox{.}}{2023}]%
+        {fichtenberger2023constant}
+\bibfield{author}{\bibinfo{person}{Hendrik Fichtenberger},
+  \bibinfo{person}{Monika Henzinger}, {and} \bibinfo{person}{Jalaj Upadhyay}.}
+  \bibinfo{year}{2023}\natexlab{}.
+\newblock \showarticletitle{Constant Matters: Fine-Grained Error Bound on
+  Differentially Private Continual Observation}. In
+  \bibinfo{booktitle}{\emph{Proceedings of the 40th International Conference on
+  Machine Learning (ICML)}}, Vol.~\bibinfo{volume}{202}.
+  \bibinfo{pages}{10072--10092}.
+\newblock
+\newblock
+\shownote{arXiv:2202.11205.}
+
+
+\bibitem[\protect\citeauthoryear{Ghazi, Kumar, Manurangsi, and Nelson}{Ghazi
+  et~al\mbox{.}}{2023}]%
+        {ghazi2023distinct}
+\bibfield{author}{\bibinfo{person}{Badih Ghazi}, \bibinfo{person}{Ravi Kumar},
+  \bibinfo{person}{Pasin Manurangsi}, {and} \bibinfo{person}{Jelani Nelson}.}
+  \bibinfo{year}{2023}\natexlab{}.
+\newblock \showarticletitle{Private Counting of Distinct and $k$-Occurring
+  Items in Time Windows}. In \bibinfo{booktitle}{\emph{14th Innovations in
+  Theoretical Computer Science Conference (ITCS)}}, Vol.~\bibinfo{volume}{251}.
+  \bibinfo{pages}{55:1--55:24}.
+\newblock
+\newblock
+\shownote{arXiv:2211.11718.}
+
+
+\bibitem[\protect\citeauthoryear{Henzinger and Upadhyay}{Henzinger and
+  Upadhyay}{2024}]%
+        {henzinger2024group}
+\bibfield{author}{\bibinfo{person}{Monika Henzinger} {and}
+  \bibinfo{person}{Jalaj Upadhyay}.} \bibinfo{year}{2024}\natexlab{}.
+\newblock \showarticletitle{Improved Differentially Private Continual
+  Observation Using Group Algebra}.
+\newblock \bibinfo{journal}{\emph{arXiv preprint arXiv:2412.02840}}
+  (\bibinfo{year}{2024}).
+\newblock
+
+
+\bibitem[\protect\citeauthoryear{Honaker}{Honaker}{2015}]%
+        {honaker2015efficient}
+\bibfield{author}{\bibinfo{person}{James Honaker}.}
+  \bibinfo{year}{2015}\natexlab{}.
+\newblock \bibinfo{booktitle}{\emph{Efficient Use of Differentially Private
+  Binary Trees}}.
+\newblock \bibinfo{type}{{T}echnical {R}eport}. \bibinfo{institution}{Harvard
+  University Privacy Tools Project}.
+\newblock
+
+
+\bibitem[\protect\citeauthoryear{Jain, Kalemaj, Raskhodnikova, Sivakumar, and
+  Smith}{Jain et~al\mbox{.}}{2023}]%
+        {jain2023turnstile}
+\bibfield{author}{\bibinfo{person}{Palak Jain}, \bibinfo{person}{Iden Kalemaj},
+  \bibinfo{person}{Sofya Raskhodnikova}, \bibinfo{person}{Satchit Sivakumar},
+  {and} \bibinfo{person}{Adam~D. Smith}.} \bibinfo{year}{2023}\natexlab{}.
+\newblock \showarticletitle{Counting Distinct Elements in the Turnstile Model
+  with Differential Privacy under Continual Observation}. In
+  \bibinfo{booktitle}{\emph{Advances in Neural Information Processing Systems
+  (NeurIPS)}}, Vol.~\bibinfo{volume}{36}.
+\newblock
+\newblock
+\shownote{arXiv:2306.06723.}
+
+
+\bibitem[\protect\citeauthoryear{Kellaris, Papadopoulos, Xiao, and
+  Papadias}{Kellaris et~al\mbox{.}}{2014}]%
+        {kellaris2014wevent}
+\bibfield{author}{\bibinfo{person}{Georgios Kellaris}, \bibinfo{person}{Stavros
+  Papadopoulos}, \bibinfo{person}{Xiaokui Xiao}, {and}
+  \bibinfo{person}{Dimitris Papadias}.} \bibinfo{year}{2014}\natexlab{}.
+\newblock \showarticletitle{Differentially Private Event Sequences over
+  Infinite Streams}.
+\newblock \bibinfo{journal}{\emph{Proceedings of the VLDB Endowment (PVLDB)}}
+  \bibinfo{volume}{7}, \bibinfo{number}{12} (\bibinfo{year}{2014}),
+  \bibinfo{pages}{1155--1166}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.14778/2732977.2732989}
+\showDOI{\tempurl}
+
+
+\bibitem[\protect\citeauthoryear{Li, Miklau, Hay, McGregor, and Rastogi}{Li
+  et~al\mbox{.}}{2015}]%
+        {li2015matrix}
+\bibfield{author}{\bibinfo{person}{Chao Li}, \bibinfo{person}{Gerome Miklau},
+  \bibinfo{person}{Michael Hay}, \bibinfo{person}{Andrew McGregor}, {and}
+  \bibinfo{person}{Vibhor Rastogi}.} \bibinfo{year}{2015}\natexlab{}.
+\newblock \showarticletitle{The Matrix Mechanism: Optimizing Linear Counting
+  Queries Under Differential Privacy}.
+\newblock \bibinfo{journal}{\emph{The VLDB Journal}} \bibinfo{volume}{24},
+  \bibinfo{number}{6} (\bibinfo{year}{2015}), \bibinfo{pages}{757--781}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1007/s00778-015-0398-x}
+\showDOI{\tempurl}
+
+
+\bibitem[\protect\citeauthoryear{McMahan and Pillutla}{McMahan and
+  Pillutla}{2025}]%
+        {mcmahan2025blt}
+\bibfield{author}{\bibinfo{person}{H.~Brendan McMahan} {and}
+  \bibinfo{person}{Krishna Pillutla}.} \bibinfo{year}{2025}\natexlab{}.
+\newblock \showarticletitle{An Inversion Theorem for Buffered Linear {T}oeplitz
+  ({BLT}) Matrices and Applications to Streaming Differential Privacy}.
+\newblock \bibinfo{journal}{\emph{arXiv preprint arXiv:2504.21413}}
+  (\bibinfo{year}{2025}).
+\newblock
+
+
+\bibitem[\protect\citeauthoryear{Mir, Muthukrishnan, Nikolov, and Wright}{Mir
+  et~al\mbox{.}}{2011}]%
+        {mir2011panprivate}
+\bibfield{author}{\bibinfo{person}{Darakhshan~J. Mir}, \bibinfo{person}{S.
+  Muthukrishnan}, \bibinfo{person}{Aleksandar Nikolov}, {and}
+  \bibinfo{person}{Rebecca~N. Wright}.} \bibinfo{year}{2011}\natexlab{}.
+\newblock \showarticletitle{Pan-Private Algorithms via Statistics on Sketches}.
+  In \bibinfo{booktitle}{\emph{Proceedings of the 30th ACM SIGMOD-SIGACT-SIGART
+  Symposium on Principles of Database Systems (PODS)}}.
+  \bibinfo{pages}{37--48}.
+\newblock
+\urldef\tempurl%
+\url{https://doi.org/10.1145/1989284.1989290}
+\showDOI{\tempurl}
+
+
+\bibitem[\protect\citeauthoryear{Zhao, Ren, Hessel, Cardie, Choi, and
+  Deng}{Zhao et~al\mbox{.}}{2024}]%
+        {zhao2024wildchat}
+\bibfield{author}{\bibinfo{person}{Wenting Zhao}, \bibinfo{person}{Xiang Ren},
+  \bibinfo{person}{Jack Hessel}, \bibinfo{person}{Claire Cardie},
+  \bibinfo{person}{Yejin Choi}, {and} \bibinfo{person}{Yuntian Deng}.}
+  \bibinfo{year}{2024}\natexlab{}.
+\newblock \showarticletitle{{WildChat}: 1{M} {ChatGPT} Interaction Logs in the
+  Wild}. In \bibinfo{booktitle}{\emph{Proceedings of the Twelfth International
+  Conference on Learning Representations (ICLR)}}.
+\newblock
+\newblock
+\shownote{arXiv:2405.01470.}
+
 
 \end{thebibliography}
