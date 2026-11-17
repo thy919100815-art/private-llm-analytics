@@ -19,6 +19,7 @@ from private_llm_analytics.sdg_mh.calendar_accounting import (
     WEEK1_V2_CURVE,
 )
 from private_llm_analytics.sdg_mh.joint_planner import (
+    CANONICAL_7_ORBIT_REPRESENTATIVES,
     OPT_TIER_FEASIBLE_CERTIFIED,
     OPT_TIER_GLOBAL_PROVED,
     OPT_TIER_NEAR_GLOBAL_CERTIFIED,
@@ -26,7 +27,9 @@ from private_llm_analytics.sdg_mh.joint_planner import (
     JointCalendarPlanner,
     PlannerConfig,
     PlanningResult,
+    canonicalize_phase_orbit,
     certify_lagrangian_dual_bound_exact,
+    enumerate_canonical_phase_orbits,
 )
 from private_llm_analytics.sdg_mh.ledger import (
     PrivacyAdmissionError,
@@ -170,7 +173,10 @@ def test_distinct_heavy_shrinkage_certification_and_three_tier_flags():
             assert passed is True, f"{curve.name} {grp_name} commit failed: {msg}"
 
         assert plans["D_JointPlanning"].optimality_scope == "JOINT_EXHAUSTIVE_MIXED_CONVEX"
-        assert plans["D_JointPlanning"].phase_certification_summary["total_phases"] == 210
+        assert plans["D_JointPlanning"].phase_certification_summary["total_phases"] == 7
+        assert plans["D_JointPlanning"].phase_certification_summary["canonical_orbits_total"] == 7
+        assert plans["D_JointPlanning"].phase_certification_summary["expanded_210_slice_phases"] == 210
+        assert plans["D_JointPlanning"].phase_certification_summary["full_1470_phase_space"] == 1470
         assert plans["D_JointPlanning"].phase_certification_summary["all_phases_accounted_for"] is True
         assert plans["B_BudgetOnly"].optimality_scope == "FIXED_PHASE_CONVEX"
 
@@ -288,14 +294,16 @@ def test_shrinkage_violating_min_allocations_fails_closed():
 
 
 def test_primal_dual_bounds_across_all_workloads_and_zero_tol_commit():
-    """Verify post-shrinkage primal UB >= dual LB across all 210 phases, rel_gap <= 1e-6, and zero-tol ledger commit."""
+    """Verify post-shrinkage primal UB >= dual LB across all 7 canonical phase orbits, rel_gap <= 1e-6, and zero-tol ledger commit."""
     for curve in (WEEK1_V2_CURVE, ORIGINAL_PLANNER_CURVE):
         for wl in ((0.40, 0.25, 0.25, 0.10), (0.10, 0.40, 0.40, 0.10)):
             planner = JointCalendarPlanner(PlannerConfig(commitment=curve, workload_weights=wl))
             res_d = planner.plan_group_d()
             assert res_d.optimality_certification_tier == OPT_TIER_NEAR_GLOBAL_CERTIFIED
             assert res_d.is_math_global_optimal is False
-            assert res_d.phase_certification_summary["total_phases"] == 210
+            assert res_d.phase_certification_summary["total_phases"] == 7
+            assert res_d.phase_certification_summary["canonical_orbits_total"] == 7
+            assert res_d.phase_certification_summary["expanded_210_slice_phases"] == 210
             assert res_d.phase_certification_summary["uncertified_phases"] == 0
             assert res_d.primal_objective_certified >= res_d.dual_lower_bound > 0.0
             assert res_d.optimality_abs_gap >= 0.0
@@ -313,7 +321,7 @@ def test_uncertified_phase_downgrades_tier_to_feasible_certified(monkeypatch):
     orig_solve = planner.solve_budget_for_phase
 
     def flaky_solve(phi, initial_v=None):
-        if phi == (0, 2, 10):
+        if phi in ((0, 2, 0), (0, 2, 10)):
             return False, None, float("inf"), {"status": "SIMULATED_STALL"}
         return orig_solve(phi, initial_v=initial_v)
 
@@ -392,4 +400,99 @@ def test_naive_float64_dual_deduction_fails_cancellation_counterexample():
     res_b = planner.plan_group_b()
     assert res_b.diagnostics.get("dual_cert_method") == "DECIMAL100_DIRECTED_ROUNDING"
     assert res_b.dual_lower_bound <= res_b.primal_objective_certified
+
+
+def test_p0a_p0b_commitment_curve_exact_params_and_drift_bounds():
+    """Verify exact source-code commitment parameters (P0-A, P0-B) and unified epsilon drift bounds."""
+    # P0-B: Verify exact source-code knots for ORIGINAL_PLANNER_CURVE and WEEK1_V2_CURVE
+    assert ORIGINAL_PLANNER_CURVE.horizons == (1, 7, 30, 90, 365)
+    assert ORIGINAL_PLANNER_CURVE.epsilons == (0.90, 1.08, 1.49, 2.24, 4.39)
+    assert WEEK1_V2_CURVE.horizons == (1, 7, 30, 90, 365)
+    assert WEEK1_V2_CURVE.epsilons == (1.0, 1.2, 1.5, 2.25, 4.4)
+
+    # Check exact rhos, beta_tail, and a_tail
+    assert ORIGINAL_PLANNER_CURVE.rhos[0] == pytest.approx(0.01419861, rel=1e-6)
+    assert ORIGINAL_PLANNER_CURVE.rhos[3] == pytest.approx(0.08410616, rel=1e-6)
+    assert ORIGINAL_PLANNER_CURVE.rhos[4] == pytest.approx(0.30235637, rel=1e-6)
+    assert ORIGINAL_PLANNER_CURVE.beta_tail == pytest.approx(0.00079364, rel=1e-5)
+    assert ORIGINAL_PLANNER_CURVE.a_tail == pytest.approx(0.01267882, rel=1e-5)
+
+    assert WEEK1_V2_CURVE.rhos[0] == pytest.approx(0.01746890, rel=1e-6)
+    assert WEEK1_V2_CURVE.rhos[3] == pytest.approx(0.08483138, rel=1e-6)
+    assert WEEK1_V2_CURVE.rhos[4] == pytest.approx(0.30364628, rel=1e-6)
+    assert WEEK1_V2_CURVE.beta_tail == pytest.approx(0.00079569, rel=1e-5)
+    assert WEEK1_V2_CURVE.a_tail == pytest.approx(0.01321923, rel=1e-5)
+
+    # P0-A: Verify commitment_curve_drift_summary across all curves and horizons
+    summary = UnifiedPrivacyLedger.commitment_curve_drift_summary()
+    assert summary["global_min_curve"] == "Original_Planner"
+    assert summary["global_min_horizon_h"] == 1
+    assert summary["global_min_rho"] == pytest.approx(0.01419861, rel=1e-6)
+    assert summary["global_max_epsilon_drift"] == pytest.approx(3.219325e-11, rel=1e-5)
+    assert summary["per_curve"]["Week1_v2"]["min_rho"] == pytest.approx(0.01746890, rel=1e-6)
+    assert summary["per_curve"]["Week1_v2"]["max_epsilon_drift"] == pytest.approx(2.912229e-11, rel=1e-5)
+    assert summary["additive_subchannel_max_epsilon_drift"] == pytest.approx(2.147065e-10, rel=1e-5)
+    assert summary["solver_box_floor_max_epsilon_drift"] == pytest.approx(3.718365e-9, rel=1e-5)
+    assert summary["universal_nonsingular_root_bound"] == pytest.approx(7.433845e-6, rel=1e-5)
+
+
+def test_p0c_crt_7_canonical_orbits_partition_1470_phases_and_match_210_slice():
+    """Verify CRT bijection partitions 1,470 phases into 7 orbits of size 210 and matches 210-tuple search."""
+    orbits = enumerate_canonical_phase_orbits()
+    assert len(orbits) == 7
+    assert orbits == list(CANONICAL_7_ORBIT_REPRESENTATIVES)
+
+    # 1. Partition all 1,470 phases in Z_7 x Z_7 x Z_30 and all 210 phases in {0} x Z_7 x Z_30
+    orbit_counts_1470 = {rep: 0 for rep in orbits}
+    orbit_counts_210 = {rep: 0 for rep in orbits}
+    for p7 in range(7):
+        for p30 in range(7):
+            for p90 in range(30):
+                rep, delta = canonicalize_phase_orbit((p7, p30, p90))
+                assert 0 <= delta < 210
+                assert (p7 - delta) % 7 == rep[0] == 0
+                assert (p30 - delta) % 7 == rep[1] == (p30 - p7) % 7
+                assert (p90 - delta) % 30 == rep[2] == 0
+                orbit_counts_1470[rep] += 1
+                if p7 == 0:
+                    orbit_counts_210[rep] += 1
+
+    assert all(cnt == 210 for cnt in orbit_counts_1470.values())
+    assert all(cnt == 30 for cnt in orbit_counts_210.values())
+
+    # 2. Verify 7-orbit search and 210-slice search yield identical solutions across all 4 (curve, workload) pairs
+    for curve in (WEEK1_V2_CURVE, ORIGINAL_PLANNER_CURVE):
+        for wl in ((0.40, 0.25, 0.25, 0.10), (0.10, 0.40, 0.40, 0.10)):
+            p_7 = JointCalendarPlanner(
+                PlannerConfig(commitment=curve, workload_weights=wl, use_canonical_7_orbits=True)
+            )
+            p_210 = JointCalendarPlanner(
+                PlannerConfig(commitment=curve, workload_weights=wl, use_canonical_7_orbits=False)
+            )
+            res_c7 = p_7.plan_group_c()
+            res_c210 = p_210.plan_group_c()
+            assert res_c7.min_slack == pytest.approx(res_c210.min_slack, abs=1e-15)
+            assert canonicalize_phase_orbit(res_c7.phases)[0] == canonicalize_phase_orbit(res_c210.phases)[0]
+
+            res_d7 = p_7.plan_group_d()
+            res_d210 = p_210.plan_group_d()
+            assert res_d7.phase_certification_summary["total_phases"] == 7
+            assert res_d210.phase_certification_summary["total_phases"] == 210
+            assert res_d7.phases == res_d210.phases
+            assert res_d7.daily_d == pytest.approx(res_d210.daily_d, abs=1e-15)
+            assert res_d7.distinct_costs == pytest.approx(res_d210.distinct_costs, abs=1e-15)
+            assert res_d7.primal_objective_certified == pytest.approx(res_d210.primal_objective_certified, abs=1e-12)
+            assert res_d7.dual_lower_bound == pytest.approx(res_d210.dual_lower_bound, abs=1e-12)
+
+
+def test_p0c_pinned_phase_breaks_z210_orbit_symmetry():
+    """Verify pinning any phase coordinate disables full Z_210 orbit collapse and honors pinned coordinates."""
+    cfg_p90 = PlannerConfig(commitment=WEEK1_V2_CURVE, fixed_phi_90=17, use_canonical_7_orbits=True)
+    planner_p90 = JointCalendarPlanner(cfg_p90)
+    res_d = planner_p90.plan_group_d()
+    assert res_d.phases[2] == 17
+    assert res_d.optimality_scope == "CONSTRAINED_PHASE_CONVEX"
+    assert res_d.phase_certification_summary["use_canonical_7_orbits"] is False
+    assert res_d.phase_certification_summary["total_phases"] == 7  # 1 * 7 * 1 candidates
+
 

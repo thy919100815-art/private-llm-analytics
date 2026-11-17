@@ -1,72 +1,48 @@
-# Phase 3: Independent Two-Pass Read-Only PVLDB 2027 Reviewer Risk Report
+# Post-Revision Mathematical, Statistical, and Formatting Audit Report (PVLDB 2027)
 
-- **Reviewed Manuscript**: `docs/pvlbd_2027_paper/main.tex` and compiled `docs/pvlbd_2027_paper/main.pdf` (12 pages, two-column PVLDB format).
-- **Review Protocol**: Strictly **read-only** two-pass audit executed *after* compiling `main.pdf`, without modifying `main.tex` during or between the two passes so that both reviewers' independent findings can be compared directly.
-
----
-
-## 1. Pass 1: Mathematical & Theoretical Correctness Review (Reviewer #1 — Theory & Privacy)
-
-### Overall Assessment (Pass 1)
-The mathematical formulation of Multi-Horizon User-Time zCDP, the closed-form data-window intersection count $n_f(s, h; \phi_f)$, the 210-day periodic shift identity, and the concavity-free 575-day finite-to-infinite reduction theorem are rigorous and self-contained. In particular, identifying that the canonical commitment curves (`Original_Planner` and `Week1_v2`) are *non-concave* in zCDP space (Proposition 1) and proving Theorem 3 using only the $h \ge 365$ affine tail eliminates a major mathematical flaw that would have invalidated concavity-based horizon reductions. Furthermore, replacing heuristic IEEE-754 `(1 - 1e-14)` dual deductions with 100-digit directed-rounding enclosure arithmetic (`DECIMAL100_DIRECTED_ROUNDING`, Theorem 4) and strictly separating `NEAR_GLOBAL_OPTIMAL_CERTIFIED` from symbolic `GLOBAL_OPTIMAL_PROVED` reflects high mathematical integrity.
-
-### Categorized Findings (Pass 1)
-
-#### Critical Issues (0)
-- *None.* All theorem statements match their proofs, all assumptions (Assumption 1 A1–A3) are explicitly stated, and no unproved heuristic is claimed as a formal theorem.
-
-#### Major Issues (3)
-- **[M1.1] Table 1 (`tab:curves`) Anchor Value Discrepancy on `Week1_v2` at $h \in \{90, 365\}$**:
-  - *Location*: Section 2.2, Table 1 (lines 125–128 of `main.tex`).
-  - *Diagnosis*: The table body lists $\varepsilon(90) = 2.51 \mapsto \bar{\rho}(90) = 0.076306$ and $\varepsilon(365) = 4.41 \mapsto \bar{\rho}(365) = 0.295121$, while a footnote explains that the operational `WEEK1_V2_CURVE` code object uses $\bar{\rho}(90) = 0.084831$ and $\bar{\rho}(365) = 0.303646$ (yielding secant slopes $0.000770$ and $0.000796$). Note that both sets of values are non-concave, so Proposition 1 holds under either parameterization, but presenting two slightly different numerical anchor pairs in the same table can confuse a careful theory referee.
-  - *Action for Next Revision*: Display the exact operational `WEEK1_V2_CURVE` $\bar{\rho}(h)$ values directly in the primary row of Table 1 and state their corresponding $\varepsilon(h)$ values ($2.660$ and $4.477$ at $\delta=10^{-6}$).
-- **[M1.2] Conditional Scope of `DECIMAL100_DIRECTED_ROUNDING` Relative to `float64` Curve Inputs**:
-  - *Location*: Section 5.2, Theorem 4 & Paragraph "Eliminating IEEE-754 Cancellation" (lines 321–342).
-  - *Diagnosis*: `certify_lagrangian_dual_bound_exact()` converts the operational `float64` RHS array `b = self.rho_bars` via `Decimal.from_float(b[i])` (and lower-bounds rational $1/7, 1/30$ via `ROUND_FLOOR`). Thus, the 100-digit directed-rounding certificate is unconditional with respect to the *operational floating-point constraint system* enforced by `UnifiedPrivacyLedger`, rather than an interval enclosure of the transcendental map $\varepsilon \mapsto (\sqrt{\varepsilon + \ln(1/\delta)} - \sqrt{\ln(1/\delta)})^2$ from rational $\varepsilon$. While Section 8 (Limitation 4) and the v3 report state this condition, Theorem 4's surrounding text should state explicitly that $\mathbf{b}$ denotes the operational `float64` commitment vector.
-- **[M1.3] Mixed Add/Remove vs.\ Bounded-Replacement Sensitivity Convention in Equation (11)**:
-  - *Location*: Section 4.1, Equation (11) (lines 216–220).
-  - *Diagnosis*: The sensitivity bound $\Delta_{\text{distinct}}^2 = m + 2k = 5 + 2(3) = 11$ combines $m = 5$ (maximum $\ell_2^2$ change in service indicators when adding/removing a user) with $2k = 6$ (maximum $\ell_2^2$ change in $k$-task indicators when replacing $k$ tasks with $k$ disjoint tasks; under pure add/remove of a user, at most $k$ task counts change by $+1$, which would give $m + k = 8$). Hence $\Delta^2 = m + 2k = 11$ is a strictly conservative upper bound under add/remove adjacency and exact under task-replacement adjacency.
-  - *Action for Next Revision*: Add one sentence clarifying that $m + 2k$ covers worst-case replacement of a user's $k$-task set (and conservatively upper-bounds pure add/remove sensitivity $m + k = 8$).
-
-#### Minor Issues (3)
-- **[m1.1] Typographical Capitalization**: Section 3.2, line 194 reads `and Perturbs (\tilde{R}_t, \tilde{F}_t)` instead of `and perturbs`.
-- **[m1.2] Explicit Hypothesis $W_f \ge S_f$ in Theorem 2**: The proof of Theorem 2(2) (line 273) uses $\Delta_f(s) \le S_f - 1 \le W_f + h - 2$ for all $h \ge 1$, which relies on $W_f \ge S_f$ (satisfied by $(7,7), (30,7), (90,30)$). Including $W_f \ge S_f$ in Theorem 2's formal statement makes the theorem self-contained for arbitrary calendar families.
-- **[m1.3] LaTeX Wide-Table Overflow**: In `main.log`, Table 4 (`tab:baselines_v3`, lines 471–482) has an overfull `\hbox` of `257.56pt`, and Appendix Table 5 (`tab:traceability`) has `7–43pt` overfull `\texttt` entries. Wrapping Table 4 in `\resizebox{\textwidth}{!}{...}` and adding `\sloppy` or line breaks in Table 5 will eliminate all layout warnings.
+- **Repository**: `thy919100815-art/private-llm-analytics`
+- **Baseline Audited**: Draft PR #8 (`c8d3446`)
+- **Revised Branch**: `fix/pvlbd-2027-math-orbits-and-vldb-template`
+- **Audit Scope**: Post-revision verification of `P0-A`, `P0-B`, `P0-C`, `P0-D`, `P1`, and `P2`.
 
 ---
 
-## 2. Pass 2: Novelty, Experimental Fairness & PVLDB Systems Value Review (Reviewer #2 — Systems & Experiments)
+## 1. Summary of Issues Found in Baseline (`c8d3446`) and Post-Revision Status
 
-### Overall Assessment (Pass 2)
-This manuscript stands out for its statistical rigor and scientific honesty. Unlike many privacy systems papers that cherry-pick favorable query windows or use pseudo-replicated confidence intervals, this paper uses $K = 8$ independent longitudinal populations ($df = 7$) with 128-bit collision-free Common Random Numbers (CRN), applies Holm--Bonferroni and exact Wilcoxon tests, unifies post-processing ($\hat{R} = \max(0, \tilde{R}),\, \hat{F} = \min(\hat{R}, \max(0, \tilde{F}))$) across all competitive baselines, and evaluates `BudgetOnly` vs.\ `JointPlanning` on identical query request dates (`common_daily_*` and `common_sunday_*`). Most importantly, the paper transparently reports negative and non-significant findings: `30d` distinct MAPE is statistically non-significant ($p_{\text{holm}} = 1.000$), Sunday-anchored queries incur a $+3.0\text{d}$ staleness lag under $\phi_{30}=4$, `DistinctHeavy` trades $+0.38\%\text{--}+0.51\%$ higher daily additive RMSE, and `Tree-2l` has a $0.38\%$ lower mean RMSE than `SDG-MH` on 90d Requests due to clipping-bias convergence.
-
-### Categorized Findings (Pass 2)
-
-#### Critical Issues (0)
-- *None.* Prior art is properly credited (daily Gaussian and Cauchy--Schwarz splitting are attributed to classical literature), "No Epochs, No Expiry" is explicitly distinguished from constant lifetime privacy, and competitive baseline claims are strictly confined to the shared $[1, 420]$ additive workload.
-
-#### Major Issues (3)
-- **[M2.1] Synthetic-Only Telemetry in the 420-Day End-to-End Benchmark**:
-  - *Location*: Section 6.1–6.5.
-  - *Diagnosis*: While the 420-day synthetic generator models workforce turnover, weekday/weekend dips ($0.25\times$), seasonal waves, and heavy-tailed LogNormal request distributions across $N_0 = 2,000$ users, PVLDB reviewers strongly prefer seeing at least one real-world trace (e.g., the 845-day WildChat dataset or a production enterprise trace) evaluated through the exact same `JointCalendarPlanner` and `ReadOnlySealedQueryService` pipeline.
-- **[M2.2] Empirical Omission of Toeplitz / Matrix Factorization Baselines in Table 4**:
-  - *Location*: Section 6.5, Table 4 (`tab:baselines_v3`).
-  - *Diagnosis*: Sections 3.2 and 7 provide a sound theoretical explanation of why Toeplitz/banded matrix factorizations~\cite{denisov2022improved,fichtenberger2023constant,choquette2023banded} suffer cross-day sensitivity penalties under linear multi-horizon tails, and Table 4 includes `Tree-2l` and `Tree-U` with exact Honaker GLS estimation~\cite{honaker2015efficient} (which is itself a structured matrix mechanism on the dyadic tree). However, reviewers familiar with ICML/NeurIPS 2023–2025 streaming DP literature may still ask for an explicit lower-triangular Toeplitz baseline row in Table 4.
-- **[M2.3] Modest Empirical Magnitude of Phase Optimization (`D` vs.\ `B`) Relative to Budget Optimization (`B` vs.\ `A`)**:
-  - *Location*: Section 6.2–6.3, Tables 2 & 3.
-  - *Diagnosis*: Moving from naive uncalibrated/aligned Group A to budget-optimized Group B reduces workload objective $f^*$ by $\sim 30\%$, whereas moving from Group B ($\boldsymbol{\phi}=(0,0,0)$) to Joint Planning Group D ($\boldsymbol{\phi}=(0,4,0)$) reduces $f^*$ by $1.04\%\text{--}1.12\%$ on `DistinctHeavy` and $0\%$ on `Default`. While the $1.58\text{s}$ offline solve time of Group D is negligible (making Group D strictly "free" to run before deployment), reviewers may view phase shifting as a secondary refinement compared to continuous convex budget allocation.
-
-#### Minor Issues (2)
-- **[m2.1] Single-Process Execution Scope**: Section 2.1 and Section 8 note that `UnifiedPrivacyLedger` and `RollingDistinctState` are validated within a single-node process; distributed consensus across sharded ingestion workers is not evaluated.
-- **[m2.2] Fixed Top-$k$ Cap ($k=3$)**: Section 4.1 fixes $k=3$ tasks per user without an ablation over $k \in \{1, 3, 5, 10\}$ showing the sensitivity $\Delta^2 = m + 2k$ vs.\ truncation recall trade-off.
+| ID | Severity in `c8d3446` | Issue Description | Resolution in Current Revision | Post-Revision Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **P0-A** | **Critical** | `main.tex` Lemma 1 used `Original_Planner` $\bar{\rho}(1)=0.01419861$ ($\Delta\varepsilon \le 3.22\times 10^{-11}$) while Table 1 listed `Week1_v2` $\bar{\rho}(1)=0.008943$ without reconciling the global minimum across all curves and horizons. | Verified all source-code curves in `calendar_accounting.py`: `Original_Planner` $\bar{\rho}_{\min} = \bar{\rho}(1) = 0.01419861$ ($\Delta\varepsilon \le 3.2193 \times 10^{-11}$) and `Week1_v2` $\bar{\rho}_{\min} = \bar{\rho}(1) = 0.01746890$ ($\Delta\varepsilon \le 2.9122 \times 10^{-11}$). Added `commitment_curve_drift_summary()` in `ledger.py` and unified tangent + non-singular root bound in Lemma 2. | **RESOLVED (Verified by Unit Tests)** |
+| **P0-B** | **Critical** | `main.tex` Table 1 mixed obsolete Week-1 draft numbers ($\varepsilon=(0.70, 1.08, 1.49, 2.14, 4.29)$) in the `Week1_v2` main row with footnote secant slopes computed from actual code ($\varepsilon=(1.0, 1.2, 1.5, 2.25, 4.4)$), and Table 2 used hand-copied budget figures. | Rebuilt Table 2 (`\label{tab:commitments}`), Table 3 (`\label{tab:planner_benchmark}`), and Table 6 (`\label{tab:orbits_summary}`) directly from `calendar_accounting.py` and `JointCalendarPlanner` outputs. Zero contradiction between rows, footnotes, and code. | **RESOLVED (Verified by Unit Tests)** |
+| **P0-C** | **Critical** | Paper and `JointCalendarPlanner` claimed "210 canonical phase equivalence classes" by fixing only $\phi_7=0$ in $\mathbb{Z}_7 \times \mathbb{Z}_7 \times \mathbb{Z}_{30}$, overlooking that $\gcd(7,30)=1$ implies a $30\times$ redundancy under $\mathbb{Z}_{210}$. | Proved Proposition 1 via Orbit–Stabilizer and CRT ($\delta = (120\phi_7 + 91\phi_{90}) \bmod 210$): all $1{,}470$ phases partition into **7 canonical orbits of size 210** represented by $\{(0, (\phi_{30}-\phi_7)\bmod 7, 0)\}$. Updated `JointCalendarPlanner` (`use_canonical_7_orbits=True`), cutting Group D solve time by $19\times\text{--}23\times$ (`0.050s–0.081s`). Documented all 3 symmetry-breaking conditions. | **RESOLVED (Proved & Benchmarked)** |
+| **P0-D** | **Critical** | `main.tex` used `\documentclass[10pt,twocolumn]{article}` instead of the official 2027 VLDB template and had Overfull wide tables. | Migrated to official 2027 VLDB template (`acmart.cls` v2.19 + `pvldb.sty` v1.0 + `ACM-Reference-Format.bst` + `\vldbtopmatter`) with prominent single-blind author/affiliation placeholders. Compiled `main.pdf` is **9 pages total** with **0 LaTeX errors, 0 undefined citations, and 0 Overfull warnings**. | **RESOLVED (Compiled & Verified)** |
+| **P1-A** | **Major (Open Reviewer Risk)** | Main 420-day experiments use synthetic enterprise telemetry due to `DATA_APPROVAL.md` governance restriction; reviewers may ask for public real-world LLM log validation. | Explicitly documented in Section 6.1 of `main.tex` with a concrete, reproducible 420-day experimental protocol on public **WildChat-1M** (`zhao2024wildchat`). | **OPEN EXTERNAL BENCHMARK RISK (Protocol Specified)** |
+| **P1-B** | **Major (Open Reviewer Risk)** | Continual additive baselines (`Tree-2l`, `Tree-U`, `W-BD-30`) do not include multi-horizon $b$-banded / Toeplitz matrix factorization (`choquette2023banded`, `henzinger2024group`, `mcmahan2025blt`). | Explicitly documented in Table 1 and Section 6.2 of `main.tex` with a concrete $b$-banded lower-triangular factorization protocol calibrated to $\bar{\rho}_{\text{add}}(h)$ across $h \in [1, 575]$. | **OPEN EXTERNAL BENCHMARK RISK (Protocol Specified)** |
+| **P1-C** | **Minor (Open Reviewer Risk)** | Fixed $\ell_2$ clipping ($\Delta_2 = \sqrt{11}$) on multi-cell window distinct indicators causes $\approx -40\%$ negative clipping bias on 30d/90d windows, causing lower Gaussian variance in Group D to slightly increase unclipped Distinct30 MAPE ($+4.03\%$). | Fully explained analytically (via truncated normal expectation $\mathbb{E}[\max(0, Y)]$) and empirically in Section 5.2 and Table 4 without hiding negative results. | **TRANSPARENTLY DISCLOSED** |
 
 ---
 
-## 3. Side-by-Side Comparison of Pass 1 and Pass 2 Conclusions
+## 2. Post-Revision Audit Counts (Critical / Major / Minor)
 
-| Dimension | Pass 1 (Mathematical & Theoretical Audit) | Pass 2 (Novelty, Fairness & PVLDB Systems Audit) | Convergence & Readiness Verdict |
-|---|---|---|---|
-| **Critical Flaws** | **0** (All proofs valid; non-concavity handled via affine tail; `DECIMAL100` directed rounding sound) | **0** (No overclaiming of known primitives; negative/non-significant results fully disclosed) | **Ready**: Zero blocking mathematical or integrity defects |
-| **Primary Strengths** | Concavity-free 575d infinite reduction (Thm. 3); $5\times$ intersection counterexample (Thm. 1); 100-digit dual certificate (Thm. 4) | $K=8$ stratified CRN design ($df=7$); 128-bit collision-free seeds; same-query-date staleness separation; uniform post-processing | Strong alignment between theoretical guarantees and experimental protocol |
-| **Top Major Risks** | M1.1 (`Week1_v2` Table 1 footnote clarity); M1.2 (`float64` RHS condition in Thm. 4); M1.3 ($m+2k$ replacement vs. add/remove note) | M2.1 (Synthetic-only 420d evaluation); M2.2 (No Toeplitz row in Table 4); M2.3 ($1.04\%\text{--}1.12\%$ modest phase gain vs. Group B) | M1.1–M1.3 are 1-paragraph text clarifications; M2.1–M2.3 are inherent scope trade-offs transparently documented in Section 8 |
-| **Minor Polish Items** | m1.1 (`Perturbs` typo); m1.2 ($W_f \ge S_f$ in Thm. 2); m1.3 (Table 4/5 `\hbox` width) | m2.1 (Single-process scope); m2.2 (Fixed $k=3$ task cap) | Easily addressed in camera-ready formatting |
+- **Mathematical & Code-Consistency Critical Issues**: **0** (all `P0-A`, `P0-B`, `P0-C`, `P0-D` defects reproduced, proved, and resolved).
+- **Formatting & Template Critical/Minor Issues**: **0** (`acmart` + `pvldb.sty` v1.0 official 2027 VLDB template; 9 pages $\le 12$ pages; 0 Overfull boxes; 0 undefined citations).
+- **Open Experimental / Pre-Submission Risks (Major)**: **2**
+  1. Execution of the Section 6.1 public real-data replay protocol (WildChat-1M 420-day replay) if human reviewers require non-synthetic 420-day traces beyond the frozen benchmark suite;
+  2. Execution of the Section 6.2 $b$-banded / BLT matrix factorization baseline on the additive channel;
+  3. Completion of real single-blind author names and institutional affiliations in `\author{...}` / `\affiliation{...}` by the human authors prior to camera-ready/submission upload.
+
+> **Mandatory Scientific Integrity Disclaimer**:
+> 1. All audits in this repository are automated/agentic technical verifications and **do not constitute external independent human peer review**.
+> 2. Accordingly, we **do not declare unconditional "Submission Ready" status**: final PVLDB 2027 submission requires human author sign-off, completion of the single-blind author metadata placeholders in `main.tex`, and human judgment on whether to execute the WildChat-1M and $b$-banded MF protocols prior to submission.
+
+---
+
+## 3. Revision Diff Summary and Evidence Traceability Map
+
+| Deliverable / Claim | Source Code / Data Evidence | Test / Verification Script | Manuscript Location (`docs/pvlbd_2027_paper/main.tex`) |
+| :--- | :--- | :--- | :--- |
+| **P0-A**: Unified $\bar{\rho}_{\min}$ & $\varepsilon$-drift bound | `src/private_llm_analytics/sdg_mh/ledger.py` (`conservative_epsilon_drift_bound`, `commitment_curve_drift_summary`) | `tests/sdg_mh/test_joint_planner.py::test_p0a_p0b_commitment_curve_exact_params_and_drift_bounds` | Section 3.3, Lemma 2 (`\label{lem:drift}`), Eq. (3), Table 2 |
+| **P0-B**: Exact `Original_Planner` & `Week1_v2` parameters | `src/private_llm_analytics/sdg_mh/calendar_accounting.py` (`ORIGINAL_PLANNER_CURVE`, `WEEK1_V2_CURVE`) | `tests/sdg_mh/test_joint_planner.py::test_p0a_p0b_commitment_curve_exact_params_and_drift_bounds` | Section 3.3, Table 2 (`\label{tab:commitments}`), Section 4 |
+| **P0-C**: 7 Canonical Phase Orbits via CRT & Orbit–Stabilizer | `src/private_llm_analytics/sdg_mh/joint_planner.py` (`CANONICAL_7_ORBIT_REPRESENTATIVES`, `canonicalize_phase_orbit`, `use_canonical_7_orbits`); `results/sdg_mh/canonical_7_orbits_benchmark/canonical_7_vs_210_benchmark.csv` | `tests/sdg_mh/test_joint_planner.py::test_p0c_crt_7_canonical_orbits_partition_1470_phases_and_match_210_slice`, `test_p0c_pinned_phase_breaks_z210_orbit_symmetry` | Section 5.1, Proposition 1 (`\label{prop:orbits}`), Eqs. (6)–(8), Table 3, Appendix A.1, Table 6 |
+| **P0-D**: Official 2027 VLDB Template (`acmart` + `pvldb.sty`) | `docs/pvlbd_2027_paper/acmart.cls`, `pvldb.sty`, `ACM-Reference-Format.bst`, `main.tex`, `main.pdf` | `pdflatex` + `bibtex` (9 pages, 0 errors, 0 Overfull boxes) | `docs/pvlbd_2027_paper/main.tex` & `main.pdf` |
+| **P1**: 4-Way Novelty Matrix & WildChat / Banded-MF Protocols | `docs/pvlbd_2027_paper/NOVELTY_AND_PRIOR_ART_AUDIT.md` | Verified against bibliography (`references.bib`) | Table 1 (`\label{tab:novelty_matrix}`), Section 2, Section 6.1–6.3 |
+| **Frozen Experimental Data Integrity** | `results/calendar_planning/`, `results/sdg_mh/long_horizon_420d*` | `git diff` confirms 0 modifications to frozen result directories | Section 5, Tables 4–5 |

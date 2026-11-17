@@ -1,0 +1,5 @@
+curve,workload,orbits_7_phases,slice_210_phases,full_space_phases,optimal_phase,primal_ub_7_orbits,primal_ub_210_slice,decimal100_dual_lb_7_orbits,decimal100_dual_lb_210_slice,rel_gap,runtime_7_orbits_sec,runtime_210_slice_sec,speedup_ratio
+Week1_v2,Default,7,210,1470,"(0, 0, 0)",1433.91817968,1433.91817968,1433.91817965,1433.91817965,2.040993e-11,0.0662,1.5374,23.21
+Week1_v2,DistinctHeavy,7,210,1470,"(0, 4, 0)",922.97911225,922.97911225,922.97910537,922.97910537,7.450274e-09,0.0675,1.5088,22.35
+Original_Planner,Default,7,210,1470,"(0, 3, 0)",1437.62828617,1437.62828617,1437.62828614,1437.62828614,2.009994e-11,0.0497,0.9518,19.14
+Original_Planner,DistinctHeavy,7,210,1470,"(0, 4, 0)",930.32603967,930.32603967,930.32603966,930.32603966,1.017116e-11,0.0812,1.7014,20.96
