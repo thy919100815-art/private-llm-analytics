@@ -122,37 +122,39 @@ where $\beta_{\mathrm{tail}} = \frac{\bar{\rho}(365) - \bar{\rho}(90)}{365 - 90}
 Because $\varepsilon \mapsto (\sqrt{\varepsilon + \ln(1/\delta)} - \sqrt{\ln(1/\delta)})^2$ is strictly convex, a sub-linear schedule in $\varepsilon(h)$ can map to a non-concave schedule in $\bar{\rho}(h)$. As Table~\ref{tab:curves} and Figure~\ref{fig:privacy_envelope}(b) show, the secant slope of \textbf{Standard} strictly increases from $[7, 30]$ ($5.939\times 10^{-4}$) to $[30, 90]$ ($7.698\times 10^{-4}$) and $[90, 365]$ ($7.957\times 10^{-4}$), and \textbf{Balanced} increases from $[30, 90]$ to $[90, 365]$. Consequently, \emph{any infinite-horizon security proof that assumes global concavity of $\bar{\rho}(h)$ is invalid for these schedules}.
 
 \subsection{System Architecture Overview}
-Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily records enter two physically isolated ingestion paths: (i) a daily additive clipper capping per-user requests and failures at $(C_r, C_f) = (50, 10)$, and (ii) a bounded-retention rolling distinct state retaining at most $w_{\max}=90$ days of per-user service bitmasks and sparse category counts. Prior to deployment, a joint phase--budget planner solves for optimal periodic phases $\boldsymbol{\phi}$ and budgets $\mathbf{v}$, verified over a 575-day horizon via Theorem~\ref{thm:reduction}. At runtime, every release batch must pass an atomic two-phase reservation in the privacy ledger before Discrete Gaussian noise ($\mathcal{N}_{\mathbb{Z}}$) is drawn and appended to immutable output stores, which serve analysts exclusively through a read-only query interface.
+Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily records enter two physically isolated ingestion paths: (i) a daily additive clipper capping per-user requests and failures at $(C_r, C_f) = (50, 10)$, and (ii) a bounded-retention rolling distinct state retaining at most $w_{\max}=90$ days of per-user service bitmasks and sparse category counts. Prior to deployment, a joint phase--budget planner solves for optimal periodic phases $\boldsymbol{\phi}$ and budgets $\mathbf{v}$, verified over a 575-day horizon via Theorem~\ref{thm:reduction}. At runtime, every release batch follows a four-step execution sequence: (1) fail-closed \texttt{RESERVED} admission in the privacy ledger ($\tau_{\mathrm{tol}}=0$), (2) Discrete Gaussian ($\mathcal{N}_{\mathbb{Z}}$) noise sampling, (3) persistence to immutable output stores, and (4) irrevocable \texttt{COMMITTED} ledger finalization. If noise generation fails or persistence fails with the output confirmed absent, the unexposed reservation is cancelled; if persistence fails after the output may have been exposed (or storage state is uncertain), the ledger conservatively commits the privacy spend. Analysts access outputs exclusively through a read-only query interface.
 
 \begin{figure*}[t]
 \centering
 \begin{tikzpicture}[
-    node distance=0.42cm and 0.68cm,
-    box/.style={draw=black!75, rounded corners=2pt, fill=blue!4, minimum height=0.82cm, minimum width=2.35cm, align=center, font=\scriptsize},
-    off/.style={draw=purple!65!black, rounded corners=2pt, fill=purple!5, minimum height=0.72cm, minimum width=3.1cm, align=center, font=\scriptsize},
-    store/.style={draw=teal!70!black, rounded corners=2pt, fill=teal!6, minimum height=0.78cm, minimum width=2.3cm, align=center, font=\scriptsize},
-    gate/.style={draw=red!65!black, rounded corners=2pt, fill=red!6, minimum height=1.15cm, minimum width=2.45cm, align=center, font=\scriptsize},
-    noise/.style={draw=orange!75!black, rounded corners=2pt, fill=orange!7, minimum height=0.78cm, minimum width=2.3cm, align=center, font=\scriptsize},
+    node distance=0.42cm and 0.62cm,
+    box/.style={draw=black!75, rounded corners=2pt, fill=blue!4, minimum height=0.80cm, minimum width=2.25cm, align=center, font=\scriptsize},
+    off/.style={draw=purple!65!black, rounded corners=2pt, fill=purple!5, minimum height=0.70cm, minimum width=3.05cm, align=center, font=\scriptsize},
+    store/.style={draw=teal!70!black, rounded corners=2pt, fill=teal!6, minimum height=0.76cm, minimum width=2.25cm, align=center, font=\scriptsize},
+    gate/.style={draw=red!65!black, rounded corners=2pt, fill=red!6, minimum height=0.88cm, minimum width=2.35cm, align=center, font=\scriptsize},
+    noise/.style={draw=orange!75!black, rounded corners=2pt, fill=orange!7, minimum height=0.76cm, minimum width=2.25cm, align=center, font=\scriptsize},
     arr/.style={-{Stealth[length=4.5pt]}, semithick, draw=black!75}
 ]
-% Bottom tier: Runtime Pipeline
-\node[box, fill=gray!10, minimum width=1.6cm] (stream) {Daily Stream\\$D_t$};
-\node[box, above right=0.22cm and 0.65cm of stream] (clip) {Additive Clipper\\$(C_r=50, C_f=10)$};
-\node[box, below right=0.22cm and 0.65cm of stream] (roll) {Rolling Distinct State\\$(w_{\max}=90, k=3)$};
+% Bottom tier: Runtime Pipeline (1. Reserve -> 2. Sample -> 3. Persist -> 4. Commit)
+\node[box, fill=gray!10, minimum width=1.55cm] (stream) {Daily Stream\\$D_t$};
+\node[box, above right=0.22cm and 0.55cm of stream] (clip) {Additive Clipper\\$(C_r=50, C_f=10)$};
+\node[box, below right=0.22cm and 0.55cm of stream] (roll) {Rolling Distinct State\\$(w_{\max}=90, k=3)$};
 
-\node[gate, right=0.75cm of $(clip.east)!0.5!(roll.east)$] (ledger) {\textbf{Atomic Privacy Ledger}\\1.\ Reserve ($\tau_{\mathrm{tol}}=0$)\\2.\ Commit Irrevocably};
+\node[gate, right=0.62cm of $(clip.east)!0.5!(roll.east)$] (ledger) {\textbf{1.\ Ledger Reserve}\\$\tau_{\mathrm{tol}}=0$, Fail-Closed};
 
-\node[noise, right=0.75cm of ledger, yshift=0.58cm] (seal) {Daily $\mathcal{N}_{\mathbb{Z}}$ Sealing\\$(\sigma_r, \sigma_f)$};
-\node[noise, right=0.75cm of ledger, yshift=-0.58cm] (cal) {Periodic $\mathcal{N}_{\mathbb{Z}}$ Release\\$t \equiv \phi_f \pmod{S_f}$};
+\node[noise, right=0.62cm of ledger, yshift=0.56cm] (seal) {\textbf{2.\ Daily $\mathcal{N}_{\mathbb{Z}}$ Sealing}\\$(\sigma_r, \sigma_f)$};
+\node[noise, right=0.62cm of ledger, yshift=-0.56cm] (cal) {\textbf{2.\ Periodic $\mathcal{N}_{\mathbb{Z}}$ Release}\\$t \equiv \phi_f \pmod{S_f}$};
 
-\node[store, right=0.65cm of seal] (sstore) {Immutable Daily Store\\$(y_{R,t}, y_{F,t})$};
-\node[store, right=0.65cm of cal] (cstore) {Immutable Distinct Store\\$(7\text{d}, 30\text{d}, 90\text{d})$};
+\node[store, right=0.55cm of seal] (sstore) {\textbf{3.\ Persist Daily Store}\\$(y_{R,t}, y_{F,t})$};
+\node[store, right=0.55cm of cal] (cstore) {\textbf{3.\ Persist Distinct Store}\\$(7\text{d}, 30\text{d}, 90\text{d})$};
 
-\node[box, fill=gray!10, right=0.65cm of $(sstore.east)!0.5!(cstore.east)$, minimum width=2.1cm] (query) {Read-Only Query\\Service (Post-Proc.)};
+\node[box, fill=gray!10, right=0.62cm of $(sstore.east)!0.5!(cstore.east)$, minimum width=2.05cm] (query) {Read-Only Query\\Service (Post-Proc.)};
+
+\node[gate, below=0.52cm of cstore, minimum width=3.15cm, minimum height=0.72cm] (commit) {\textbf{4.\ Commit Irrevocably} (\texttt{COMMITTED})\\Conservative commit if persist may expose};
 
 % Top tier: Offline Planning & Certification
-\node[off, above=0.65cm of $(clip.north)!0.5!(ledger.north)$] (curve) {Commitment $\bar{\rho}(h)$\\+ Workload Weights $\mathbf{w}$};
-\node[off, right=0.75cm of curve] (planner) {\textbf{Offline Joint Planner}\\7-Orbit CRT + 100-Digit Dual Cert.};
+\node[off, above=0.62cm of $(clip.north)!0.5!(ledger.north)$] (curve) {Commitment $\bar{\rho}(h)$\\+ Workload Weights $\mathbf{w}$};
+\node[off, right=0.65cm of curve] (planner) {\textbf{Offline Joint Planner}\\7-Orbit CRT + 100-Digit Dual Cert.};
 
 \draw[arr] (stream.east) |- (clip.west);
 \draw[arr] (stream.east) |- (roll.west);
@@ -165,11 +167,15 @@ Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily
 \draw[arr] (sstore.east) -| (query.north);
 \draw[arr] (cstore.east) -| (query.south);
 
+\draw[arr, draw=red!65!black] (cstore.south) -- (commit.north);
+\draw[arr, draw=red!65!black] (sstore.east) -- ++(0.22,0) |- (commit.east);
+\draw[arr, dashed, draw=red!65!black] (commit.west) -| node[below, pos=0.25, font=\tiny, text=red!65!black] {finalize / cancel only if confirmed unstored} (ledger.south);
+
 \draw[arr, draw=purple!70!black] (curve.east) -- (planner.west);
 \draw[arr, dashed, draw=purple!70!black] (planner.south) -- node[left, pos=0.55, font=\tiny, text=purple!70!black] {certified $(\boldsymbol{\phi}^*, \mathbf{v}^*)$} (ledger.north);
 \draw[arr, dashed, draw=purple!70!black] (planner.south -| seal.north) -- node[right, pos=0.5, align=left, font=\tiny, text=purple!70!black] {noise scales\\$(\sigma_r, \sigma_f, \sigma_d)$} (seal.north);
 \end{tikzpicture}
-\caption{SDG-MH architecture separating \emph{offline planning} (top: commitment curve, 7-orbit CRT optimization, and dual certification) from \emph{runtime execution} (bottom: physical data isolation, atomic two-phase ledger reservation prior to $\mathcal{N}_{\mathbb{Z}}$ sampling, immutable storage, and read-only query service).}
+\caption{SDG-MH architecture separating \emph{offline planning} (top) from \emph{runtime execution} (bottom: \textbf{1.\ Reserve} $\to$ \textbf{2.\ Sample $\mathcal{N}_{\mathbb{Z}}$} $\to$ \textbf{3.\ Persist} $\to$ \textbf{4.\ Commit Irrevocably}). Unexposed pre-persist failures cancel the reservation, whereas uncertain persistence failures conservatively commit privacy spend.}
 \label{fig:arch}
 \end{figure*}
 
@@ -350,7 +356,7 @@ Proposition~\ref{prop:orbits}(3) separates \emph{steady-state budget equivalence
 \node[font=\tiny\bfseries, text=orange!80!black] at (0.24, 0.32) {+90d};
 \draw[->, >=Stealth, thick, teal!75!black] (0.50, 1.44) -- node[above, font=\tiny, sloped] {$+4$d} (2.30, 1.00);
 \end{tikzpicture}
-\caption{14-day release schedule grid: \textbf{Budget-Opt} $(0,0,0)$ stacks $7\text{d}$, $30\text{d}$, and $90\text{d}$ releases on Days $0$ and $7$ (red cells), whereas \textbf{Joint-Opt} $(0,4,0)$ shifts $30\text{d}$ releases by $+4$ days to Days $4$ and $11$, reducing overlap while trading weekday freshness.}
+\caption{Periodic steady-state phase schematic over a 14-day window ($t \equiv \phi_f \pmod{S_f}$, not a system startup calendar): \textbf{Budget-Opt} $(0,0,0)$ aligns $7\text{d}$, $30\text{d}$, and $90\text{d}$ releases on Day~$0$, and stacks $7\text{d}$ and $30\text{d}$ on Day~$7$ (no $90\text{d}$ release on Day~$7$ since $S_{90}=30$ days). \textbf{Joint-Opt} $(0,4,0)$ shifts $30\text{d}$ releases by $+4$ days to Days~$4$ and~$11$, reducing overlap while trading weekday freshness.}
 \label{fig:calendar_schematic}
 \end{figure}
 
