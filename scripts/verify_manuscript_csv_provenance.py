@@ -411,6 +411,18 @@ def verify_manuscript_provenance(
             val_str = fmt_fn(wc_aud[field_key]).replace("%", r"\%")
             record_check(f"wildchat_audit_{field_key}", val_str in tex, str(wc_audit_csv.relative_to(ROOT)), val_str)
 
+    # -------------------------------------------------------------------------
+    # 9. Verify v6 Dual-Regime Additive Microbenchmark numbers in Section 6.5
+    # -------------------------------------------------------------------------
+    t6_csv = ROOT / "results" / "sdg_mh" / "banded_mf_timing_audit_v6" / "banded_mf_timing_summary_v6.csv"
+    with t6_csv.open("r", encoding="utf-8") as f:
+        for r in csv.DictReader(f):
+            m_tag = r["method"]
+            reg_a = f"{float(r['regime_a_with_sampling_420d_ms']):.2f}"
+            reg_b = f"{float(r['regime_b_kernel_only_420d_ms']):.2f}"
+            record_check(f"timing_v6_{m_tag}_regA", reg_a in tex, str(t6_csv.relative_to(ROOT)), reg_a)
+            record_check(f"timing_v6_{m_tag}_regB", reg_b in tex, str(t6_csv.relative_to(ROOT)), reg_b)
+
     report = {
         "manuscript": "docs/pvlbd_2027_paper/main.tex",
         "verifier_mode": "STRUCTURED_LATEX_TABLE_JOINT_KEY_PARSER",

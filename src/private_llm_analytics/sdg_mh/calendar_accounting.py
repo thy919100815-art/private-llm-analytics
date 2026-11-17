@@ -53,6 +53,26 @@ DEFAULT_FAMILIES = (
 
 JOINT_PERIOD: int = 210  # lcm(7, 7, 30)
 
+
+def experiment_phase_to_runtime_phase(phi_exp: int, step_days: int) -> int:
+    """Map 0-indexed experiment phase (d=0 -> current_day=1) to 1-indexed CalendarJob runtime phase.
+
+    In 0-indexed experiment coordinates (e.g., WildChat d=0 at 2023-11-20), release occurs iff
+    (d - phi_exp) % step_days == 0. Since runtime CalendarJob uses current_day = d + 1 >= 1 with
+    release condition current_day % step_days == phi_runtime % step_days, exact alignment requires:
+      phi_runtime = (phi_exp + 1) % step_days.
+    """
+    if step_days <= 0:
+        raise ValueError(f"step_days must be positive, got {step_days}")
+    return int((int(phi_exp) + 1) % int(step_days))
+
+
+def runtime_phase_to_experiment_phase(phi_runtime: int, step_days: int) -> int:
+    """Inverse of `experiment_phase_to_runtime_phase`: map CalendarJob runtime phase to 0-indexed experiment phase."""
+    if step_days <= 0:
+        raise ValueError(f"step_days must be positive, got {step_days}")
+    return int((int(phi_runtime) - 1) % int(step_days))
+
 # Unified numerical tolerance hierarchy across planning, certification, and ledger admission:
 # - Continuous SLSQP iterative solver tolerance before conservative shrinkage
 SOLVER_VIOLATION_TOL: float = 1e-8

@@ -1,0 +1,2 @@
+source_mode,input_sha256,win420_start,win420_start_weekday,win420_end,win420_convs,win420_unique_hashed_ip,mean_dedup_reduction_7d_pct,mean_dedup_reduction_30d_pct,mean_dedup_reduction_90d_pct,mean_daily_req_clip_bias_pct,mean_cat30d_k3_clip_bias_pct
+local_cache:C:\Users\user\AppData\Local\Temp\wildchat_fresh_hf_repro.parquet,7e13956612e41c06bc4e6f6dbcc932381d0b6eb38e38791dd7e171a0e902caf3,2023-11-20,Monday,2025-01-12,1721032,895148,7.560994550109069,10.759716130765419,13.055188044539596,11.240314793430422,1.063643735292174
