@@ -1,8 +1,8 @@
 {
   "manuscript": "docs/pvlbd_2027_paper/main.tex",
   "verifier_mode": "STRUCTURED_LATEX_TABLE_JOINT_KEY_PARSER",
-  "total_checks": 493,
-  "passed_checks": 493,
+  "total_checks": 499,
+  "passed_checks": 499,
   "failed_checks": 0,
   "all_passed": true,
   "checks": [
@@ -3455,6 +3455,48 @@
       "passed": true,
       "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
       "expected": "1.06\\%",
+      "actual": ""
+    },
+    {
+      "check": "timing_v6_SDG-MH (Additive Daily Operator)_regA",
+      "passed": true,
+      "source": "results\\sdg_mh\\banded_mf_timing_audit_v6\\banded_mf_timing_summary_v6.csv",
+      "expected": "159.60",
+      "actual": ""
+    },
+    {
+      "check": "timing_v6_SDG-MH (Additive Daily Operator)_regB",
+      "passed": true,
+      "source": "results\\sdg_mh\\banded_mf_timing_audit_v6\\banded_mf_timing_summary_v6.csv",
+      "expected": "8.63",
+      "actual": ""
+    },
+    {
+      "check": "timing_v6_Banded-MF (b=8, MH-RemEnv)_regA",
+      "passed": true,
+      "source": "results\\sdg_mh\\banded_mf_timing_audit_v6\\banded_mf_timing_summary_v6.csv",
+      "expected": "134.65",
+      "actual": ""
+    },
+    {
+      "check": "timing_v6_Banded-MF (b=8, MH-RemEnv)_regB",
+      "passed": true,
+      "source": "results\\sdg_mh\\banded_mf_timing_audit_v6\\banded_mf_timing_summary_v6.csv",
+      "expected": "33.11",
+      "actual": ""
+    },
+    {
+      "check": "timing_v6_Banded-MF (b=30, MH-RemEnv)_regA",
+      "passed": true,
+      "source": "results\\sdg_mh\\banded_mf_timing_audit_v6\\banded_mf_timing_summary_v6.csv",
+      "expected": "135.66",
+      "actual": ""
+    },
+    {
+      "check": "timing_v6_Banded-MF (b=30, MH-RemEnv)_regB",
+      "passed": true,
+      "source": "results\\sdg_mh\\banded_mf_timing_audit_v6\\banded_mf_timing_summary_v6.csv",
+      "expected": "32.61",
       "actual": ""
     }
   ]

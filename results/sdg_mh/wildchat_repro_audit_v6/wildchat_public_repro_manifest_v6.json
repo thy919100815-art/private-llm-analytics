@@ -1,0 +1,44 @@
+{
+  "dataset_id": "allenai/WildChat-4.8M",
+  "pinned_hf_revision": "c827c6df8fcf008219ffaffa4d1dd77491099367",
+  "license": "ODC-By 1.0 / AI2 ImpACT Low-Risk Artifact",
+  "source_mode": "huggingface:allenai/WildChat-4.8M@c827c6df8fcf008219ffaffa4d1dd77491099367 (86 shards)",
+  "input_file_bytes": 171259413,
+  "input_file_sha256": "7e13956612e41c06bc4e6f6dbcc932381d0b6eb38e38791dd7e171a0e902caf3",
+  "legacy_blob_file_sha256": "581e68ce482d506a3985fcd4f8cc71c3ba349d5b021164629235d885a3476a2a",
+  "logical_records_sha256": "37144d8ddfbbf8b6633331de612e2cdb96d07aea459db166d9ddd6197101bd09",
+  "logical_sha256_matches_expected": true,
+  "row_count": 3199860,
+  "row_count_matches_expected": true,
+  "columns": [
+    "hashed_ip",
+    "timestamp",
+    "model",
+    "country"
+  ],
+  "null_counts": {
+    "hashed_ip": 0,
+    "timestamp": 0,
+    "model": 0,
+    "country": 217369
+  },
+  "min_timestamp_utc": "2023-04-09 00:03:20+00:00",
+  "max_timestamp_utc": "2025-07-31 23:56:04+00:00",
+  "unique_hashed_ip_count": 1833730,
+  "hash_distinction_note": "input_file_sha256 hashes serialized parquet bytes (varies across writer metadata/compression); logical_records_sha256 hashes deterministically sorted canonical rows (timestamp_utc, hashed_ip, model, country) with fillna('').",
+  "field_mapping": {
+    "service_axis_m5": "5 OpenAI model families (gpt-4o, gpt-4o-mini, gpt-3.5-turbo, gpt-4-turbo, other-openai)",
+    "category_axis_A20": "20 interaction-category proxies = 5 model_families x 4 UTC_6h_quadrants (NOT semantic NLP task topics)",
+    "user_identifier": "hashed_ip (IP-derived pseudonym; NOT authenticated account ID)",
+    "timestamp_semantics": "Top-level WildChat timestamp is the last turn of the conversation (NOT HTTP request timestamp)",
+    "unit_of_record": "1 conversation record (NOT 1 raw HTTP API request)",
+    "dataset_scope": "3,199,860-conversation public filtered release"
+  },
+  "dependencies": {
+    "python": "3.14.0",
+    "pandas": "3.1.0",
+    "numpy": "2.5.4",
+    "pyarrow": "26.0.0",
+    "scipy": "1.18.1"
+  }
+}
