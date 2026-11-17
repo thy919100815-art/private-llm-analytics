@@ -526,6 +526,71 @@ class BandedToeplitzBaseline(BaseDPBaseline):
         self._P_m = np.zeros((self.T + 1, self.T + 1), dtype=np.float64)
         self._P_m[1:, 1:] = np.cumsum(np.cumsum(self.M_base, axis=0), axis=1)
 
+        # Online causal streaming state (ring buffers of length b - 1)
+        self._stream_t: int = 0
+        self._x_ring: np.ndarray = np.zeros(max(1, self.bandwidth - 1), dtype=np.float64)
+        self._xhat_ring: np.ndarray = np.zeros(max(1, self.bandwidth - 1), dtype=np.float64)
+
+    def reset_stream(self, n_channels: int = 1) -> None:
+        """Reset O(b) ring buffers for day-by-day causal online streaming."""
+        self._stream_t = 0
+        ring_len = max(1, self.bandwidth - 1)
+        if n_channels == 1:
+            self._x_ring = np.zeros(ring_len, dtype=np.float64)
+            self._xhat_ring = np.zeros(ring_len, dtype=np.float64)
+        else:
+            self._x_ring = np.zeros((ring_len, n_channels), dtype=np.float64)
+            self._xhat_ring = np.zeros((ring_len, n_channels), dtype=np.float64)
+
+    def step_stream(self, x_t: float | np.ndarray, z_t: float | np.ndarray) -> float | np.ndarray:
+        """Execute one day of causal b-banded Toeplitz encoding and forward-substitution decoding.
+
+        Encoder uses only past b-1 raw counts to emit y_t = x_t + sum_{k=1}^{b-1} f_k x_{t-k} + z_t.
+        Causal decoder uses only y_t and past b-1 reconstructions:
+          x_hat_t = y_t - sum_{k=1}^{b-1} f_k x_hat_{t-k}.
+        """
+        b_m1 = self.bandwidth - 1
+        t = self._stream_t
+        if b_m1 == 0:
+            self._stream_t += 1
+            return x_t + z_t
+
+        k_max = min(b_m1, t)
+        if k_max > 0:
+            # Ring indices for lags k = 1 .. k_max
+            lags = np.arange(1, k_max + 1)
+            ring_idx = (t - lags) % b_m1
+            coeffs = self.band_coeffs[1 : k_max + 1]
+            if self._x_ring.ndim == 1:
+                enc_hist = float(np.dot(coeffs, self._x_ring[ring_idx]))
+                dec_hist = float(np.dot(coeffs, self._xhat_ring[ring_idx]))
+            else:
+                enc_hist = coeffs @ self._x_ring[ring_idx]
+                dec_hist = coeffs @ self._xhat_ring[ring_idx]
+        else:
+            enc_hist = 0.0
+            dec_hist = 0.0
+
+        y_t = x_t + enc_hist + z_t
+        xhat_t = y_t - dec_hist
+
+        slot = t % b_m1
+        self._x_ring[slot] = x_t
+        self._xhat_ring[slot] = xhat_t
+        self._stream_t += 1
+        return xhat_t
+
+    def get_memory_breakdown_bytes(self, n_channels: int = 2) -> Dict[str, int]:
+        """Distinguish theoretical O(b) ring-buffer state from offline/dense T x T calibration matrices."""
+        b_m1 = max(1, self.bandwidth - 1)
+        return {
+            "theoretical_ring_buffer_bytes": int(2 * b_m1 * n_channels * 8),
+            "dense_decoder_c_inv_bytes": int(self.C_inv.nbytes),
+            "offline_calibration_all_matrices_bytes": int(
+                self.C_mat.nbytes + self.M_base.nbytes + self.C_inv.nbytes + self.cov_base.nbytes + self._P_m.nbytes
+            ),
+        }
+
     def get_worst_case_rho_term(self, h: int) -> float:
         """Compute unit-sensitivity zCDP term 0.5 * max_s 1_h^T M_base 1_h for horizon h."""
         h_clamped = max(1, min(self.T, int(h)))

@@ -16,13 +16,15 @@
 \newtheorem{remark}{Remark}
 
 \emergencystretch=3em
-\setlength{\textfloatsep}{6pt plus 2pt minus 2pt}
-\setlength{\floatsep}{5pt plus 2pt minus 2pt}
-\setlength{\dbltextfloatsep}{6pt plus 2pt minus 2pt}
-\setlength{\dblfloatsep}{5pt plus 2pt minus 2pt}
-\setlength{\abovecaptionskip}{3pt}
-\setlength{\belowcaptionskip}{1pt}
-\renewcommand{\arraystretch}{0.92}
+\setlength{\textfloatsep}{5pt plus 2pt minus 2pt}
+\setlength{\floatsep}{4pt plus 2pt minus 2pt}
+\setlength{\dbltextfloatsep}{5pt plus 2pt minus 2pt}
+\setlength{\dblfloatsep}{4pt plus 2pt minus 2pt}
+\setlength{\abovecaptionskip}{2pt}
+\setlength{\parskip}{0pt}
+\setlength{\parsep}{1pt}
+\setlength{\itemsep}{1pt}
+\renewcommand{\arraystretch}{0.83}
 
 \begin{document}
 
@@ -457,7 +459,7 @@ Table~\ref{tab:planner_bounds} summarizes the planner's optimization performance
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.88\columnwidth]{figures/fig1_420d_cross_period_ledger_trajectory.png}
+\includegraphics[width=0.82\columnwidth]{figures/fig1_420d_cross_period_ledger_trajectory.png}
 \caption{420-day cross-period privacy ledger trajectory $\max_s \rho_{\text{ledger}}(s, h)$ vs.\ 575-day theoretical envelope $L_{\max}(h)$ and commitment $\bar{\rho}(h)$, with strictly positive headroom across checkpoints $t \in \{210, 365, 420\}$.}
 \label{fig:ledger_traj}
 \end{figure}
@@ -513,7 +515,7 @@ Because Group B ($\phi_{30}=0$, Sunday) and Group D ($\phi_{30}=4$, Thursday) re
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.88\columnwidth]{figures/fig1_v3_same_query_date_d_vs_b.png}
+\includegraphics[width=0.82\columnwidth]{figures/fig1_v3_same_query_date_d_vs_b.png}
 \caption{Paired MAPE difference ($D - B$, $K=8$ seeds, $95\%$ CI) across 7d, 30d common daily queries, 30d fixed Sunday queries, and 90d distinct prevalence.}
 \label{fig:same_date}
 \end{figure}
@@ -523,7 +525,7 @@ Figure~\ref{fig:cr_ablation} evaluates per-user request clipping thresholds $C_r
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.92\columnwidth]{figures/fig2_cr_clipping_pareto_ablation.png}
+\includegraphics[width=0.82\columnwidth]{figures/fig2_cr_clipping_pareto_ablation.png}
 \caption{Per-user daily request clipping threshold $C_r \in \{30, 50, 100, 200\}$ bias--variance Pareto ablation over 420 days.}
 \label{fig:cr_ablation}
 \end{figure}
@@ -532,16 +534,16 @@ Figure~\ref{fig:cr_ablation} evaluates per-user request clipping thresholds $C_r
 
 \begin{table*}[t]
 \centering
-\caption{Uniformly Post-Processed Competitive Additive Baselines Over the Shared $[1, 420]$ Horizon from \texttt{audit\_v3\_competitive\_baselines\_summary.csv} and \texttt{banded\_mf\_competitive\_summary.csv} (\texttt{Week1\_v2} Remaining Additive Envelope $\bar{\rho}_{\text{add}}(h)$ across all $h \in [1, 420]$, $C_r=50, C_f=10$, $K=8$ Seeds, $df=7$). All Methods Use Identical Window Post-Processing $\hat{R}=\max(0,\tilde{R}),\, \hat{F}=\min(\hat{R},\max(0,\tilde{F}))$.}
+\caption{Uniformly Post-Processed Competitive Additive Baselines Over the Shared $[1, 420]$ Horizon from \texttt{audit\_v3\_competitive\_baselines\_summary.csv} and \texttt{banded\_mf\_competitive\_summary\_v5.csv} (\texttt{Week1\_v2} Remaining Additive Envelope $\bar{\rho}_{\text{add}}(h)$ across all $h \in [1, 420]$, $C_r=50, C_f=10$, $K=8$ Seeds, $df=7$). All Methods Use Identical Window Post-Processing $\hat{R}=\max(0,\tilde{R}),\, \hat{F}=\min(\hat{R},\max(0,\tilde{F}))$.}
 \label{tab:baselines_v3}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}llrrrrrrrc@{}}
 \toprule
 \textbf{Method} & \textbf{Certified Horizon Scope} & \textbf{Req 1d RMSE} & \textbf{Req 7d RMSE} & \textbf{Req 30d RMSE} & \textbf{Req 90d RMSE} & \textbf{Fail 1d RMSE} & \textbf{Fail 30d RMSE} & \textbf{Fail 90d RMSE} & \textbf{Distinct (7/30/90d)} \\
 \midrule
-\textbf{SDG-MH (D\_Joint)} & \textbf{Infinite $h \ge 1$} (eval $[1,420]$) & $\mathbf{2314.5\pm 32.2}$ & $\mathbf{11034.3\pm 261.3}$ & $\mathbf{43866.8\pm 1247.3}$ & $126664.8\pm 4104.2$ & $\mathbf{1159.4\pm 28.9}$ & $\mathbf{7468.4\pm 583.1}$ & $14003.3\pm 991.9$ & \textbf{Supported (Native)} \\
-\textbf{Banded-MF ($b=8$, MH-RemEnv)} & Finite Toeplitz $T=420$ ($\alpha=0.25$) & $3446.9\pm 18.5$ & $11589.1\pm 281.3$ & $43975.5\pm 1337.5$ & $126617.7\pm 4385.9$ & $2069.1\pm 23.0$ & $7829.9\pm 330.2$ & $\mathbf{13880.6\pm 1261.6}$ & N/A (Non-Additive) \\
-\textbf{Banded-MF ($b=30$, MH-RemEnv)} & Finite Toeplitz $T=420$ ($\alpha=0.50$) & $9919.5\pm 125.5$ & $18846.8\pm 358.6$ & $46369.0\pm 1260.5$ & $127926.1\pm 4450.8$ & $5733.8\pm 90.4$ & $13248.0\pm 583.0$ & $19658.6\pm 1043.5$ & N/A (Non-Additive) \\
+\textbf{SDG-MH (D\_Joint)} & \textbf{Infinite $h \ge 1$} (eval $[1,420]$) & $\mathbf{2314.5\pm 32.2}$ & $\mathbf{11034.3\pm 261.3}$ & $43866.8\pm 1247.3$ & $126664.8\pm 4104.2$ & $\mathbf{1159.4\pm 28.9}$ & $\mathbf{7468.4\pm 583.1}$ & $14003.3\pm 991.9$ & \textbf{Supported (Native)} \\
+\textbf{Banded-MF ($b=8$, MH-RemEnv)} & Finite Toeplitz $T=420$ ($\alpha=0.25$) & $3450.7\pm 35.3$ & $11558.3\pm 333.4$ & $\mathbf{43651.1\pm 1807.8}$ & $\mathbf{125048.5\pm 5335.7}$ & $2069.4\pm 17.3$ & $7865.9\pm 504.3$ & $\mathbf{14079.9\pm 1183.0}$ & N/A (Non-Additive) \\
+\textbf{Banded-MF ($b=30$, MH-RemEnv)} & Finite Toeplitz $T=420$ ($\alpha=0.50$) & $9981.0\pm 128.2$ & $18933.7\pm 213.2$ & $46202.8\pm 661.6$ & $128248.2\pm 2551.8$ & $5684.7\pm 99.7$ & $12938.5\pm 636.8$ & $18800.9\pm 997.9$ & N/A (Non-Additive) \\
 \textbf{Tree-2l (MH-RemEnv)} & Finite Dyadic $T \le 512$ & $4378.6\pm 64.2$ & $12716.7\pm 176.4$ & $44587.3\pm 924.4$ & $\mathbf{126186.5\pm 3209.9}$ & $2724.1\pm 51.1$ & $9467.8\pm 498.9$ & $16154.0\pm 1224.1$ & N/A (Non-Additive) \\
 \textbf{Tree-2l (Daily-$d$)} & Finite Dyadic $T \le 512$ & $4407.0\pm 64.8$ & $12753.4\pm 176.6$ & $44612.6\pm 927.6$ & $126197.5\pm 3223.4$ & $2743.0\pm 51.2$ & $9530.3\pm 504.1$ & $16253.4\pm 1233.7$ & N/A (Non-Additive) \\
 \textbf{Tree-U (MH-RemEnv)} & Finite Dyadic $T \le 512$ & $27907.0\pm 528.7$ & $49855.3\pm 601.3$ & $72369.7\pm 1298.6$ & $138543.3\pm 3926.2$ & $14142.6\pm 284.3$ & $40923.8\pm 1438.6$ & $45397.7\pm 2852.4$ & N/A (Non-Additive) \\
@@ -553,15 +555,15 @@ Figure~\ref{fig:cr_ablation} evaluates per-user request clipping thresholds $C_r
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=0.88\columnwidth]{figures/fig2_v3_uniform_postproc_baselines.png}
+\includegraphics[width=0.82\columnwidth]{figures/fig2_v3_uniform_postproc_baselines.png}
 \caption{Competitive additive baseline comparison under identical post-processing, clipping, and $[1,420]$ multi-horizon privacy envelope.}
 \label{fig:baselines}
 \end{figure}
 
-Table~\ref{tab:baselines_v3} and Figure~\ref{fig:baselines} compare SDG-MH against \texttt{Tree-2l}, \texttt{Tree-U} (with exact Honaker GLS estimation~\cite{honaker2015efficient}), \texttt{W-BD-30}~\cite{kellaris2014wevent}, and $b$-banded lower-triangular Toeplitz Matrix Factorization~\cite{denisov2022improved,fichtenberger2023constant,choquette2023banded} (\texttt{Banded-MF ($b=30, \alpha=0.50$)} and \texttt{Banded-MF ($b=8, \alpha=0.25$)}, where $C_{t,\tau} = f_{t-\tau}$ with generating function $(1-z)^{-\alpha}$ for $0 \le t-\tau < b$). All methods are evaluated on the shared $[1, 420]$ horizon, calibrated to the exact remaining additive zCDP envelope $\bar{\rho}_{\text{add}}(h) = \bar{\rho}(h) - L_{\max,\text{distinct}}(h)$ across \textbf{all} $h \in [1, 420]$, and use identical clipping $(C_r=50, C_f=10)$, isotropic split $\eta$, and window post-processing (\ref{eq:postproc}).
+Table~\ref{tab:baselines_v3} and Figure~\ref{fig:baselines} compare SDG-MH against \texttt{Tree-2l}, \texttt{Tree-U} (with exact Honaker GLS estimation~\cite{honaker2015efficient}), \texttt{W-BD-30}~\cite{kellaris2014wevent}, and two representative fixed-$(b, \alpha)$ $b$-banded lower-triangular Toeplitz Matrix Factorization baselines~\cite{denisov2022improved,fichtenberger2023constant,choquette2023banded} (\texttt{Banded-MF ($b=30, \alpha=0.50$)} and \texttt{Banded-MF ($b=8, \alpha=0.25$)}, where $C_{t,\tau} = f_{t-\tau}$ with generating function $(1-z)^{-\alpha}$ for $0 \le t-\tau < b$; these are representative Toeplitz baselines rather than globally optimized BLT~\cite{mcmahan2025blt} strategies). All methods are evaluated on the shared $[1, 420]$ horizon, calibrated to the exact remaining additive zCDP envelope $\bar{\rho}_{\text{add}}(h) = \bar{\rho}(h) - L_{\max,\text{distinct}}(h)$ across \textbf{all} $h \in [1, 420]$, and use identical clipping $(C_r=50, C_f=10)$, isotropic split $\eta$, and window post-processing (\ref{eq:postproc}).
 \begin{itemize}[leftmargin=*, nosep, topsep=2pt]
-    \item \textbf{Why Banded Toeplitz MF Suffers Coherent Multi-Day Sensitivity Inflation}: Under single-day participation ($h=1$), a $b$-banded Toeplitz strategy $\mathbf{C}^{(b)}$ has column norm squared $\sum_{k=0}^{b-1} f_k^2 = O(\log b)$. However, under $(u, I)$-User-Time Adjacency across $h$ consecutive days, a user active throughout $I=[s, s+h-1]$ perturbs $h$ consecutive columns coherently, inducing worst-case sensitivity $\Delta_2^2(h) = C_{\text{clip}}^2 \max_s \mathbf{1}_I^\top (\mathbf{C}^{(b)\top}\mathbf{C}^{(b)}) \mathbf{1}_I \approx C_{\text{clip}}^2 h (\sum_{k=0}^{b-1} f_k)^2$. Calibrating $\mathbf{C}^{(b)}$ naively at $h=1$ violates the 365-day commitment $\bar{\rho}_{\text{add}}(365)$ by $\mathbf{275.86\times}$ for $b=30, \alpha=0.50$ and $\mathbf{47.74\times}$ for $b=8, \alpha=0.25$. Enforcing $\rho_{\text{MF}}(h) \le \bar{\rho}_{\text{add}}(h)$ across all $h \in [1, 420]$ binds at $h=394$ and scales $\sigma_{\text{mf}}$ by $\sum_{k=0}^{b-1} f_k$. Consequently, SDG-MH outperforms \texttt{Banded-MF ($b=30$)} by $4.29\times$ ($2314.5$ vs.\ $9919.5$) on 1d Requests and $1.77\times$ ($7468.4$ vs.\ $13248.0$) on 30d Failures, and outperforms \texttt{Banded-MF ($b=8$)} on 1d/7d/30d Requests ($2314.5$ vs.\ $3446.9$ at 1d; $43866.8$ vs.\ $43975.5$ at 30d) and 1d/7d/30d Failures ($1159.4$ vs.\ $2069.1$ at 1d; $7468.4$ vs.\ $7829.9$ at 30d).
-    \item \textbf{90d Clipping Convergence and Systems Overhead}: At $w=90$, \texttt{Tree-2l} ($126186.5\pm 3209.9$) and \texttt{Banded-MF ($b=8$)} ($126617.7\pm 4385.9$ on Requests; $13880.6\pm 1261.6$ vs.\ $14003.3\pm 991.9$ on 90d Failures) slightly edge SDG-MH within overlapping confidence intervals. In terms of systems overhead (\texttt{banded\_mf\_systems\_overhead.csv}), SDG-MH requires $66.20\,\text{ms}$ offline 7-orbit planning, $0.420\,\text{ms}$ online 420d sealing, and $16\,\text{B}$ streaming state ($0\,\text{KB}$ matrix memory), whereas \texttt{Banded-MF ($b=30$/$8$)} requires $173.01\text{--}214.42\,\text{ms}$ offline matrix factorization/calibration, $0.182\text{--}0.152\,\text{ms}$ online execution, $480\text{--}128\,\text{B}$ ring buffer state ($1378.1\,\text{KB}$ dense $\mathbf{C}^{-1}$ decoder), and cannot release non-additive distinct histograms.
+    \item \textbf{Why Banded Toeplitz MF Suffers Coherent Multi-Day Sensitivity Inflation}: Under single-day participation ($h=1$), a $b$-banded Toeplitz strategy $\mathbf{C}^{(b)}$ has column norm squared $\sum_{k=0}^{b-1} f_k^2 = O(\log b)$. However, under $(u, I)$-User-Time Adjacency across $h$ consecutive days, a user active throughout $I=[s, s+h-1]$ perturbs $h$ consecutive columns coherently, inducing worst-case sensitivity $\Delta_2^2(h) = C_{\text{clip}}^2 \max_s \mathbf{1}_I^\top (\mathbf{C}^{(b)\top}\mathbf{C}^{(b)}) \mathbf{1}_I \approx C_{\text{clip}}^2 h (\sum_{k=0}^{b-1} f_k)^2$. Calibrating $\mathbf{C}^{(b)}$ naively at $h=1$ violates the 365-day commitment $\bar{\rho}_{\text{add}}(365)$ by $\mathbf{275.86\times}$ for $b=30, \alpha=0.50$ and $\mathbf{47.74\times}$ for $b=8, \alpha=0.25$. Enforcing $\rho_{\text{MF}}(h) \le \bar{\rho}_{\text{add}}(h)$ across all $h \in [1, 420]$ binds at $h=394$ and scales $\sigma_{\text{mf}}$ by $\sum_{k=0}^{b-1} f_k$. In paired v5 streaming tests ($df=7$, \texttt{banded\_mf\_paired\_vs\_sdg\_v5.csv}), SDG-MH achieves statistically significant reductions over \texttt{Banded-MF ($b=30$)} on 1d/7d/30d Requests ($2314.5$ vs.\ $9981.0$ at 1d, $p_{\text{holm}} \le 0.0013$) and 1d/7d/30d/90d Failures ($p_{\text{holm}} \le 0.0059$), and over \texttt{Banded-MF ($b=8$)} on 1d/7d Requests ($2314.5$ vs.\ $3450.7$ at 1d, $p_{\text{holm}} \le 0.0133$) and 1d/7d Failures ($1151.7$ vs.\ $2069.4$ at 1d, $p_{\text{holm}} \le 3.05\times 10^{-5}$).
+    \item \textbf{Long-Horizon Equivalence and True Online Streaming Cost}: On 30d/90d Requests and 30d/90d Failures vs.\ \texttt{Banded-MF ($b=8$)} ($43866.8$ vs.\ $43651.1$ at 30d Req; $126664.8$ vs.\ $125048.5$ at 90d Req; $14522.2$ vs.\ $14079.9$ at 90d Fail under Discrete/continuous pairing), differences are \textbf{not} statistically significant ($p_{\text{holm}} = 1.000$), nor is 90d Requests vs.\ \texttt{Banded-MF ($b=30$)} ($p_{\text{holm}}=0.284$). Measuring true day-by-day causal online streaming on identical hardware (\texttt{banded\_mf\_systems\_overhead\_v5.csv}), \texttt{Banded-MF ($b=30$/$8$)} executes 420 steps in $50.58$--$51.73\,\text{ms}$ ($120.42$--$123.17\,\mu\text{s}/\text{day}$) with $224$--$928\,\text{B}$ theoretical ring buffers ($11.43$--$12.81\,\text{KB}$ Python \texttt{tracemalloc} peak) after $63.47$--$170.22\,\text{ms}$ offline calibration ($6897.2\,\text{KB}$ dense calibration matrices; $1378.1\,\text{KB}$ $\mathbf{C}^{-1}$), whereas SDG-MH's exact Discrete Gaussian rejection sampling takes $249.24\,\text{ms}$ over 420 days ($593.43\,\mu\text{s}/\text{day}$) with $16\,\text{B}$ state ($14.48\,\text{KB}$ \texttt{tracemalloc} peak) and $0\,\text{KB}$ matrix memory ($273.89\,\text{ms}$ cold-start planning; Tree/W-BD timing N/A).
 \end{itemize}
 
 \subsection{Real-World Telemetry Validation on AllenAI WildChat-4.8M}
@@ -569,38 +571,40 @@ Table~\ref{tab:baselines_v3} and Figure~\ref{fig:baselines} compare SDG-MH again
 
 \begin{table*}[t]
 \centering
-\caption{Real-World Telemetry Validation on \texttt{allenai/WildChat-4.8M} (\texttt{wildchat\_k8\_cohorts\_paired\_d\_vs\_b.csv} and \texttt{wildchat\_k8\_cohorts\_summary.csv}): $1{,}721{,}032$ Authentic User--LLM Conversations Across All $895{,}148$ Unique \texttt{hashed\_ip} Users in the 420-Day Calendar Window (\texttt{2023-11-20} to \texttt{2025-01-12}, 418 Active UTC Days + 2 Server-Outage Days), Partitioned into $K=8$ Disjoint Real-User Cohorts ($111{,}893.5$ Users/Cohort, $df=7$) $\times$ $5$ CRN Trials.}
+\caption{Real-World Telemetry Validation on \texttt{allenai/WildChat-4.8M} (v5, \texttt{wildchat\_k8\_cohorts\_paired\_v5.csv}): $1{,}721{,}032$ Public-Release Conversations Across $895{,}148$ Unique \texttt{hashed\_ip} Pseudonyms in the 420-Day Window (\texttt{2023-11-20} [Monday] to \texttt{2025-01-12}, 418 Active UTC Days + 2 Server-Outage Days), Using Exact \texttt{RollingDistinctState} Top-$k$ Ordering and Production Discrete Gaussian Noise ($\mathcal{N}_{\mathbb{Z}}$), Conditional on the Fixed 420d Trace ($K=8$ Disjoint Cohorts, $df=7$, $\times 5$ CRN Trials).}
 \label{tab:wildchat_v4}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{@{}lllrrrrrrl@{}}
 \toprule
-\textbf{Workload / Curve} & \textbf{Contrast} & \textbf{Metric ($K=8$ Disjoint Real Cohorts)} & \textbf{Base Mean} & \textbf{Trt Mean} & \textbf{Paired Diff ($\pm$CI95)} & \textbf{Raw $p_t$} & \textbf{Holm $p_{\text{holm}}$} & \textbf{Wilcoxon $p$} & \textbf{Cohorts $<0$ / Note} \\
+\textbf{Workload / Curve} & \textbf{Contrast} & \textbf{Metric ($K=8$ Cohorts, Conditional on Fixed Trace)} & \textbf{Base Mean} & \textbf{Trt Mean} & \textbf{Paired Diff ($\pm$CI95)} & \textbf{Raw $p_t$} & \textbf{Holm $p_{\text{holm}}$} & \textbf{Wilcoxon $p$} & \textbf{Cohorts $<0$ / Note} \\
 \midrule
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_7d\_active\_mape} (\%) & $65.25\%$ & $64.72\%$ & $\mathbf{-0.52\%}$ ($\pm 0.02\%$) & $4.82\text{e-}11$ & $2.41\text{e-}10$ & $0.0078$ & $8/8$ ($359$d gap-free: $63.96\%$) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_30d\_active\_mape} (\%) & $26.79\%$ & $27.50\%$ & $\mathbf{+0.71\%}$ ($\pm 0.54\%$) & $0.0162$ & $0.0324$ & $0.0078$ & $0/8$ (Phase-shift rollout drift) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_90d\_active\_mape} (\%) & $15.85\%$ & $15.46\%$ & $\mathbf{-0.39\%}$ ($\pm 0.02\%$) & $5.97\text{e-}10$ & $2.39\text{e-}09$ & $0.0078$ & $8/8$ (Sig.\ improvement) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_7d\_release\_rmse} (users) & $47.49$ & $47.05$ & $\mathbf{-0.44}$ ($\pm 0.01$) & $1.64\text{e-}13$ & $1.15\text{e-}12$ & $0.0078$ & $8/8$ (Denominator-free) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_30d\_release\_rmse} (users) & $53.52$ & $53.00$ & $-0.52$ ($\pm 0.78$) & $0.1591$ & $0.1591$ & $0.2500$ & $5/8$ (Lower $\ell_2$ user error) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_90d\_release\_rmse} (users) & $66.80$ & $65.13$ & $\mathbf{-1.67}$ ($\pm 0.02$) & $9.02\text{e-}14$ & $7.22\text{e-}13$ & $0.0078$ & $8/8$ (Denominator-free) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{req\_1d\_rmse} (scalar daily requests) & $1493.98$ & $1502.74$ & $\mathbf{+8.76}$ ($\pm 0.21$) & $3.18\text{e-}12$ & $1.91\text{e-}11$ & $0.0078$ & $0/8$ (Additive trade-off) \\
-DistHeavy / Week1\_v2 & D $-$ B & \texttt{req\_30d\_rmse} (vs.\ Tree $12283.6$, BMF30 $16869.4$) & $9611.68$ & $9658.61$ & $\mathbf{+46.93}$ ($\pm 4.94$) & $8.74\text{e-}08$ & $2.62\text{e-}07$ & $0.0078$ & $0/8$ (BMF8: $10614.1$) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_7d\_active\_mape} (\%) & $65.10\%$ & $64.34\%$ & $\mathbf{-0.76\%}$ ($\pm 0.41\%$) & $0.0032$ & $0.0064$ & $0.0078$ & $8/8$ ($359$d gap-free: $64.09\%$) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_30d\_active\_mape} (\%) & $26.18\%$ & $27.85\%$ & $\mathbf{+1.67\%}$ ($\pm 0.62\%$) & $0.0004$ & $0.0018$ & $0.0078$ & $0/8$ (Negative result kept) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_90d\_active\_mape} (\%) & $15.94\%$ & $15.50\%$ & $\mathbf{-0.44\%}$ ($\pm 0.17\%$) & $0.0005$ & $0.0020$ & $0.0078$ & $8/8$ (Sig.\ conditional diff.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_7d\_release\_rmse} (users) & $47.46$ & $47.04$ & $\mathbf{-0.42}$ ($\pm 0.08$) & $4.47\text{e-}06$ & $3.13\text{e-}05$ & $0.0078$ & $8/8$ (Denominator-free) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_30d\_release\_rmse} (users) & $53.56$ & $52.78$ & $-0.77$ ($\pm 0.80$) & $0.0574$ & $0.0574$ & $0.1094$ & $5/8$ (Non-sig.\ $\ell_2$ user diff.) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_90d\_release\_rmse} (users) & $64.78$ & $62.97$ & $\mathbf{-1.80}$ ($\pm 0.34$) & $5.09\text{e-}06$ & $3.13\text{e-}05$ & $0.0078$ & $8/8$ (Denominator-free) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_30d\_latest\_active\_mape} (\%) & $33.49\%$ & $32.25\%$ & $\mathbf{-1.24\%}$ ($\pm 0.61\%$) & $0.0020$ & $0.0061$ & $0.0078$ & $8/8$ (Same-query-date all days) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{distinct\_30d\_sunday\_latest\_active\_mape} (\%) & $41.32\%$ & $30.12\%$ & $\mathbf{-11.20\%}$ ($\pm 0.49\%$) & $1.96\text{e-}10$ & $1.76\text{e-}09$ & $0.0078$ & $8/8$ (True UTC Sun: $2\text{d}$ vs $6\text{d}$ lag) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{req\_1d\_rmse} (scalar conversations) & $1486.13$ & $1494.94$ & $\mathbf{+8.81}$ ($\pm 0.30$) & $3.37\text{e-}11$ & $3.37\text{e-}10$ & $0.0078$ & $0/8$ (Additive trade-off) \\
+DistHeavy / Week1\_v2 & D $-$ B & \texttt{req\_30d\_rmse} (scalar conversations) & $9831.15$ & $9879.39$ & $\mathbf{+48.25}$ ($\pm 5.02$) & $8.12\text{e-}08$ & $6.50\text{e-}07$ & $0.0078$ & $0/8$ (Additive trade-off) \\
 \midrule
-DistHeavy / Original & D $-$ B & \texttt{distinct\_7d\_active\_mape} (\%) & $65.33\%$ & $64.82\%$ & $\mathbf{-0.51\%}$ ($\pm 0.02\%$) & $4.79\text{e-}11$ & $2.40\text{e-}10$ & $0.0078$ & $8/8$ (RMSE: $47.56 \to 47.13$) \\
-DistHeavy / Original & D $-$ B & \texttt{distinct\_30d\_active\_mape} (\%) & $27.03\%$ & $27.70\%$ & $\mathbf{+0.66\%}$ ($\pm 0.54\%$) & $0.0229$ & $0.0459$ & $0.0078$ & $0/8$ (RMSE: $54.06 \to 53.42$) \\
-DistHeavy / Original & D $-$ B & \texttt{distinct\_90d\_active\_mape} (\%) & $16.20\%$ & $15.75\%$ & $\mathbf{-0.45\%}$ ($\pm 0.02\%$) & $5.94\text{e-}10$ & $2.38\text{e-}09$ & $0.0078$ & $8/8$ (RMSE: $68.31 \to 66.37$) \\
+DistHeavy / Original & D $-$ B & \texttt{distinct\_7d\_active\_mape} (\%) & $65.07\%$ & $64.36\%$ & $\mathbf{-0.71\%}$ ($\pm 0.26\%$) & $0.0004$ & $0.0019$ & $0.0078$ & $8/8$ (RMSE: $47.55 \to 47.11$) \\
+DistHeavy / Original & D $-$ B & \texttt{distinct\_30d\_active\_mape} (\%) & $26.50\%$ & $28.05\%$ & $\mathbf{+1.54\%}$ ($\pm 0.64\%$) & $0.0007$ & $0.0030$ & $0.0078$ & $0/8$ (RMSE: $54.12 \to 53.24$) \\
+DistHeavy / Original & D $-$ B & \texttt{distinct\_90d\_active\_mape} (\%) & $16.34\%$ & $15.78\%$ & $\mathbf{-0.56\%}$ ($\pm 0.25\%$) & $0.0013$ & $0.0030$ & $0.0078$ & $8/8$ (RMSE: $66.45 \to 64.34$) \\
 \midrule
-Default / Week1\_v2 & D $-$ A & \texttt{req\_1d\_rmse} (scalar daily requests) & $1694.25$ & $1249.75$ & $\mathbf{-444.50}$ ($\pm 10.79$) & $3.16\text{e-}12$ & $1.26\text{e-}11$ & $0.0078$ & $8/8$ ($-26.24\%$ reduction) \\
-Default / Week1\_v2 & D $-$ A & \texttt{req\_30d\_rmse} (vs.\ Tree $10365.3$, BMF30 $14100.0$) & $10689.93$ & $8304.90$ & $\mathbf{-2385.03}$ ($\pm 255.71$) & $9.95\text{e-}08$ & $9.95\text{e-}08$ & $0.0078$ & $8/8$ (BMF8: $9100.5$) \\
+Default / Week1\_v2 & D $-$ A & \texttt{req\_1d\_rmse} (scalar conversations) & $1686.83$ & $1240.71$ & $\mathbf{-446.12}$ ($\pm 15.47$) & $3.83\text{e-}11$ & $2.68\text{e-}10$ & $0.0078$ & $8/8$ ($-26.45\%$ reduction) \\
+Default / Week1\_v2 & D $-$ A & \texttt{req\_30d\_rmse} (scalar conversations) & $10933.16$ & $8487.03$ & $\mathbf{-2446.13}$ ($\pm 262.61$) & $1.00\text{e-}07$ & $2.01\text{e-}07$ & $0.0078$ & $8/8$ ($-22.37\%$ reduction) \\
 \bottomrule
 \end{tabular}%
 }
 \end{table*}
 
-To validate SDG-MH on authentic public LLM telemetry without synthetic assumptions, we evaluate \texttt{allenai/WildChat-4.8M}~\cite{zhao2024wildchat} (ODC-By 1.0 / AI2 ImpACT license; $3{,}199{,}860$ total conversations across $1{,}833{,}730$ unique pseudonymous \texttt{hashed\_ip} users from \texttt{2023-04-09} to \texttt{2025-07-31}, covering $845$ calendar days and $809$ active UTC dates). We extract the contiguous 420-day calendar window from \texttt{2023-11-20} to \texttt{2025-01-12} (calendar indices $225\text{--}644$, containing $1{,}721{,}032$ conversations and $895{,}148$ unique \texttt{hashed\_ip} users across $418$ active UTC dates and $2$ real Gradio server-outage zero-activity days on \texttt{2024-01-18..19}), as well as the $359$-day strictly gap-free sub-span from \texttt{2024-01-20} to \texttt{2025-01-12}. We map the hosted OpenAI checkpoints to $m=5$ model families (\texttt{gpt-4o}, \texttt{gpt-4o-mini}, \texttt{gpt-3.5-turbo}, \texttt{gpt-4-turbo}, \texttt{other-openai}) and $|\mathcal{A}|=20$ interaction categories ($5\text{ model families} \times 4\text{ UTC 6h quadrants}$, $k=3$ per-user window cap, $\Delta_{\text{distinct}}^2 = 11$), and partition all $895{,}148$ users without subsampling into $K=8$ disjoint real-user cohorts ($111{,}893.5$ users/cohort, $df=7$) $\times$ $5$ CRN trials (Table~\ref{tab:wildchat_v4}):
+To evaluate SDG-MH on public real-world LLM telemetry without private git dependencies, we build a reproducible projection of \texttt{allenai/WildChat-4.8M}~\cite{zhao2024wildchat} pinned to Hugging Face revision \texttt{c827c6df8fcf008219ffaffa4d1dd77491099367} (\texttt{scripts/\allowbreak prepare\_\allowbreak wildchat\_\allowbreak public\_\allowbreak manifest.py}, ODC-By 1.0 / AI2 ImpACT license; $3{,}199{,}860$ conversations across $1{,}833{,}730$ \texttt{hashed\_ip} identifiers, \texttt{SHA-256} verified). We extract the contiguous 420-day window \texttt{2023-11-20} (Monday) to \texttt{2025-01-12} ($1{,}721{,}032$ conversations, $895{,}148$ \texttt{hashed\_ip} users, $418$ active UTC days + $2$ outage days \texttt{2024-01-18..19}) and the $359$-day gap-free sub-span (\texttt{2024-01-20} to \texttt{2025-01-12}). We map checkpoints to $m=5$ model families and $|\mathcal{A}|=20$ \emph{interaction-category proxies} ($5\text{ model families} \times 4\text{ UTC 6h quadrants}$, using exact \texttt{RollingDistinctState} top-$k=3$ ranking by descending in-window count and production Discrete Gaussian noise $\mathcal{N}_{\mathbb{Z}}$). All $895{,}148$ users are partitioned into $K=8$ disjoint cohorts ($df=7$, $\times 5$ CRN trials; Table~\ref{tab:wildchat_v4}), where $p$-values quantify uncertainty \emph{conditional on this fixed 420d trace} rather than 8 independent real-world deployments:
 \begin{enumerate}[leftmargin=*, nosep, topsep=2pt]
-    \item \textbf{Heavy-Tailed Activity, Deduplication, and Clipping Bias}: Real user conversation counts are extreme ($p_{50}=1$, $p_{90}=1$, $p_{99}=13$, $\max=35{,}588$). Exact window deduplication reduces raw daily user sums by $7.56\%$ ($7\text{d}$), $10.76\%$ ($30\text{d}$), and $13.06\%$ ($90\text{d}$). Daily request clipping at $C_r=50$ induces an $11.24\%$ bias, while the $k=3$ window category cap clips $0.863\%$ of users ($7{,}723 / 895{,}148$ power users visiting $\ge 4$ categories), inducing a $1.06\%$ 30d category bias.
-    \item \textbf{Consistency with Controlled v3 Findings and Non-Stationary Rollout Sensitivity}: On active model-category cells ($\text{true} \ge 10$), \texttt{D\_JointPlanning} $(0,4,0)$ significantly reduces 7d and 90d Distinct Active MAPE ($-0.52\%$ and $-0.39\%$ on \texttt{Week1\_v2}, $p_{\text{holm}} \le 2.39\times 10^{-9}$, $8/8$ cohorts) and denominator-free Release RMSE ($-0.44$ and $-1.67$ users, $p_{\text{holm}} \le 1.15\times 10^{-12}$). At $30\text{d}$, whereas Release RMSE decreases from $53.52$ to $53.00$ users ($-0.52$, $p_{\text{holm}}=0.1591$), Active MAPE increases by $+0.71\%$ ($26.79\% \to 27.50\%$, $p_{\text{holm}}=0.0324$, $0/8$ cohorts)---a negative result reported as-is; one untested hypothesis is that the $+4$-day shift samples different windows relative to dated checkpoint transitions. On 30d additive Requests, SDG-MH ($9658.61$ under \texttt{DistinctHeavy} and $8304.90$ under \texttt{Default}) outperforms \texttt{Banded-MF ($b=8$)} ($10614.07$ / $9100.50$), \texttt{Tree-2l} ($12283.60$ / $10365.35$), and \texttt{Banded-MF ($b=30$)} ($16869.35$ / $14100.03$).
-    \item \textbf{Real-Data Limitations}: (i) \texttt{hashed\_ip} is an IP-based pseudonym subject to NAT sharing and DHCP churn; (ii) dated checkpoints are absent for part of the window (hence active-cell MAPE); and (iii) WildChat logs completed conversations without HTTP error codes.
+    \item \textbf{Deduplication, Clipping Bias, and Sensitivity Analysis}: Real user conversation counts are heavy-tailed ($p_{50}=1$, $p_{90}=1$, $p_{99}=13$, $\max=35{,}588$). Window deduplication reduces daily active sums by $7.56\%$ ($7\text{d}$), $10.76\%$ ($30\text{d}$), and $13.06\%$ ($90\text{d}$); $C_r=50$ clipping incurs $11.24\%$ bias and $k=3$ truncation incurs $1.06\%$ 30d bias. Across partition sensitivities ($K \in \{4, 8, 16\}$ and \texttt{blake2b(hashed\_ip)\%8}), 7d ($-0.48\%$ to $-0.85\%$) and 90d ($-0.47\%$ to $-1.25\%$) active MAPE gains and the 30d release-day increase ($+0.37\%$ to $+1.76\%$) remain directionally consistent.
+    \item \textbf{Release-Day vs.\ Same-Query-Date Accuracy and Authentic UTC Sunday Alignment}: Under \texttt{DistinctHeavy / Week1\_v2}, \texttt{D\_JointPlanning} $(0,4,0)$ improves 7d and 90d active MAPE ($-0.76\%$ and $-0.44\%$, $p_{\text{holm}} \le 0.0064$) and Release RMSE ($-0.42$ and $-1.80$ users, $p_{\text{holm}} \le 3.13\times 10^{-5}$). At 30d, release-day active MAPE degrades by $+1.67\%$ ($p_{\text{holm}}=0.0018$, retained as a negative result; Release RMSE $-0.77$ users, $p_{\text{holm}}=0.0574$), yet \emph{same-query-date all-day latest-available} active MAPE improves by $-1.24\%$ ($33.49\% \to 32.25\%$, $p_{\text{holm}}=0.0061$, $8/8$ cohorts). Because \texttt{2023-11-20} is Monday, $\phi_{30}=0$ (\texttt{B\_BudgetOnly}) releases on Monday and suffers $6.0\text{d}$ staleness on authentic UTC Sundays ($41.32\%$ MAPE), whereas $(0,4,0)$ releases on Friday ($2.0\text{d}$ Sunday lag, $30.12\%$ MAPE); pinning \texttt{fixed\_phi\_30=6} selects $(1,6,0)$ for $0.0\text{d}$ Sunday lag.
+    \item \textbf{Explicit Dataset Boundaries}: (i) The artifact is the 3.2M-conversation public filtered release; (ii) \texttt{hashed\_ip} is an IP pseudonym subject to NAT/DHCP churn, not an authenticated account ID; (iii) one conversation record $\neq$ one HTTP API request, and WildChat lacks HTTP error logs; (iv) the 20 categories are an interaction-category proxy rather than semantic NLP task topics.
 \end{enumerate}
 
 % ============================================================================
@@ -663,9 +667,9 @@ Table~\ref{tab:paired_v3} \& Fig.~\ref{fig:same_date} (Same-date $B$ vs.\ $D$, H
 \midrule
 Fig.~\ref{fig:cr_ablation} ($C_r \in \{30,50,100,200\}$ ablation) & \texttt{experiments/sdg\_mh/run\_\allowbreak long\_\allowbreak horizon\_\allowbreak 420d\_\allowbreak and\_\allowbreak ablation.py} & \texttt{long\_\allowbreak horizon\_\allowbreak 420d/\allowbreak cr\_\allowbreak clipping\_\allowbreak ablation\_\allowbreak 420d.csv} \\
 \midrule
-Table~\ref{tab:baselines_v3} \& Fig.~\ref{fig:baselines} (Uniform post-proc baselines + Banded-MF on $[1,420]$) & \texttt{sdg\_mh/baselines.py} (\texttt{BandedToeplitzBaseline}), \texttt{run\_\allowbreak banded\_\allowbreak mf\_\allowbreak baseline\_\allowbreak v4.py} & \texttt{long\_\allowbreak horizon\_\allowbreak 420d\_\allowbreak v3\_\allowbreak final/\allowbreak audit\_\allowbreak v3\_\allowbreak competitive\_\allowbreak baselines\_\allowbreak summary.csv}; \texttt{banded\_\allowbreak mf\_\allowbreak baseline\_\allowbreak v4/\allowbreak banded\_\allowbreak mf\_\allowbreak competitive\_\allowbreak summary.csv} \\
+Table~\ref{tab:baselines_v3} \& Fig.~\ref{fig:baselines} (Uniform post-proc baselines + Banded-MF v5 on $[1,420]$) & \texttt{sdg\_mh/baselines.py} (\texttt{BandedToeplitzBaseline}), \texttt{run\_\allowbreak banded\_\allowbreak mf\_\allowbreak baseline\_\allowbreak v5.py} & \texttt{long\_\allowbreak horizon\_\allowbreak 420d\_\allowbreak v3\_\allowbreak final/\allowbreak audit\_\allowbreak v3\_\allowbreak competitive\_\allowbreak baselines\_\allowbreak summary.csv}; \texttt{banded\_\allowbreak mf\_\allowbreak baseline\_\allowbreak v5/\allowbreak banded\_\allowbreak mf\_\allowbreak competitive\_\allowbreak summary\_\allowbreak v5.csv} \\
 \midrule
-Section~\ref{sec:wildchat} \& Table~\ref{tab:wildchat_v4} (WildChat-4.8M 420d real-data validation, $K=8$ cohorts) & \texttt{experiments/sdg\_mh/run\_\allowbreak wildchat\_\allowbreak real\_\allowbreak validation\_\allowbreak v4.py} & \texttt{wildchat\_\allowbreak real\_\allowbreak validation\_\allowbreak v4/\allowbreak wildchat\_\allowbreak k8\_\allowbreak cohorts\_\allowbreak paired\_\allowbreak d\_\allowbreak vs\_\allowbreak b.csv}, \texttt{wildchat\_\allowbreak dataset\_\allowbreak audit\_\allowbreak summary.csv} \\
+Section~\ref{sec:wildchat} \& Table~\ref{tab:wildchat_v4} (WildChat-4.8M 420d real-data validation v5, $K=8$ cohorts) & \texttt{experiments/sdg\_mh/run\_\allowbreak wildchat\_\allowbreak real\_\allowbreak validation\_\allowbreak v5.py}, \texttt{prepare\_\allowbreak wildchat\_\allowbreak public\_\allowbreak manifest.py} & \texttt{wildchat\_\allowbreak real\_\allowbreak validation\_\allowbreak v5/\allowbreak wildchat\_\allowbreak k8\_\allowbreak cohorts\_\allowbreak paired\_\allowbreak v5.csv}, \texttt{wildchat\_\allowbreak public\_\allowbreak repro\_\allowbreak manifest.json} \\
 \bottomrule
 \end{tabular}%
 }

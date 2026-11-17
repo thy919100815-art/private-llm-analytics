@@ -1,8 +1,8 @@
 {
   "manuscript": "docs/pvlbd_2027_paper/main.tex",
   "verifier_mode": "STRUCTURED_LATEX_TABLE_JOINT_KEY_PARSER",
-  "total_checks": 478,
-  "passed_checks": 478,
+  "total_checks": 493,
+  "passed_checks": 493,
   "failed_checks": 0,
   "all_passed": true,
   "checks": [
@@ -2173,50 +2173,50 @@
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "3446.9\u00b1 18.5",
-      "actual": "3446.9\u00b1 18.5"
+      "expected": "3450.7\u00b1 35.3",
+      "actual": "3450.7\u00b1 35.3"
     },
     {
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_7d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "11589.1\u00b1 281.3",
-      "actual": "11589.1\u00b1 281.3"
+      "expected": "11558.3\u00b1 333.4",
+      "actual": "11558.3\u00b1 333.4"
     },
     {
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "43975.5\u00b1 1337.5",
-      "actual": "43975.5\u00b1 1337.5"
+      "expected": "43651.1\u00b1 1807.8",
+      "actual": "43651.1\u00b1 1807.8"
     },
     {
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_requests_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "126617.7\u00b1 4385.9",
-      "actual": "126617.7\u00b1 4385.9"
+      "expected": "125048.5\u00b1 5335.7",
+      "actual": "125048.5\u00b1 5335.7"
     },
     {
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_failures_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "2069.1\u00b1 23.0",
-      "actual": "2069.1\u00b1 23.0"
+      "expected": "2069.4\u00b1 17.3",
+      "actual": "2069.4\u00b1 17.3"
     },
     {
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_failures_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "7829.9\u00b1 330.2",
-      "actual": "7829.9\u00b1 330.2"
+      "expected": "7865.9\u00b1 504.3",
+      "actual": "7865.9\u00b1 504.3"
     },
     {
       "check": "tab5_Banded-MF (b=8, MH-RemEnv)_failures_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "13880.6\u00b1 1261.6",
-      "actual": "13880.6\u00b1 1261.6"
+      "expected": "14079.9\u00b1 1183.0",
+      "actual": "14079.9\u00b1 1183.0"
     },
     {
       "check": "tab5_method_present_Banded-MF (b=30, MH-RemEnv)",
@@ -2243,50 +2243,50 @@
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "9919.5\u00b1 125.5",
-      "actual": "9919.5\u00b1 125.5"
+      "expected": "9981.0\u00b1 128.2",
+      "actual": "9981.0\u00b1 128.2"
     },
     {
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_7d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "18846.8\u00b1 358.6",
-      "actual": "18846.8\u00b1 358.6"
+      "expected": "18933.7\u00b1 213.2",
+      "actual": "18933.7\u00b1 213.2"
     },
     {
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "46369.0\u00b1 1260.5",
-      "actual": "46369.0\u00b1 1260.5"
+      "expected": "46202.8\u00b1 661.6",
+      "actual": "46202.8\u00b1 661.6"
     },
     {
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_requests_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "127926.1\u00b1 4450.8",
-      "actual": "127926.1\u00b1 4450.8"
+      "expected": "128248.2\u00b1 2551.8",
+      "actual": "128248.2\u00b1 2551.8"
     },
     {
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_failures_1d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "5733.8\u00b1 90.4",
-      "actual": "5733.8\u00b1 90.4"
+      "expected": "5684.7\u00b1 99.7",
+      "actual": "5684.7\u00b1 99.7"
     },
     {
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_failures_30d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "13248.0\u00b1 583.0",
-      "actual": "13248.0\u00b1 583.0"
+      "expected": "12938.5\u00b1 636.8",
+      "actual": "12938.5\u00b1 636.8"
     },
     {
       "check": "tab5_Banded-MF (b=30, MH-RemEnv)_failures_90d_rmse",
       "passed": true,
       "source": "results\\sdg_mh\\long_horizon_420d_v3_final\\audit_v3_competitive_baselines_summary.csv",
-      "expected": "19658.6\u00b1 1043.5",
-      "actual": "19658.6\u00b1 1043.5"
+      "expected": "18800.9\u00b1 997.9",
+      "actual": "18800.9\u00b1 997.9"
     },
     {
       "check": "tab5_method_present_Tree-2l (MH-RemEnv)",
@@ -2676,679 +2676,784 @@
     {
       "check": "tab6_row_count",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "13",
-      "actual": "13"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "15",
+      "actual": "15"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "65.25%",
-      "actual": "65.25%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "65.10%",
+      "actual": "65.10%"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "64.72%",
-      "actual": "64.72%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "64.34%",
+      "actual": "64.34%"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-0.52%",
-      "actual": "-0.52% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-0.76%",
+      "actual": "-0.76% (\u00b1 0.41%)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.02%",
-      "actual": "-0.52% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.41%",
+      "actual": "-0.76% (\u00b1 0.41%)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_active_mape')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
-      "actual": "8/8 (359d gap-free: 63.96%)"
+      "actual": "8/8 (359d gap-free: 64.09%)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "26.79%",
-      "actual": "26.79%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "26.18%",
+      "actual": "26.18%"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "27.50%",
-      "actual": "27.50%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "27.85%",
+      "actual": "27.85%"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "+0.71%",
-      "actual": "+0.71% (\u00b1 0.54%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "+1.67%",
+      "actual": "+1.67% (\u00b1 0.62%)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.54%",
-      "actual": "+0.71% (\u00b1 0.54%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.62%",
+      "actual": "+1.67% (\u00b1 0.62%)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_active_mape')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0/8",
-      "actual": "0/8 (Phase-shift rollout drift)"
+      "actual": "0/8 (Negative result kept)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "15.85%",
-      "actual": "15.85%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "15.94%",
+      "actual": "15.94%"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "15.46%",
-      "actual": "15.46%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "15.50%",
+      "actual": "15.50%"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-0.39%",
-      "actual": "-0.39% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-0.44%",
+      "actual": "-0.44% (\u00b1 0.17%)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.02%",
-      "actual": "-0.39% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.17%",
+      "actual": "-0.44% (\u00b1 0.17%)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_active_mape')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
-      "actual": "8/8 (Sig.\\ improvement)"
+      "actual": "8/8 (Sig.\\ conditional diff.)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "47.49",
-      "actual": "47.49"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "47.46",
+      "actual": "47.46"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "47.05",
-      "actual": "47.05"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "47.04",
+      "actual": "47.04"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-0.44",
-      "actual": "-0.44 (\u00b1 0.01)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-0.42",
+      "actual": "-0.42 (\u00b1 0.08)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.01",
-      "actual": "-0.44 (\u00b1 0.01)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.08",
+      "actual": "-0.42 (\u00b1 0.08)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_7d_release_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
       "actual": "8/8 (Denominator-free)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "53.52",
-      "actual": "53.52"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "53.56",
+      "actual": "53.56"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "53.00",
-      "actual": "53.00"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "52.78",
+      "actual": "52.78"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-0.52",
-      "actual": "-0.52 (\u00b1 0.78)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-0.77",
+      "actual": "-0.77 (\u00b1 0.80)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.78",
-      "actual": "-0.52 (\u00b1 0.78)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.80",
+      "actual": "-0.77 (\u00b1 0.80)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "0.2500",
-      "actual": "0.2500"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "0.1094",
+      "actual": "0.1094"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_release_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "5/8",
-      "actual": "5/8 (Lower \\ell_2 user error)"
+      "actual": "5/8 (Non-sig.\\ \\ell_2 user diff.)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "66.80",
-      "actual": "66.80"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "64.78",
+      "actual": "64.78"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "65.13",
-      "actual": "65.13"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "62.97",
+      "actual": "62.97"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-1.67",
-      "actual": "-1.67 (\u00b1 0.02)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-1.80",
+      "actual": "-1.80 (\u00b1 0.34)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.02",
-      "actual": "-1.67 (\u00b1 0.02)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.34",
+      "actual": "-1.80 (\u00b1 0.34)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_90d_release_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
       "actual": "8/8 (Denominator-free)"
     },
     {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "33.49%",
+      "actual": "33.49%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "32.25%",
+      "actual": "32.25%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-1.24%",
+      "actual": "-1.24% (\u00b1 0.61%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.61%",
+      "actual": "-1.24% (\u00b1 0.61%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_latest_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "8/8",
+      "actual": "8/8 (Same-query-date all days)"
+    },
+    {
+      "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')",
+      "actual": "found"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')_base",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "41.32%",
+      "actual": "41.32%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')_trt",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "30.12%",
+      "actual": "30.12%"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')_diff",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-11.20%",
+      "actual": "-11.20% (\u00b1 0.49%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')_ci95",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.49%",
+      "actual": "-11.20% (\u00b1 0.49%)"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')_wilcoxon",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "0.0078",
+      "actual": "0.0078"
+    },
+    {
+      "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'distinct_30d_sunday_latest_active_mape')_cohorts",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "8/8",
+      "actual": "8/8 (True UTC Sun: 2\\text{d} vs 6\\text{d} lag)"
+    },
+    {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "1493.98",
-      "actual": "1493.98"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "1486.13",
+      "actual": "1486.13"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "1502.74",
-      "actual": "1502.74"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "1494.94",
+      "actual": "1494.94"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "+8.76",
-      "actual": "+8.76 (\u00b1 0.21)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "+8.81",
+      "actual": "+8.81 (\u00b1 0.30)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.21",
-      "actual": "+8.76 (\u00b1 0.21)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.30",
+      "actual": "+8.81 (\u00b1 0.30)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_1d_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0/8",
       "actual": "0/8 (Additive trade-off)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "9611.68",
-      "actual": "9611.68"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "9831.15",
+      "actual": "9831.15"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "9658.61",
-      "actual": "9658.61"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "9879.39",
+      "actual": "9879.39"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "+46.93",
-      "actual": "+46.93 (\u00b1 4.94)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "+48.25",
+      "actual": "+48.25 (\u00b1 5.02)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 4.94",
-      "actual": "+46.93 (\u00b1 4.94)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 5.02",
+      "actual": "+48.25 (\u00b1 5.02)"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Week1_v2', 'D - B', 'req_30d_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0/8",
-      "actual": "0/8 (BMF8: 10614.1)"
+      "actual": "0/8 (Additive trade-off)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "65.33%",
-      "actual": "65.33%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "65.07%",
+      "actual": "65.07%"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "64.82%",
-      "actual": "64.82%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "64.36%",
+      "actual": "64.36%"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-0.51%",
-      "actual": "-0.51% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-0.71%",
+      "actual": "-0.71% (\u00b1 0.26%)"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.02%",
-      "actual": "-0.51% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.26%",
+      "actual": "-0.71% (\u00b1 0.26%)"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_7d_active_mape')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
-      "actual": "8/8 (RMSE: 47.56 \\to 47.13)"
+      "actual": "8/8 (RMSE: 47.55 \\to 47.11)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "27.03%",
-      "actual": "27.03%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "26.50%",
+      "actual": "26.50%"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "27.70%",
-      "actual": "27.70%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "28.05%",
+      "actual": "28.05%"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "+0.66%",
-      "actual": "+0.66% (\u00b1 0.54%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "+1.54%",
+      "actual": "+1.54% (\u00b1 0.64%)"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.54%",
-      "actual": "+0.66% (\u00b1 0.54%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.64%",
+      "actual": "+1.54% (\u00b1 0.64%)"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_30d_active_mape')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0/8",
-      "actual": "0/8 (RMSE: 54.06 \\to 53.42)"
+      "actual": "0/8 (RMSE: 54.12 \\to 53.24)"
     },
     {
       "check": "tab6_key_in_csv_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')",
       "actual": "found"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "16.20%",
-      "actual": "16.20%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "16.34%",
+      "actual": "16.34%"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "15.75%",
-      "actual": "15.75%"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "15.78%",
+      "actual": "15.78%"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-0.45%",
-      "actual": "-0.45% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-0.56%",
+      "actual": "-0.56% (\u00b1 0.25%)"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 0.02%",
-      "actual": "-0.45% (\u00b1 0.02%)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 0.25%",
+      "actual": "-0.56% (\u00b1 0.25%)"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('DistHeavy / Original', 'D - B', 'distinct_90d_active_mape')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
-      "actual": "8/8 (RMSE: 68.31 \\to 66.37)"
+      "actual": "8/8 (RMSE: 66.45 \\to 64.34)"
     },
     {
       "check": "tab6_key_in_csv_('Default / Week1_v2', 'D - A', 'req_1d_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('Default / Week1_v2', 'D - A', 'req_1d_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "1694.25",
-      "actual": "1694.25"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "1686.83",
+      "actual": "1686.83"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "1249.75",
-      "actual": "1249.75"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "1240.71",
+      "actual": "1240.71"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-444.50",
-      "actual": "-444.50 (\u00b1 10.79)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-446.12",
+      "actual": "-446.12 (\u00b1 15.47)"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 10.79",
-      "actual": "-444.50 (\u00b1 10.79)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 15.47",
+      "actual": "-446.12 (\u00b1 15.47)"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_1d_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
-      "actual": "8/8 (-26.24% reduction)"
+      "actual": "8/8 (-26.45% reduction)"
     },
     {
       "check": "tab6_key_in_csv_('Default / Week1_v2', 'D - A', 'req_30d_rmse')",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "('Default / Week1_v2', 'D - A', 'req_30d_rmse')",
       "actual": "found"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_base",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "10689.93",
-      "actual": "10689.93"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "10933.16",
+      "actual": "10933.16"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_trt",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "8304.90",
-      "actual": "8304.90"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "8487.03",
+      "actual": "8487.03"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_diff",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "-2385.03",
-      "actual": "-2385.03 (\u00b1 255.71)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "-2446.13",
+      "actual": "-2446.13 (\u00b1 262.61)"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_ci95",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
-      "expected": "\u00b1 255.71",
-      "actual": "-2385.03 (\u00b1 255.71)"
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
+      "expected": "\u00b1 262.61",
+      "actual": "-2446.13 (\u00b1 262.61)"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_wilcoxon",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "0.0078",
       "actual": "0.0078"
     },
     {
       "check": "tab6_('Default / Week1_v2', 'D - A', 'req_30d_rmse')_cohorts",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_k8_cohorts_paired_d_vs_b.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_k8_cohorts_paired_v5.csv",
       "expected": "8/8",
-      "actual": "8/8 (BMF8: 9100.5)"
+      "actual": "8/8 (-22.37% reduction)"
+    },
+    {
+      "check": "wildchat_origin_weekday",
+      "passed": true,
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
+      "expected": "2023-11-20 (Monday)",
+      "actual": ""
     },
     {
       "check": "wildchat_audit_mean_dedup_reduction_7d_pct",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
       "expected": "7.56\\%",
       "actual": ""
     },
     {
       "check": "wildchat_audit_mean_dedup_reduction_30d_pct",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
       "expected": "10.76\\%",
       "actual": ""
     },
     {
       "check": "wildchat_audit_mean_dedup_reduction_90d_pct",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
       "expected": "13.06\\%",
       "actual": ""
     },
     {
       "check": "wildchat_audit_mean_daily_req_clip_bias_pct",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
       "expected": "11.24\\%",
       "actual": ""
     },
     {
       "check": "wildchat_audit_mean_cat30d_k3_clip_bias_pct",
       "passed": true,
-      "source": "results\\sdg_mh\\wildchat_real_validation_v4\\wildchat_dataset_audit_summary.csv",
+      "source": "results\\sdg_mh\\wildchat_real_validation_v5\\wildchat_dataset_audit_summary_v5.csv",
       "expected": "1.06\\%",
       "actual": ""
     }
