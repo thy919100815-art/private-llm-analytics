@@ -66,18 +66,42 @@ def make_fig_privacy_envelope() -> None:
         ["observed_ledger_max_rho", "theoretical_L_max_575", "commitment_rho_bar"]
     ].mean().sort_values("horizon_h")
 
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.2, 2.35), constrained_layout=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(7.4, 2.55), constrained_layout=True)
 
     hs = sub["horizon_h"].to_numpy()
     ax1.plot(hs, sub["commitment_rho_bar"], color=C_NAVY, lw=2.0, marker="o", ms=4.0, label=r"Commitment $\bar{\rho}(h)$")
     ax1.plot(hs, sub["theoretical_L_max_575"], color=C_TEAL, lw=1.7, ls="--", marker="s", ms=3.8, label=r"575d Bound $L_{\max}(h)$")
     ax1.plot(hs, sub["observed_ledger_max_rho"], color=C_AMBER, lw=1.7, ls=":", marker="^", ms=4.2, label=r"Observed Ledger $\rho_{\mathrm{ledger}}(h)$")
     ax1.axvline(365, color=C_SLATE, lw=1.0, ls="-.")
-    ax1.text(358, 0.05, "Affine tail\n($h \\geq 365$)", fontsize=8.0, color=C_SLATE, ha="right")
+    ax1.text(358, 0.212, "Affine tail\n($h \\geq 365$)", fontsize=7.5, color=C_SLATE, ha="right", va="center")
     ax1.set_xlabel("Horizon $h$ (days)")
     ax1.set_ylabel(r"Cumulative zCDP ($\rho$)")
     ax1.set_title("(a) 420-Day Ledger vs. Commitment")
     ax1.legend(frameon=False, loc="upper left")
+
+    sub_z = sub[sub["horizon_h"] <= 90]
+    hz = sub_z["horizon_h"].to_numpy()
+    axins = ax1.inset_axes([0.53, 0.12, 0.44, 0.35])
+    axins.set_facecolor("white")
+    axins.plot(hz, sub_z["commitment_rho_bar"], color=C_NAVY, lw=1.6, marker="o", ms=3.3)
+    axins.plot(hz, sub_z["theoretical_L_max_575"], color=C_TEAL, lw=1.4, ls="--", marker="s", ms=3.0)
+    axins.plot(hz, sub_z["observed_ledger_max_rho"], color=C_AMBER, lw=1.4, ls=":", marker="^", ms=3.3)
+    axins.fill_between(hz, sub_z["theoretical_L_max_575"], sub_z["commitment_rho_bar"], color=C_TEAL, alpha=0.15)
+    axins.set_xlim(-3, 96)
+    axins.set_ylim(0.008, 0.092)
+    axins.set_xticks([1, 7, 30, 90])
+    axins.set_yticks([0.02, 0.05, 0.08])
+    axins.tick_params(labelsize=6.8)
+    axins.text(
+        0.04, 0.92, "Zoom: $h \\in [1, 90]$\n(Headroom $>0$)",
+        transform=axins.transAxes, fontsize=6.8, va="top", ha="left",
+        color=C_NAVY, fontweight="bold",
+        bbox=dict(boxstyle="round,pad=0.15", facecolor="white", edgecolor="none", alpha=0.85),
+    )
+    for sp in axins.spines.values():
+        sp.set_visible(True)
+        sp.set_edgecolor("#7F8C8D")
+        sp.set_linewidth(0.8)
 
     labels = ["[1, 7]", "[7, 30]", "[30, 90]", "[90, 365]"]
     x = np.arange(len(labels))
@@ -134,13 +158,17 @@ def make_fig_joint_planning_eval() -> None:
         col = C_TEAL if (p < 0.05 and d < 0) else C_SLATE
         ax1.errorbar(d, y, xerr=ci, fmt="o", color=col, capsize=3.5, ms=5.5, lw=1.6)
         tag = f"{d:+.3f} pp (sig.)" if p < 0.05 else f"{d:+.3f} pp (n.s.)"
-        x_txt = d - 0.008 if d < -0.02 else 0.008
-        ha = "right" if d < -0.02 else "left"
-        ax1.text(x_txt, y + 0.20, tag, ha=ha, va="bottom", fontsize=7.8, color=col)
+        if d < -0.05:
+            x_txt, ha = d + 0.005, "center"
+        elif d < -0.02:
+            x_txt, ha = d - 0.006, "right"
+        else:
+            x_txt, ha = 0.008, "left"
+        ax1.text(x_txt, y + 0.22, tag, ha=ha, va="bottom", fontsize=7.8, color=col)
     ax1.set_yticks(y_pos)
     ax1.set_yticklabels([lbl for _, lbl in syn_specs])
     ax1.set_ylim(-0.55, len(syn_specs) - 0.25)
-    ax1.set_xlim(-0.135, 0.115)
+    ax1.set_xlim(-0.150, 0.115)
     ax1.set_xlabel("Paired MAPE Diff (pp) [Scale: $\\pm 0.13$ pp]")
     ax1.set_title("(a) Synthetic Workload ($K=8$ seeds, $df=7$)")
 
@@ -219,7 +247,15 @@ def make_fig_baselines_and_clipping() -> None:
     ax2.plot(crs, abs_bias, ls="--", marker="s", ms=4.2, color=C_CORAL, lw=1.5, label=r"$|$Clipping Bias$|$")
     ax2.plot(crs, noise_rmse, ls=":", marker="^", ms=4.5, color=C_TEAL, lw=1.5, label="Noise RMSE")
     ax2.axvline(50, color=C_SLATE, lw=1.0, ls="-.")
-    ax2.text(55, 4200, "Optimum\n$C_r=50$", fontsize=8.0, color=C_NAVY)
+    ax2.annotate(
+        "Optimum $C_r=50$\n(RMSE $2346.2$)",
+        xy=(50, 2346.2),
+        xytext=(84, 1350),
+        arrowprops=dict(arrowstyle="->", color=C_NAVY, lw=1.2),
+        fontsize=8.0,
+        color=C_NAVY,
+        fontweight="bold",
+    )
     ax2.set_xticks(crs)
     ax2.set_ylim(0, 7400)
     ax2.set_xlabel("Daily Per-User Clipping Threshold $C_r$")

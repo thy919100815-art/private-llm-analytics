@@ -19,22 +19,6 @@
 
 \emergencystretch=3em
 
-\setlength{\textfloatsep}{5.5pt plus 1.5pt minus 1.5pt}
-\setlength{\dbltextfloatsep}{5.5pt plus 1.5pt minus 1.5pt}
-\setlength{\floatsep}{4pt plus 1.5pt minus 1.5pt}
-\setlength{\dblfloatsep}{4pt plus 1.5pt minus 1.5pt}
-\setlength{\abovecaptionskip}{3pt plus 1pt minus 1pt}
-\setlength{\belowcaptionskip}{1pt plus 1pt minus 1pt}
-\AtBeginDocument{%
-  \setlength{\abovedisplayskip}{4pt plus 1.5pt minus 1.5pt}%
-  \setlength{\belowdisplayskip}{4pt plus 1.5pt minus 1.5pt}%
-  \setlength{\abovedisplayshortskip}{2.5pt plus 1pt}%
-  \setlength{\belowdisplayshortskip}{2.5pt plus 1pt}%
-}
-\setlength{\bibsep}{0pt plus 0.3pt}
-\setlist[enumerate]{leftmargin=*, nosep, topsep=1pt, partopsep=0pt}
-\setlist[itemize]{leftmargin=*, nosep, topsep=1pt, partopsep=0pt}
-
 \begin{document}
 
 \title[No Epochs, No Expiry: Multi-Horizon User-Time DP for Perpetual Analytics]{No Epochs, No Expiry: Multi-Horizon User-Time Differential Privacy and Unified Calendar Planning for Perpetual Analytics}
@@ -148,7 +132,7 @@ Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily
 \begin{figure*}[t]
 \centering
 \begin{tikzpicture}[
-    node distance=0.36cm and 0.60cm,
+    node distance=0.42cm and 0.62cm,
     box/.style={draw=black!75, rounded corners=2pt, fill=blue!4, minimum height=0.80cm, minimum width=2.25cm, align=center, font=\scriptsize},
     off/.style={draw=purple!65!black, rounded corners=2pt, fill=purple!5, minimum height=0.70cm, minimum width=3.05cm, align=center, font=\scriptsize},
     store/.style={draw=teal!70!black, rounded corners=2pt, fill=teal!6, minimum height=0.76cm, minimum width=2.75cm, align=center, font=\scriptsize},
@@ -158,23 +142,23 @@ Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily
 ]
 % Bottom tier: Runtime Pipeline (1. Reserve -> 2. Sample -> 3. Persist -> 4. Commit)
 \node[box, fill=gray!10, minimum width=1.55cm] (stream) {Daily Stream\\$D_t$};
-\node[box, above right=0.20cm and 0.55cm of stream] (clip) {Additive Clipper\\$(C_r=50, C_f=10)$};
-\node[box, below right=0.20cm and 0.55cm of stream] (roll) {Rolling Distinct State\\$(w_{\max}=90, k=3)$};
+\node[box, above right=0.22cm and 0.55cm of stream] (clip) {Additive Clipper\\$(C_r=50, C_f=10)$};
+\node[box, below right=0.22cm and 0.55cm of stream] (roll) {Rolling Distinct State\\$(w_{\max}=90, k=3)$};
 
-\node[gate, right=0.60cm of $(clip.east)!0.5!(roll.east)$] (ledger) {\textbf{1.\ Ledger Reserve}\\$\tau_{\mathrm{tol}}=0$, Fail-Closed};
+\node[gate, right=0.62cm of $(clip.east)!0.5!(roll.east)$] (ledger) {\textbf{1.\ Ledger Reserve}\\$\tau_{\mathrm{tol}}=0$, Fail-Closed};
 
-\node[noise, right=0.60cm of ledger, yshift=0.50cm] (seal) {\textbf{2a.\ Daily $\mathcal{N}_{\mathbb{Z}}$ Sealing}\\$(\sigma_r, \sigma_f)$};
-\node[noise, right=0.60cm of ledger, yshift=-0.50cm] (cal) {\textbf{2b.\ Periodic $\mathcal{N}_{\mathbb{Z}}$ Release}\\$t \equiv \phi_f \pmod{S_f}$};
+\node[noise, right=0.62cm of ledger, yshift=0.56cm] (seal) {\textbf{2a.\ Daily $\mathcal{N}_{\mathbb{Z}}$ Sealing}\\$(\sigma_r, \sigma_f)$};
+\node[noise, right=0.62cm of ledger, yshift=-0.56cm] (cal) {\textbf{2b.\ Periodic $\mathcal{N}_{\mathbb{Z}}$ Release}\\$t \equiv \phi_f \pmod{S_f}$};
 
 \node[store, right=0.55cm of seal] (sstore) {\textbf{3a.\ Persist Daily Store}\\$(y_{R,t}, y_{F,t})$};
 \node[store, right=0.55cm of cal] (cstore) {\textbf{3b.\ Persist Distinct Store}\\$(7\text{d}, 30\text{d}, 90\text{d})$};
 
-\node[box, fill=gray!10, right=0.60cm of $(sstore.east)!0.5!(cstore.east)$, minimum width=2.05cm] (query) {Read-Only Query\\Service (Post-Proc.)};
+\node[box, fill=gray!10, right=0.62cm of $(sstore.east)!0.5!(cstore.east)$, minimum width=2.05cm] (query) {Read-Only Query\\Service (Post-Proc.)};
 
-\node[gate, below=0.42cm of $(cal.south)!0.45!(cstore.south)$, minimum width=3.25cm, minimum height=0.72cm] (commit) {\textbf{4.\ Commit Irrevocably} (\texttt{COMMITTED})\\Conservative commit if persistence uncertain};
+\node[gate, below=0.52cm of $(cal.south)!0.45!(cstore.south)$, minimum width=3.25cm, minimum height=0.72cm] (commit) {\textbf{4.\ Commit Irrevocably} (\texttt{COMMITTED})\\Conservative commit if persistence uncertain};
 
 % Top tier: Offline Planning & Certification
-\node[off, above=0.48cm of $(clip.north)!0.5!(ledger.north)$] (curve) {Commitment $\bar{\rho}(h)$\\+ Workload Weights $\mathbf{w}$};
+\node[off, above=0.62cm of $(clip.north)!0.5!(ledger.north)$] (curve) {Commitment $\bar{\rho}(h)$\\+ Workload Weights $\mathbf{w}$};
 \node[off, right=0.65cm of curve] (planner) {\textbf{Offline Joint Planner}\\7-Phase CRT + Dual Certification};
 
 \draw[arr] (stream.east) |- (clip.west);
@@ -193,8 +177,8 @@ Figure~\ref{fig:arch} illustrates the end-to-end SDG-MH pipeline. Incoming daily
 \draw[arr, dashed, draw=red!65!black] (commit.west) -| node[below, pos=0.25, align=center, font=\tiny, text=red!65!black] {finalize / cancel only\\if confirmed unstored} (ledger.south);
 
 \draw[arr, draw=purple!70!black] (curve.east) -- (planner.west);
-\draw[arr, dashed, draw=purple!70!black] (planner.south) -- node[left, pos=0.55, font=\tiny, text=purple!70!black] {certified $(\boldsymbol{\phi}^*, \mathbf{v}^*)$} (ledger.north);
-\draw[arr, dashed, draw=purple!70!black] (planner.south -| seal.north) -- node[right, pos=0.5, align=left, font=\tiny, text=purple!70!black] {noise scales\\$(\sigma_r, \sigma_f, \sigma_d)$} (seal.north);
+\draw[arr, dashed, draw=purple!70!black] (planner.south) -- node[left=4pt, pos=0.52, font=\tiny, text=purple!70!black] {certified $(\boldsymbol{\phi}^*, \mathbf{v}^*)$} (ledger.north);
+\draw[arr, dashed, draw=purple!70!black] (planner.south -| seal.north) -- node[right=2pt, pos=0.5, align=left, font=\tiny, text=purple!70!black] {noise scales\\$(\sigma_r, \sigma_f, \sigma_{7..90})$} (seal.north);
 \end{tikzpicture}
 \caption{SDG-MH architecture separating \emph{offline planning} (top) from four-step \emph{runtime execution} (bottom: \textbf{1.\ Reserve} $\to$ \textbf{2.\ Sample $\mathcal{N}_{\mathbb{Z}}$} $\to$ \textbf{3.\ Persist} $\to$ \textbf{4.\ Commit Irrevocably}). Unexposed pre-persist failures cancel the reservation, whereas uncertain persistence failures conservatively commit privacy spend.}
 \label{fig:arch}
@@ -300,7 +284,7 @@ Figure~\ref{fig:privacy_envelope}(a) illustrates empirical ledger compliance ove
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.80\textwidth]{figures/fig_privacy_envelope.pdf}
+\includegraphics[width=0.96\textwidth]{figures/fig_privacy_envelope.pdf}
 \caption{Multi-horizon zCDP safety and non-concavity: (a) 420-day observed ledger loss remains strictly within the 575-day envelope and commitment $\bar{\rho}(h)$; (b) rising secant slopes prove non-concavity, necessitating Theorem~\ref{thm:reduction}.}
 \label{fig:privacy_envelope}
 \end{figure*}
@@ -339,7 +323,8 @@ While Proposition~\ref{prop:orbits} separates \emph{steady-state budget equivale
 
 \begin{figure}[t]
 \centering
-\begin{tikzpicture}[scale=0.78, every node/.style={font=\scriptsize}]
+\resizebox{\columnwidth}{!}{%
+\begin{tikzpicture}[scale=1.0, every node/.style={font=\scriptsize}]
 % Column headers: days 0..13
 \foreach \x in {0,1,...,13} {
     \node[font=\tiny, text=black!75] at (\x*0.52 + 0.26, 2.32) {\x};
@@ -373,7 +358,8 @@ While Proposition~\ref{prop:orbits} separates \emph{steady-state budget equivale
 }
 \node[font=\tiny\bfseries, text=orange!80!black] at (0.24, 0.32) {+90d};
 \draw[->, >=Stealth, thick, teal!75!black] (0.50, 1.44) -- node[above, font=\tiny, sloped] {$+4$d} (2.30, 1.00);
-\end{tikzpicture}
+\end{tikzpicture}%
+}
 \caption{Periodic steady-state phase schematic over a 14-day window ($t \equiv \phi_f \pmod{S_f}$, not a system startup calendar): \textbf{Budget-Opt} $(0,0,0)$ aligns $7\text{d}$, $30\text{d}$, and $90\text{d}$ releases on Day~$0$, and stacks $7\text{d}$ and $30\text{d}$ on Day~$7$ (no $90\text{d}$ release on Day~$7$ since $S_{90}=30$ days). \textbf{Joint-Opt} $(0,4,0)$ shifts $30\text{d}$ releases by $+4$ days to Days~$4$ and~$11$, reducing overlap while trading weekday freshness.}
 \label{fig:calendar_schematic}
 \end{figure}
@@ -438,7 +424,7 @@ We organize our evaluation around five research questions across three distinct 
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.80\textwidth]{figures/fig_joint_planning_eval.pdf}
+\includegraphics[width=0.96\textwidth]{figures/fig_joint_planning_eval.pdf}
 \caption{Paired distinct-user MAPE differences in percentage points (\textbf{Joint-Opt} minus \textbf{Budget-Opt}, $95\%$ CIs, $K=8$, $df=7$): (a) synthetic workload ($t \bmod 7 = 0$ Sunday origin, scale $\pm 0.13$\,pp); (b) \texttt{WildChat-4.8M} real trace (\texttt{2023-11-20} Monday origin, conditional on trace, scale $\pm 2.6$\,pp). Negative values favor \textbf{Joint-Opt}.}
 \label{fig:joint_eval}
 \end{figure*}
@@ -472,7 +458,7 @@ We organize our evaluation around five research questions across three distinct 
 
 \begin{figure*}[t]
 \centering
-\includegraphics[width=0.80\textwidth]{figures/fig_baselines_and_clipping.pdf}
+\includegraphics[width=0.96\textwidth]{figures/fig_baselines_and_clipping.pdf}
 \caption{Baseline comparison and clipping trade-off: (a) additive Requests RMSE across $w \in \{1,7,30,90\}$ under identical $[1,420]$ privacy envelope; (b) daily clipping threshold $C_r$ U-curve.}
 \label{fig:baselines_clipping}
 \end{figure*}
@@ -529,7 +515,7 @@ Four dataset boundaries apply: (i) the trace is a public filtered release; (ii) 
 \paragraph{Continual Observation and Matrix Mechanisms.}
 Dwork et al.~\cite{dwork2010continual} and Chan et al.~\cite{chan2011private} introduced the binary tree mechanism for continual prefix sums over horizon $T$, refined via Honaker's GLS estimator~\cite{honaker2015efficient} and Li et al.'s Matrix Mechanism~\cite{li2015matrix}. Recent work optimizes lower-triangular and Toeplitz factorizations for streaming DP-SGD, including fixed-point operators~\cite{denisov2022improved}, sharp Toeplitz bounds~\cite{fichtenberger2023constant}, multi-epoch and banded factorizations~\cite{choquette2023multiepoch,choquette2023banded}, group-algebra constructions~\cite{henzinger2024group}, and Buffered Linear Toeplitz (BLT) mechanisms~\cite{mcmahan2025blt}. These mechanisms target \emph{additive} queries under single-epoch or $b$-separated participation bounds, whereas SDG-MH enforces simultaneous multi-horizon constraints $\bar{\rho}(h)$ across all contiguous intervals $h \ge 1$ alongside periodic non-additive distinct histograms.
 
-\paragraph{Sliding-Window, $w$-Event, and Distinct-Count DP.}
+\paragraph{Sliding-Window, $w$-Event, and Distinct-Count DP\@.}
 Bolot et al.~\cite{bolot2013decayed} studied decayed predicate sums under event-level DP, Kellaris et al.~\cite{kellaris2014wevent} proposed $w$-event DP for single-width sliding windows, and Cummings et al.~\cite{cummings2018growing} amortized privacy over growing populations $n_t \to \infty$. On non-additive streams, pan-private sketches~\cite{mir2011panprivate} and continual distinct/frequency counters~\cite{epasto2023frequency,ghazi2023distinct,jain2023turnstile} incur multiplicative bias or polynomial error growth under continual release. SDG-MH avoids continual-release error blowup by publishing exact $k$-capped window histograms~\cite{amin2019bounding} on a periodic calendar accounted via Theorem~\ref{thm:intersection}.
 
 % ============================================================================
